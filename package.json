@@ -1,0 +1,27 @@
+{
+  "name": "concordia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local MCP coordination runtime for Codex and ZCode",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && npm run build:plugin",
+    "build:plugin": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22.13 --outfile=zcode-plugin/dist/index.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "start": "node dist/src/index.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

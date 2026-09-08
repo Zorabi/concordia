@@ -1,0 +1,8 @@
+{
+  "name": "concordia",
+  "version": "0.1.0",
+  "description": "Local Concordia task coordination commands and MCP server for ZCode",
+  "commands": "commands",
+  "mcpServers": ".mcp.json",
+  "keywords": ["coordination", "mcp", "tasks", "local"]
+}
