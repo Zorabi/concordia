@@ -110,10 +110,16 @@ test("runs the complete task lifecycle through rework and approval", (t) => {
     findings: [{ path: "src/app.ts", line: 1, severity: "blocking", message: "Handle the edge case" }],
     idempotencyKey: `${taskId}:changes-requested`,
   });
-  assert.equal(fixture.service.getTask(taskId).status, "RUNNING");
+  assert.equal(fixture.service.getTask(taskId).status, "READY");
 
-  const secondCommit = commitChange(claim.task!.worktreePath!, "export const value = 3;\n", "address review");
-  submit(fixture.service, taskId, claim.leaseToken!, secondCommit);
+  const secondClaim = fixture.service.claimTask({ agentId: "zcode" });
+  assert.equal(secondClaim.task?.attempt, 2);
+  assert.notEqual(secondClaim.leaseToken, claim.leaseToken);
+  assert.notEqual(secondClaim.task?.worktreePath, claim.task?.worktreePath);
+  fixture.service.startTask(taskId, `${taskId}:restart`, secondClaim.leaseToken!);
+  const secondCommit = commitChange(secondClaim.task!.worktreePath!, "export const value = 3;\n", "address review");
+  expectCode(() => submit(fixture.service, taskId, claim.leaseToken!, secondCommit), "LEASE_CONFLICT");
+  submit(fixture.service, taskId, secondClaim.leaseToken!, secondCommit);
   const approved = fixture.service.reviewTask({
     taskId,
     decision: "approve",
@@ -123,7 +129,10 @@ test("runs the complete task lifecycle through rework and approval", (t) => {
   assert.equal(approved.status, "APPROVED");
   assert.deepEqual(
     approved.events.map((event) => event.type),
-    ["TASK_CREATED", "TASK_CLAIMED", "PROGRESS", "COMPLETED", "CHANGES_REQUESTED", "COMPLETED", "APPROVED"],
+    [
+      "TASK_CREATED", "TASK_CLAIMED", "PROGRESS", "COMPLETED", "CHANGES_REQUESTED",
+      "TASK_CLAIMED", "PROGRESS", "COMPLETED", "APPROVED",
+    ],
   );
 });
 

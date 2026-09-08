@@ -1,10 +1,10 @@
 # Concordia
 
-> 面向 Codex 与 ZCode 的本机 MCP 多代理协作控制面。
+> 面向 Codex 与 ZCode 的 local-first MCP 多代理协作控制面，支持单机 stdio 与可选的跨机器 Redis relay。
 
-Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与验收”与“实施”分开：**Codex** 创建任务、回答问题、审查交付；**ZCode** 原子领取任务、实施、按需使用其子代理，并提交可审查的 commit 与验证证据。状态保存于本地 SQLite；双方各自通过 stdio MCP 连接同一状态库。
+Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与验收”与“实施”分开：**Codex** 创建任务、回答问题、审查交付；**ZCode** 原子领取任务、实施、按需使用其子代理，并提交可审查的 commit 与验证证据。状态保存在协调主机的本地 SQLite；双方既可在单机直接连接，也可在都没有公网 IP 时通过 Redis 中转。
 
-它适合在一台机器、一个或少量 Git 仓库中可靠地协调两个代理，不需要 GitHub Issue、远程队列、HTTP 服务或共享在线文档。
+它适合在一台机器或“远程 Codex + ZCode 执行主机”的两机拓扑中，可靠地协调一个或少量 Git 仓库，不依赖 GitHub Issue 或共享在线文档。
 
 ## 它解决什么问题
 
@@ -16,11 +16,12 @@ Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与
 
 ## 边界与非目标
 
-第一版面向**单机、单用户、少量并发任务**。已实现 SQLite 持久化、任务状态机、Git 隔离、幂等写入、租约恢复及 ZCode 插件。尚不提供：
+当前版本面向**单协调节点、同一可信用户或团队、少量并发任务**。已实现 SQLite 持久化、任务状态机、Git 隔离、幂等写入、租约恢复、ZCode 插件，以及基于 Redis Streams 和角色签名的跨机器 relay。尚不提供：
 
-- 跨机器、多用户认证或权限管理；
-- Redis、NATS、Kafka 等外部消息系统；
-- Web Dashboard、网络监听端口或推送订阅；
+- 多用户身份、仓库级 ACL 或租户隔离；
+- 多协调节点高可用或 PostgreSQL；
+- 多个独立 ZCode 执行机之间的路径映射和 Git 对象传输；
+- Web Dashboard 或推送订阅；
 - 自动合并、推送远程 Git、发布制品或部署；
 - 强制 ZCode 使用某个子代理，或替代理制订实现计划；
 - 映射为 ZCode 原生侧边栏任务。
@@ -29,21 +30,35 @@ Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与
 
 ## 架构
 
-```text
-                         同一台本地机器
+### 单机模式
 
+```text
 Codex ── stdio MCP ─┐
                     ├── Concordia ── SQLite（任务、事件、交付物）
 ZCode ── stdio MCP ─┘        │
                               └── 目标 Git 仓库/.worktrees/<task>-zcode-a<attempt>
 ```
 
+### 跨机器 Redis 模式
+
+```text
+Codex MCP relay client ──┐
+                         ├── 出站 TLS ──> Redis Streams/response keys
+ZCode MCP relay client ──┘                         │
+                                                  │ 出站连接
+                                      Concordia relay coordinator（ZCode/Git 主机）
+                                                  ├── 本机 SQLite
+                                                  └── 本机 Git 仓库与 worktrees
+```
+
+远程模式必须把协调器部署在持有目标 Git 仓库的执行主机上。两端只需主动连接同一 Redis，无需公网 IP 或入站端口；`claim_task` 和 `submit_task` 仍在协调主机执行本机 Git/worktree 强校验。详细部署、令牌、Codex/ZCode 配置和安全限制见 [跨机器协调指南](docs/remote-coordination.md)。
+
 这里有两个不同的目录：
 
 - **Concordia 源码目录**：本仓库，包含 `src/`、构建产物与 `zcode-plugin/`；例如 `/absolute/path/to/concordia`。
 - **被管理的目标 Git 仓库**：代理真正修改的业务项目；例如 `/absolute/path/to/example-app`。任务 `workspace` 必须是它的 Git 根目录。worktree 创建在这个目标仓库内，而非 Concordia 源码目录。
 
-Codex 与 ZCode 可运行各自的 stdio MCP 服务进程。只要两端的 `CONCORDIA_DB` 指向同一绝对 SQLite 路径，便可共享状态；无需共享 MCP 进程或开放 TCP 端口。
+单机模式下，Codex 与 ZCode 可运行各自的 stdio MCP 服务进程；只要两端的 `CONCORDIA_DB` 指向同一绝对 SQLite 路径，便可共享状态。跨机器模式下，SQLite 只保留在协调主机本地，远程客户端通过 Redis relay 访问，禁止多台机器直接打开网络共享目录中的 SQLite 文件。
 
 ### 状态生命周期
 
@@ -56,7 +71,7 @@ READY ── claim ──> CLAIMED ── progress ──> RUNNING ── submit
                                              │               └─ answer ─> RUNNING
                                              ├─ failed ───> FAILED
                                              ├─ cancelled ─> CANCELLED
-                                             └──────────────── request_changes ─> RUNNING
+                                             └──────────────── request_changes ─> READY（重新领取）
                                                                 approve ─────────> APPROVED
 ```
 
@@ -68,6 +83,7 @@ READY ── claim ──> CLAIMED ── progress ──> RUNNING ── submit
 - Git，且每个目标工作区必须是可访问的 Git 仓库根目录。
 - npm。
 - 可使用 Codex 和/或 ZCode 的 MCP 功能。
+- 跨机器模式额外需要 Redis 7+ 或兼容服务；单机模式不需要 Redis 服务。
 
 ```sh
 node --version
@@ -87,7 +103,8 @@ npm test
 
 构建产生：
 
-- `dist/`：编译后的 MCP 服务；
+- `dist/src/index.js`：本机 stdio MCP 服务；
+- `dist/src/relay.js`：运行在 ZCode/Git 主机上的 Redis relay coordinator；
 - `zcode-plugin/dist/index.mjs`：随 ZCode 本地插件分发的单文件 bundle。
 
 服务使用 stdio，通常由 MCP 客户端启动。以下命令只用于验证进程可启动，随后会等待标准输入上的 MCP 客户端：
@@ -100,13 +117,32 @@ npm start
 
 MCP 协议仅写 stdout；启动与错误日志写 stderr。默认数据库为启动目录的 `.concordia/state.db`。实际同时使用 Codex 和 ZCode 时，应配置同一个绝对 `CONCORDIA_DB`，避免不同 `cwd` 产生两个状态库。
 
+跨机器协调器使用：
+
+```sh
+CONCORDIA_ROOTS=/absolute/path/to/repositories \
+CONCORDIA_DB=/absolute/path/to/state.db \
+CONCORDIA_REDIS_URL='rediss://user:password@redis.example.com:6379/0' \
+CONCORDIA_RELAY_NAMESPACE='team-a' \
+CONCORDIA_RELAY_CODEX_TOKEN='<至少 32 字符的随机 token>' \
+CONCORDIA_RELAY_ZCODE_TOKEN='<另一个至少 32 字符的随机 token>' \
+npm run start:relay
+```
+
+协调器不监听入站 HTTP 端口，只主动连接 Redis。跨网络使用 `rediss://`，完整配置见 [跨机器协调指南](docs/remote-coordination.md)。
+
 ## 配置
 
 | 变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `CONCORDIA_ROOTS` | 是 | 无 | 允许的目标项目根目录。可用系统路径分隔符或逗号列出多个路径；任务工作区必须位于其中且为 Git 仓库根。 |
+| `CONCORDIA_TRANSPORT` | 否 | `stdio` | MCP 客户端传输模式：`stdio` 直接访问本机状态，`redis` 通过中转。 |
 | `CONCORDIA_AGENT_ID` | 是 | 无 | 只允许 `codex` 或 `zcode`；角色不匹配的工具会被拒绝。 |
-| `CONCORDIA_DB` | 否 | `<cwd>/.concordia/state.db` | SQLite 文件。两端应使用同一个绝对路径。数据库目录以 `0700` 创建，数据库文件设为 `0600`。 |
+| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 允许的目标项目根目录；Redis client 不设置。 |
+| `CONCORDIA_DB` | 否 | `<cwd>/.concordia/state.db` | stdio/协调器使用的本机 SQLite；Redis client 不设置，绝不能跨机器共享。 |
+| `CONCORDIA_REDIS_URL` | Redis 模式 | 无 | Redis URL；远程默认要求 `rediss://`。 |
+| `CONCORDIA_RELAY_NAMESPACE` | 否 | `concordia` | 隔离不同部署的 Redis 键，1–64 个安全字符。 |
+| `CONCORDIA_RELAY_CODEX_TOKEN` | Codex relay/协调器 | 无 | Codex 请求 HMAC token，至少 32 字符。 |
+| `CONCORDIA_RELAY_ZCODE_TOKEN` | ZCode relay/协调器 | 无 | ZCode 请求 HMAC token，至少 32 字符且与 Codex token 不同。 |
 
 例如：
 
@@ -159,6 +195,7 @@ startup_timeout_sec = 20
 tool_timeout_sec = 70
 
 [mcp_servers.concordia.env]
+CONCORDIA_TRANSPORT = "stdio"
 CONCORDIA_ROOTS = "/Users/me/src/example-app"
 CONCORDIA_DB = "/Users/me/src/example-app/.concordia/state.db"
 CONCORDIA_AGENT_ID = "codex"
@@ -179,6 +216,7 @@ CONCORDIA_AGENT_ID = "codex"
 
 ```sh
 codex mcp add concordia \
+  --env CONCORDIA_TRANSPORT=stdio \
   --env CONCORDIA_ROOTS=/Users/me/src/example-app \
   --env CONCORDIA_DB=/Users/me/src/example-app/.concordia/state.db \
   --env CONCORDIA_AGENT_ID=codex \
@@ -223,6 +261,7 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.mjs"],
       "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {
+        "CONCORDIA_TRANSPORT": "stdio",
         "CONCORDIA_ROOTS": "${CLAUDE_PROJECT_DIR}",
         "CONCORDIA_DB": "${CLAUDE_PROJECT_DIR}/.concordia/state.db",
         "CONCORDIA_AGENT_ID": "zcode"
@@ -256,6 +295,7 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
       "args": ["/Users/me/tools/concordia/zcode-plugin/dist/index.mjs"],
       "cwd": "/Users/me/src/example-app",
       "env": {
+        "CONCORDIA_TRANSPORT": "stdio",
         "CONCORDIA_ROOTS": "/Users/me/src/example-app",
         "CONCORDIA_DB": "/Users/me/src/example-app/.concordia/state.db",
         "CONCORDIA_AGENT_ID": "zcode"
@@ -278,6 +318,7 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
         "args": ["/Users/me/tools/concordia/zcode-plugin/dist/index.mjs"],
         "cwd": "/Users/me/src/example-app",
         "env": {
+          "CONCORDIA_TRANSPORT": "stdio",
           "CONCORDIA_ROOTS": "/Users/me/src/example-app",
           "CONCORDIA_DB": "/Users/me/src/example-app/.concordia/state.db",
           "CONCORDIA_AGENT_ID": "zcode"
@@ -300,6 +341,30 @@ ZCode 的用户级配置位于 `~/.zcode/cli/config.json`，项目级配置位�
 5. 若看不到，优先核对两端 `CONCORDIA_DB` 的绝对路径是否逐字符一致，再检查两端 `CONCORDIA_ROOTS` 是否包含目标 Git 根目录。
 
 插件提供的 `/tasks`、`/task <task-id>`、`/watch <task-id>` 是只读辅助命令；真正的领取、提交和审核仍由 MCP 工具完成。
+
+### 切换为跨机器 Redis relay
+
+只有需要跨设备时才设置 `CONCORDIA_TRANSPORT=redis`。远端 Codex 的最小配置为：
+
+```toml
+[mcp_servers.concordia]
+command = "node"
+args = ["/Users/me/tools/concordia/dist/src/index.js"]
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 80
+
+[mcp_servers.concordia.env]
+CONCORDIA_AGENT_ID = "codex"
+CONCORDIA_TRANSPORT = "redis"
+CONCORDIA_REDIS_URL = "rediss://user:password@redis.example.com:6379/0"
+CONCORDIA_RELAY_NAMESPACE = "team-a"
+CONCORDIA_RELAY_CODEX_TOKEN = "<至少 32 字符的 Codex token>"
+```
+
+ZCode/Git 机器需要另外运行 `npm run start:relay`。ZCode MCP 可设置同一个 Redis URL 与 namespace、使用独立的 `CONCORDIA_RELAY_ZCODE_TOKEN`；也可在协调主机继续用默认 `stdio`，直接连接协调器所用的本机 SQLite。Redis 模式下，任务 `workspace` 一律填写 ZCode/Git 机器上的绝对路径。
+
+可直接复制的 ZCode JSON、协调器命令、Redis ACL/TLS 要求和联通步骤见 [跨机器协调指南](docs/remote-coordination.md)。
 
 ## MCP 工具
 
@@ -354,6 +419,8 @@ ZCode 的用户级配置位于 `~/.zcode/cli/config.json`，项目级配置位�
 `claim_task` 成功结果中的 `leaseToken` 是当前执行权的短期凭据。ZCode **必须**把它带入后续每个 `send_event`（包括 `HEARTBEAT`）及 `submit_task`。token 不会进入 `get_task`、事件、提交记录或日志；不要回显、提交或持久化它。
 
 默认租约 60 秒。长任务应在到期前用 `HEARTBEAT` 续租，并可传 `leaseSeconds`（1–3600）。租约过期后另一个领取者可以接手，服务会颁发新 token；旧 token 被围栏拒绝。`expectedVersion` 是可选的乐观并发控制，适合读—改—写过程。
+
+提交进入 `REVIEW` 时租约立即失效。Codex 要求返工后任务回到 `READY`；ZCode 必须再次调用 `claim_task`，在新 attempt worktree 中继续，并使用新 `leaseToken`。旧 token 永远不能恢复使用。
 
 ### 每个 attempt 的独立工作区
 
@@ -460,7 +527,7 @@ ZCode 的用户级配置位于 `~/.zcode/cli/config.json`，项目级配置位�
    }
    ```
 
-   返工时使用 `decision: "request_changes"` 并给出至少一个 `{ path?, line?, severity, message }` finding。批准只表示任务协议完成，**不会自动合并** worktree branch；后续合并、cherry-pick 或丢弃由用户或上层协调者决定。
+   返工时使用 `decision: "request_changes"` 并给出至少一个 `{ path?, line?, severity, message }` finding。任务会回到 `READY`，ZCode 需要重新领取。批准只表示任务协议完成，**不会自动合并** worktree branch；后续合并、cherry-pick 或丢弃由用户或上层协调者决定。
 
 ## ZCode 命令
 
@@ -474,7 +541,7 @@ ZCode 的用户级配置位于 `~/.zcode/cli/config.json`，项目级配置位�
 
 ## 安全模型
 
-Concordia 的边界是“本机可信用户 + 明确工作区白名单”，不是网络鉴权或多租户隔离。已实现的约束包括：
+Concordia 的边界是“可信用户/团队 + 明确工作区白名单”，不是完整的多租户平台。已实现的约束包括：
 
 - 必须显式声明 `codex` 或 `zcode`；工具和事件发送者均做角色校验；
 - `CONCORDIA_ROOTS` 限制目标工作区，且工作区必须为该根内的 Git 仓库根；
@@ -482,10 +549,12 @@ Concordia 的边界是“本机可信用户 + 明确工作区白名单”，不�
 - worktree 及既有目录会解析真实路径，防止逃离目标仓库；
 - SQLite 使用外键、WAL、事务和任务 version 乐观锁；事件 idempotency key 全局唯一；
 - `leaseToken` 使用时序安全比较，轮换后旧领取者无法继续写入；
+- Redis relay 使用分角色 HMAC-SHA256 签名、时间戳、nonce 防重放、响应 TTL 和单协调器锁；
+- 远程 Redis 默认强制 `rediss://`，角色 token 与 Redis 凭据均不进入日志；
 - `submit_task` 不执行任意命令；只记录白名单检查 ID 的结果；
 - 业务错误不回显环境变量、凭据或完整命令输出。
 
-任何能读写本地数据库、Git 工作区或 MCP 配置的用户仍在同一信任域。
+任何能读写本地数据库、Git 工作区、Redis 数据或 MCP 配置的用户仍在同一信任域。跨机器生产部署应使用 Redis ACL 和 TLS。
 
 ## 测试与开发
 
@@ -495,7 +564,13 @@ npm run build      # 编译服务并打包 ZCode 插件
 npm test           # build 后运行 Node 内置测试
 ```
 
-测试覆盖完整领取—运行—提交—返工—批准流程、并发领取、幂等、租约恢复、fencing token、数据库重启持久化、事件等待、基准提交验证、worktree 恢复，以及路径/符号链接/提交历史范围校验。
+若本机有测试 Redis，可额外执行真实 relay 往返测试：
+
+```sh
+CONCORDIA_TEST_REDIS_URL=redis://127.0.0.1:6379 npm test
+```
+
+测试覆盖完整领取—运行—提交—返工重领—批准流程、并发领取、幂等、租约恢复、fencing token、数据库重启持久化、事件等待、基准提交验证、worktree 恢复、relay 签名/权限/TLS 校验，以及路径/符号链接/提交历史范围校验。
 
 详见：[系统设计](docs/design.md)、[开发指南](docs/development.md)与 [ZCode 使用指南](docs/zcode-usage.md)。
 
@@ -509,8 +584,11 @@ concordia/                         # Concordia 源码目录
 │   ├── database.ts                # SQLite 初始化、迁移、事务
 │   ├── events.ts                  # 事件追加、查询、有界等待
 │   ├── tasks.ts                   # 状态机、租约、幂等、交付验证
-│   └── workspace.ts               # Git/worktree、路径范围
-├── tests/concordia.test.ts
+│   ├── workspace.ts               # Git/worktree、路径范围
+│   ├── relay-protocol.ts          # relay 签名信封与安全校验
+│   ├── relay-client.ts            # Redis 模式 MCP client
+│   └── relay.ts                   # Redis Streams coordinator
+├── tests/                         # 核心与 relay 测试
 ├── marketplace.json               # ZCode 本地/GitHub marketplace 入口
 ├── zcode-plugin/                  # 可加载的 ZCode 本地插件
 │   ├── .mcp.json
@@ -537,6 +615,8 @@ concordia/                         # Concordia 源码目录
 | `CONCORDIA_ROOTS must contain at least one allowed root` | 配置至少一个存在的目标项目根目录。 |
 | `WORKSPACE_DENIED` | 确认 `workspace` 是位于 `CONCORDIA_ROOTS` 内的目标 Git 仓库根，而不是其子目录或 Concordia 源码目录；检查软链接。 |
 | 两端看不到彼此任务 | 两端 `CONCORDIA_DB` 必须是同一个绝对文件。若 ZCode 使用默认值，Codex 应设为 `<目标仓库>/.concordia/state.db`。 |
+| `Redis relay request timed out` | 确认协调器运行中，Redis URL、数据库编号和 namespace 一致，ACL 允许所需命令。 |
+| 远程 `redis://` 被拒绝 | 生产环境改用 `rediss://`；只有可信开发网络才设置 `CONCORDIA_RELAY_ALLOW_INSECURE=true`。 |
 | `claim_task` 返回 `task: null` | 没有匹配的 `READY` 任务，也没有过期可恢复任务；用 `list_tasks` 查看。 |
 | `LEASE_CONFLICT` | token 不正确、租约过期或已被重领。重新领取，切勿复用旧 token。 |
 | `STALE_VERSION` | 读取后任务被其他写操作改变；重新 `get_task` 后继续。 |
@@ -547,9 +627,9 @@ concordia/                         # Concordia 源码目录
 
 ## 当前限制
 
-- 当前版本为 `0.1.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
+- 当前版本为 `0.2.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
 - Node 的 `node:sqlite` 在部分 Node 22 发行版可能显示实验性 API 警告；采用前请按自身 Node 策略评估。
-- 不提供远程备份、跨设备同步、访问控制或自动清理旧 attempt worktree。
+- Redis relay 当前只支持单活动协调器，不提供多协调器高可用、远程备份或自动清理旧 attempt worktree。
 - `timeoutSeconds`、`delegation.maxConcurrency`、`delegation.mode` 不会被运行时强制调度或限流。
 - `wait_events` 是最多 60 秒的轮询等待；调用方维护 `afterEventId` 并决定是否继续观察。
 - 提交路径校验不替代人工/自动代码审查、CI、合并策略和发布流程。

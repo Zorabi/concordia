@@ -5,7 +5,16 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __commonJS = (cb, mod) => function __require2() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
@@ -7191,6 +7200,23455 @@ var require_dist = __commonJS({
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = formatsPlugin;
+  }
+});
+
+// src/protocol.ts
+function requireNonEmptyString(value, field) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new ConcordiaException("INVALID_INPUT", `${field} must be a non-empty string`);
+  }
+  return value;
+}
+function validateIdempotencyKey(value) {
+  const key = requireNonEmptyString(value, "idempotencyKey");
+  if (key.length > 256) {
+    throw new ConcordiaException("INVALID_INPUT", "idempotencyKey must not exceed 256 characters");
+  }
+  return key;
+}
+function validateTaskSpec(spec) {
+  if (spec === null || typeof spec !== "object") {
+    throw new ConcordiaException("INVALID_INPUT", "spec must be an object");
+  }
+  requireNonEmptyString(spec.id, "spec.id");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(spec.id)) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.id must be a safe identifier of at most 128 characters");
+  }
+  requireNonEmptyString(spec.objective, "spec.objective");
+  requireNonEmptyString(spec.workspace, "spec.workspace");
+  if (!Array.isArray(spec.ownedPaths) || spec.ownedPaths.length === 0) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.ownedPaths must contain at least one path");
+  }
+  spec.ownedPaths.forEach((value, index) => requireNonEmptyString(value, `spec.ownedPaths[${index}]`));
+  if (!Array.isArray(spec.acceptance) || spec.acceptance.length === 0) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.acceptance must contain at least one condition");
+  }
+  spec.acceptance.forEach((value, index) => requireNonEmptyString(value, `spec.acceptance[${index}]`));
+  if (!Array.isArray(spec.constraints) || !Array.isArray(spec.deliverables)) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.constraints and spec.deliverables must be arrays");
+  }
+  spec.constraints.forEach((value, index) => requireNonEmptyString(value, `spec.constraints[${index}]`));
+  if (spec.excludedPaths !== void 0 && !Array.isArray(spec.excludedPaths)) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.excludedPaths must be an array when provided");
+  }
+  const deliverables = /* @__PURE__ */ new Set(["commit", "changed_files", "checks", "risks"]);
+  if (spec.deliverables.some((value) => !deliverables.has(value))) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.deliverables contains an unsupported value");
+  }
+  if (!spec.delegation || !["auto", "disabled"].includes(spec.delegation.mode) || !Number.isInteger(spec.delegation.maxConcurrency) || spec.delegation.maxConcurrency < 1 || spec.delegation.maxDepth !== 1) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.delegation is invalid; maxDepth must equal 1");
+  }
+  if (!Number.isInteger(spec.timeoutSeconds) || spec.timeoutSeconds < 1) {
+    throw new ConcordiaException("INVALID_INPUT", "spec.timeoutSeconds must be a positive integer");
+  }
+  return spec;
+}
+function asConcordiaError(error2) {
+  if (error2 instanceof ConcordiaException) return error2;
+  return new ConcordiaException("INTERNAL_ERROR", "An internal Concordia error occurred", false);
+}
+var TASK_STATUSES, TERMINAL_STATUSES, EVENT_TYPES, ConcordiaException;
+var init_protocol = __esm({
+  "src/protocol.ts"() {
+    "use strict";
+    TASK_STATUSES = [
+      "DRAFT",
+      "READY",
+      "CLAIMED",
+      "RUNNING",
+      "WAITING_INPUT",
+      "REVIEW",
+      "APPROVED",
+      "FAILED",
+      "CANCELLED"
+    ];
+    TERMINAL_STATUSES = /* @__PURE__ */ new Set([
+      "APPROVED",
+      "FAILED",
+      "CANCELLED"
+    ]);
+    EVENT_TYPES = [
+      "TASK_CREATED",
+      "TASK_CLAIMED",
+      "PROGRESS",
+      "QUESTION",
+      "ANSWER",
+      "AGENT_STATUS",
+      "HEARTBEAT",
+      "COMPLETED",
+      "CHANGES_REQUESTED",
+      "APPROVED",
+      "FAILED",
+      "CANCELLED"
+    ];
+    ConcordiaException = class extends Error {
+      code;
+      retryable;
+      details;
+      constructor(code, message, retryable = false, details) {
+        super(message);
+        this.name = "ConcordiaException";
+        this.code = code;
+        this.retryable = retryable;
+        this.details = details;
+      }
+      toJSON() {
+        return {
+          code: this.code,
+          message: this.message,
+          retryable: this.retryable,
+          ...this.details === void 0 ? {} : { details: this.details }
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/RESP/verbatim-string.js
+var require_verbatim_string = __commonJS({
+  "node_modules/@redis/client/dist/lib/RESP/verbatim-string.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.VerbatimString = void 0;
+    var VerbatimString = class extends String {
+      format;
+      constructor(format, value) {
+        super(value);
+        this.format = format;
+      }
+    };
+    exports.VerbatimString = VerbatimString;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/errors.js
+var require_errors2 = __commonJS({
+  "node_modules/@redis/client/dist/lib/errors.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OpenTelemetryError = exports.MultiErrorReply = exports.CommandTimeoutDuringMaintenanceError = exports.SocketTimeoutDuringMaintenanceError = exports.TimeoutError = exports.BlobError = exports.SimpleError = exports.ErrorReply = exports.ReconnectStrategyError = exports.RootNodesUnavailableError = exports.SocketClosedUnexpectedlyError = exports.DisconnectsClientError = exports.ClientOfflineError = exports.ClientClosedError = exports.SocketTimeoutError = exports.ConnectionTimeoutError = exports.WatchError = exports.AbortError = void 0;
+    var AbortError = class extends Error {
+      constructor() {
+        super("The command was aborted");
+      }
+    };
+    exports.AbortError = AbortError;
+    var WatchError = class extends Error {
+      constructor(message = "One (or more) of the watched keys has been changed") {
+        super(message);
+      }
+    };
+    exports.WatchError = WatchError;
+    var ConnectionTimeoutError = class extends Error {
+      constructor() {
+        super("Connection timeout");
+      }
+    };
+    exports.ConnectionTimeoutError = ConnectionTimeoutError;
+    var SocketTimeoutError = class extends Error {
+      constructor(timeout) {
+        super(`Socket timeout timeout. Expecting data, but didn't receive any in ${timeout}ms.`);
+      }
+    };
+    exports.SocketTimeoutError = SocketTimeoutError;
+    var ClientClosedError = class extends Error {
+      constructor() {
+        super("The client is closed");
+      }
+    };
+    exports.ClientClosedError = ClientClosedError;
+    var ClientOfflineError = class extends Error {
+      constructor() {
+        super("The client is offline");
+      }
+    };
+    exports.ClientOfflineError = ClientOfflineError;
+    var DisconnectsClientError = class extends Error {
+      constructor() {
+        super("Disconnects client");
+      }
+    };
+    exports.DisconnectsClientError = DisconnectsClientError;
+    var SocketClosedUnexpectedlyError = class extends Error {
+      constructor() {
+        super("Socket closed unexpectedly");
+      }
+    };
+    exports.SocketClosedUnexpectedlyError = SocketClosedUnexpectedlyError;
+    var RootNodesUnavailableError = class extends Error {
+      constructor() {
+        super("All the root nodes are unavailable");
+      }
+    };
+    exports.RootNodesUnavailableError = RootNodesUnavailableError;
+    var ReconnectStrategyError = class extends Error {
+      originalError;
+      socketError;
+      constructor(originalError, socketError) {
+        super(originalError.message);
+        this.originalError = originalError;
+        this.socketError = socketError;
+      }
+    };
+    exports.ReconnectStrategyError = ReconnectStrategyError;
+    var ErrorReply = class extends Error {
+    };
+    exports.ErrorReply = ErrorReply;
+    var SimpleError = class extends ErrorReply {
+    };
+    exports.SimpleError = SimpleError;
+    var BlobError = class extends ErrorReply {
+    };
+    exports.BlobError = BlobError;
+    var TimeoutError = class extends Error {
+    };
+    exports.TimeoutError = TimeoutError;
+    var SocketTimeoutDuringMaintenanceError = class extends TimeoutError {
+      constructor(timeout) {
+        super(`Socket timeout during maintenance. Expecting data, but didn't receive any in ${timeout}ms.`);
+      }
+    };
+    exports.SocketTimeoutDuringMaintenanceError = SocketTimeoutDuringMaintenanceError;
+    var CommandTimeoutDuringMaintenanceError = class extends TimeoutError {
+      constructor(timeout) {
+        super(`Command timeout during maintenance. Waited to write command for more than ${timeout}ms.`);
+      }
+    };
+    exports.CommandTimeoutDuringMaintenanceError = CommandTimeoutDuringMaintenanceError;
+    var MultiErrorReply = class extends ErrorReply {
+      replies;
+      errorIndexes;
+      constructor(replies, errorIndexes) {
+        super(`${errorIndexes.length} commands failed, see .replies and .errorIndexes for more information`);
+        this.replies = replies;
+        this.errorIndexes = errorIndexes;
+      }
+      *errors() {
+        for (const index of this.errorIndexes) {
+          yield this.replies[index];
+        }
+      }
+    };
+    exports.MultiErrorReply = MultiErrorReply;
+    var OpenTelemetryError = class extends Error {
+    };
+    exports.OpenTelemetryError = OpenTelemetryError;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/RESP/decoder.js
+var require_decoder = __commonJS({
+  "node_modules/@redis/client/dist/lib/RESP/decoder.js"(exports) {
+    "use strict";
+    var _a;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Decoder = exports.PUSH_TYPE_MAPPING = exports.RESP_TYPES = void 0;
+    var verbatim_string_1 = require_verbatim_string();
+    var errors_1 = require_errors2();
+    exports.RESP_TYPES = {
+      NULL: 95,
+      // _
+      BOOLEAN: 35,
+      // #
+      NUMBER: 58,
+      // :
+      BIG_NUMBER: 40,
+      // (
+      DOUBLE: 44,
+      // ,
+      SIMPLE_STRING: 43,
+      // +
+      BLOB_STRING: 36,
+      // $
+      VERBATIM_STRING: 61,
+      // =
+      SIMPLE_ERROR: 45,
+      // -
+      BLOB_ERROR: 33,
+      // !
+      ARRAY: 42,
+      // *
+      SET: 126,
+      // ~
+      MAP: 37,
+      // %
+      PUSH: 62
+      // >
+    };
+    var ASCII = {
+      "\r": 13,
+      "t": 116,
+      "+": 43,
+      "-": 45,
+      "0": 48,
+      ".": 46,
+      "i": 105,
+      "n": 110,
+      "E": 69,
+      "e": 101
+    };
+    exports.PUSH_TYPE_MAPPING = {
+      [exports.RESP_TYPES.BLOB_STRING]: Buffer
+    };
+    var Decoder = class {
+      onReply;
+      onErrorReply;
+      onPush;
+      getTypeMapping;
+      #cursor = 0;
+      #next;
+      constructor(config2) {
+        this.onReply = config2.onReply;
+        this.onErrorReply = config2.onErrorReply;
+        this.onPush = config2.onPush;
+        this.getTypeMapping = config2.getTypeMapping;
+      }
+      reset() {
+        this.#cursor = 0;
+        this.#next = void 0;
+      }
+      write(chunk) {
+        if (this.#cursor >= chunk.length) {
+          this.#cursor -= chunk.length;
+          return;
+        }
+        if (this.#next) {
+          if (this.#next(chunk) || this.#cursor >= chunk.length) {
+            this.#cursor -= chunk.length;
+            return;
+          }
+        }
+        do {
+          const type = chunk[this.#cursor];
+          if (++this.#cursor === chunk.length) {
+            this.#next = this.#continueDecodeTypeValue.bind(this, type);
+            break;
+          }
+          if (this.#decodeTypeValue(type, chunk)) {
+            break;
+          }
+        } while (this.#cursor < chunk.length);
+        this.#cursor -= chunk.length;
+      }
+      #continueDecodeTypeValue(type, chunk) {
+        this.#next = void 0;
+        return this.#decodeTypeValue(type, chunk);
+      }
+      #decodeTypeValue(type, chunk) {
+        switch (type) {
+          case exports.RESP_TYPES.NULL:
+            this.onReply(this.#decodeNull());
+            return false;
+          case exports.RESP_TYPES.BOOLEAN:
+            return this.#handleDecodedValue(this.onReply, this.#decodeBoolean(chunk));
+          case exports.RESP_TYPES.NUMBER:
+            return this.#handleDecodedValue(this.onReply, this.#decodeNumber(this.getTypeMapping()[exports.RESP_TYPES.NUMBER], chunk));
+          case exports.RESP_TYPES.BIG_NUMBER:
+            return this.#handleDecodedValue(this.onReply, this.#decodeBigNumber(this.getTypeMapping()[exports.RESP_TYPES.BIG_NUMBER], chunk));
+          case exports.RESP_TYPES.DOUBLE:
+            return this.#handleDecodedValue(this.onReply, this.#decodeDouble(this.getTypeMapping()[exports.RESP_TYPES.DOUBLE], chunk));
+          case exports.RESP_TYPES.SIMPLE_STRING:
+            return this.#handleDecodedValue(this.onReply, this.#decodeSimpleString(this.getTypeMapping()[exports.RESP_TYPES.SIMPLE_STRING], chunk));
+          case exports.RESP_TYPES.BLOB_STRING:
+            return this.#handleDecodedValue(this.onReply, this.#decodeBlobString(this.getTypeMapping()[exports.RESP_TYPES.BLOB_STRING], chunk));
+          case exports.RESP_TYPES.VERBATIM_STRING:
+            return this.#handleDecodedValue(this.onReply, this.#decodeVerbatimString(this.getTypeMapping()[exports.RESP_TYPES.VERBATIM_STRING], chunk));
+          case exports.RESP_TYPES.SIMPLE_ERROR:
+            return this.#handleDecodedValue(this.onErrorReply, this.#decodeSimpleError(chunk));
+          case exports.RESP_TYPES.BLOB_ERROR:
+            return this.#handleDecodedValue(this.onErrorReply, this.#decodeBlobError(chunk));
+          case exports.RESP_TYPES.ARRAY:
+            return this.#handleDecodedValue(this.onReply, this.#decodeArray(this.getTypeMapping(), chunk));
+          case exports.RESP_TYPES.SET:
+            return this.#handleDecodedValue(this.onReply, this.#decodeSet(this.getTypeMapping(), chunk));
+          case exports.RESP_TYPES.MAP:
+            return this.#handleDecodedValue(this.onReply, this.#decodeMap(this.getTypeMapping(), chunk));
+          case exports.RESP_TYPES.PUSH:
+            return this.#handleDecodedValue(this.onPush, this.#decodeArray(exports.PUSH_TYPE_MAPPING, chunk));
+          default:
+            throw new Error(`Unknown RESP type ${type} "${String.fromCharCode(type)}"`);
+        }
+      }
+      #handleDecodedValue(cb, value) {
+        if (typeof value === "function") {
+          this.#next = this.#continueDecodeValue.bind(this, cb, value);
+          return true;
+        }
+        cb(value);
+        return false;
+      }
+      #continueDecodeValue(cb, next, chunk) {
+        this.#next = void 0;
+        return this.#handleDecodedValue(cb, next(chunk));
+      }
+      #decodeNull() {
+        this.#cursor += 2;
+        return null;
+      }
+      #decodeBoolean(chunk) {
+        const boolean3 = chunk[this.#cursor] === ASCII.t;
+        this.#cursor += 3;
+        return boolean3;
+      }
+      #decodeNumber(type, chunk) {
+        if (type === String) {
+          return this.#decodeSimpleString(String, chunk);
+        }
+        switch (chunk[this.#cursor]) {
+          case ASCII["+"]:
+            return this.#maybeDecodeNumberValue(false, chunk);
+          case ASCII["-"]:
+            return this.#maybeDecodeNumberValue(true, chunk);
+          default:
+            return this.#decodeNumberValue(false, this.#decodeUnsingedNumber.bind(this, 0), chunk);
+        }
+      }
+      #maybeDecodeNumberValue(isNegative, chunk) {
+        const cb = this.#decodeUnsingedNumber.bind(this, 0);
+        return ++this.#cursor === chunk.length ? this.#decodeNumberValue.bind(this, isNegative, cb) : this.#decodeNumberValue(isNegative, cb, chunk);
+      }
+      #decodeNumberValue(isNegative, numberCb, chunk) {
+        const number3 = numberCb(chunk);
+        return typeof number3 === "function" ? this.#decodeNumberValue.bind(this, isNegative, number3) : isNegative ? -number3 : number3;
+      }
+      #decodeUnsingedNumber(number3, chunk) {
+        let cursor = this.#cursor;
+        do {
+          const byte = chunk[cursor];
+          if (byte === ASCII["\r"]) {
+            this.#cursor = cursor + 2;
+            return number3;
+          }
+          number3 = number3 * 10 + byte - ASCII["0"];
+        } while (++cursor < chunk.length);
+        this.#cursor = cursor;
+        return this.#decodeUnsingedNumber.bind(this, number3);
+      }
+      #decodeBigNumber(type, chunk) {
+        if (type === String) {
+          return this.#decodeSimpleString(String, chunk);
+        }
+        switch (chunk[this.#cursor]) {
+          case ASCII["+"]:
+            return this.#maybeDecodeBigNumberValue(false, chunk);
+          case ASCII["-"]:
+            return this.#maybeDecodeBigNumberValue(true, chunk);
+          default:
+            return this.#decodeBigNumberValue(false, this.#decodeUnsingedBigNumber.bind(this, 0n), chunk);
+        }
+      }
+      #maybeDecodeBigNumberValue(isNegative, chunk) {
+        const cb = this.#decodeUnsingedBigNumber.bind(this, 0n);
+        return ++this.#cursor === chunk.length ? this.#decodeBigNumberValue.bind(this, isNegative, cb) : this.#decodeBigNumberValue(isNegative, cb, chunk);
+      }
+      #decodeBigNumberValue(isNegative, bigNumberCb, chunk) {
+        const bigNumber = bigNumberCb(chunk);
+        return typeof bigNumber === "function" ? this.#decodeBigNumberValue.bind(this, isNegative, bigNumber) : isNegative ? -bigNumber : bigNumber;
+      }
+      #decodeUnsingedBigNumber(bigNumber, chunk) {
+        let cursor = this.#cursor;
+        do {
+          const byte = chunk[cursor];
+          if (byte === ASCII["\r"]) {
+            this.#cursor = cursor + 2;
+            return bigNumber;
+          }
+          bigNumber = bigNumber * 10n + BigInt(byte - ASCII["0"]);
+        } while (++cursor < chunk.length);
+        this.#cursor = cursor;
+        return this.#decodeUnsingedBigNumber.bind(this, bigNumber);
+      }
+      #decodeDouble(type, chunk) {
+        if (type === String) {
+          return this.#decodeSimpleString(String, chunk);
+        }
+        switch (chunk[this.#cursor]) {
+          case ASCII.n:
+            this.#cursor += 5;
+            return NaN;
+          case ASCII["+"]:
+            return this.#maybeDecodeDoubleInteger(false, chunk);
+          case ASCII["-"]:
+            return this.#maybeDecodeDoubleInteger(true, chunk);
+          default:
+            return this.#decodeDoubleInteger(false, 0, chunk);
+        }
+      }
+      #maybeDecodeDoubleInteger(isNegative, chunk) {
+        return ++this.#cursor === chunk.length ? this.#decodeDoubleInteger.bind(this, isNegative, 0) : this.#decodeDoubleInteger(isNegative, 0, chunk);
+      }
+      #decodeDoubleInteger(isNegative, integer2, chunk) {
+        if (chunk[this.#cursor] === ASCII.i) {
+          this.#cursor += 5;
+          return isNegative ? -Infinity : Infinity;
+        }
+        return this.#continueDecodeDoubleInteger(isNegative, integer2, chunk);
+      }
+      #continueDecodeDoubleInteger(isNegative, integer2, chunk) {
+        let cursor = this.#cursor;
+        do {
+          const byte = chunk[cursor];
+          switch (byte) {
+            case ASCII["."]:
+              this.#cursor = cursor + 1;
+              return this.#cursor < chunk.length ? this.#decodeDoubleDecimal(isNegative, 0, integer2, chunk) : this.#decodeDoubleDecimal.bind(this, isNegative, 0, integer2);
+            case ASCII.E:
+            case ASCII.e:
+              this.#cursor = cursor + 1;
+              const i = isNegative ? -integer2 : integer2;
+              return this.#cursor < chunk.length ? this.#decodeDoubleExponent(i, chunk) : this.#decodeDoubleExponent.bind(this, i);
+            case ASCII["\r"]:
+              this.#cursor = cursor + 2;
+              return isNegative ? -integer2 : integer2;
+            default:
+              integer2 = integer2 * 10 + byte - ASCII["0"];
+          }
+        } while (++cursor < chunk.length);
+        this.#cursor = cursor;
+        return this.#continueDecodeDoubleInteger.bind(this, isNegative, integer2);
+      }
+      // Precalculated multipliers for decimal points to improve performance
+      // "... about 15 to 17 decimal places ..."
+      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number#:~:text=about%2015%20to%2017%20decimal%20places
+      static #DOUBLE_DECIMAL_MULTIPLIERS = [
+        0.1,
+        0.01,
+        1e-3,
+        1e-4,
+        1e-5,
+        1e-6,
+        1e-7,
+        1e-8,
+        1e-9,
+        1e-10,
+        1e-11,
+        1e-12,
+        1e-13,
+        1e-14,
+        1e-15,
+        1e-16,
+        1e-17
+      ];
+      #decodeDoubleDecimal(isNegative, decimalIndex, double, chunk) {
+        let cursor = this.#cursor;
+        do {
+          const byte = chunk[cursor];
+          switch (byte) {
+            case ASCII.E:
+            case ASCII.e:
+              this.#cursor = cursor + 1;
+              const d = isNegative ? -double : double;
+              return this.#cursor === chunk.length ? this.#decodeDoubleExponent.bind(this, d) : this.#decodeDoubleExponent(d, chunk);
+            case ASCII["\r"]:
+              this.#cursor = cursor + 2;
+              return isNegative ? -double : double;
+          }
+          if (decimalIndex < _a.#DOUBLE_DECIMAL_MULTIPLIERS.length) {
+            double += (byte - ASCII["0"]) * _a.#DOUBLE_DECIMAL_MULTIPLIERS[decimalIndex++];
+          }
+        } while (++cursor < chunk.length);
+        this.#cursor = cursor;
+        return this.#decodeDoubleDecimal.bind(this, isNegative, decimalIndex, double);
+      }
+      #decodeDoubleExponent(double, chunk) {
+        switch (chunk[this.#cursor]) {
+          case ASCII["+"]:
+            return ++this.#cursor === chunk.length ? this.#continueDecodeDoubleExponent.bind(this, false, double, 0) : this.#continueDecodeDoubleExponent(false, double, 0, chunk);
+          case ASCII["-"]:
+            return ++this.#cursor === chunk.length ? this.#continueDecodeDoubleExponent.bind(this, true, double, 0) : this.#continueDecodeDoubleExponent(true, double, 0, chunk);
+        }
+        return this.#continueDecodeDoubleExponent(false, double, 0, chunk);
+      }
+      #continueDecodeDoubleExponent(isNegative, double, exponent, chunk) {
+        let cursor = this.#cursor;
+        do {
+          const byte = chunk[cursor];
+          if (byte === ASCII["\r"]) {
+            this.#cursor = cursor + 2;
+            return double * 10 ** (isNegative ? -exponent : exponent);
+          }
+          exponent = exponent * 10 + byte - ASCII["0"];
+        } while (++cursor < chunk.length);
+        this.#cursor = cursor;
+        return this.#continueDecodeDoubleExponent.bind(this, isNegative, double, exponent);
+      }
+      #findCRLF(chunk, cursor) {
+        while (chunk[cursor] !== ASCII["\r"]) {
+          if (++cursor === chunk.length) {
+            this.#cursor = chunk.length;
+            return -1;
+          }
+        }
+        this.#cursor = cursor + 2;
+        return cursor;
+      }
+      #decodeSimpleString(type, chunk) {
+        const start = this.#cursor, crlfIndex = this.#findCRLF(chunk, start);
+        if (crlfIndex === -1) {
+          return this.#continueDecodeSimpleString.bind(this, [chunk.subarray(start)], type);
+        }
+        const slice = chunk.subarray(start, crlfIndex);
+        return type === Buffer ? slice : slice.toString();
+      }
+      #continueDecodeSimpleString(chunks, type, chunk) {
+        const start = this.#cursor, crlfIndex = this.#findCRLF(chunk, start);
+        if (crlfIndex === -1) {
+          chunks.push(chunk.subarray(start));
+          return this.#continueDecodeSimpleString.bind(this, chunks, type);
+        }
+        chunks.push(chunk.subarray(start, crlfIndex));
+        const buffer = Buffer.concat(chunks);
+        return type === Buffer ? buffer : buffer.toString();
+      }
+      #decodeBlobString(type, chunk) {
+        if (chunk[this.#cursor] === ASCII["-"]) {
+          this.#cursor += 4;
+          return null;
+        }
+        const length = this.#decodeUnsingedNumber(0, chunk);
+        if (typeof length === "function") {
+          return this.#continueDecodeBlobStringLength.bind(this, length, type);
+        } else if (this.#cursor >= chunk.length) {
+          return this.#decodeBlobStringWithLength.bind(this, length, type);
+        }
+        return this.#decodeBlobStringWithLength(length, type, chunk);
+      }
+      #continueDecodeBlobStringLength(lengthCb, type, chunk) {
+        const length = lengthCb(chunk);
+        if (typeof length === "function") {
+          return this.#continueDecodeBlobStringLength.bind(this, length, type);
+        } else if (this.#cursor >= chunk.length) {
+          return this.#decodeBlobStringWithLength.bind(this, length, type);
+        }
+        return this.#decodeBlobStringWithLength(length, type, chunk);
+      }
+      #decodeStringWithLength(length, skip, type, chunk) {
+        const end = this.#cursor + length;
+        if (end >= chunk.length) {
+          const slice2 = chunk.subarray(this.#cursor);
+          this.#cursor = chunk.length;
+          return this.#continueDecodeStringWithLength.bind(this, length - slice2.length, [slice2], skip, type);
+        }
+        const slice = chunk.subarray(this.#cursor, end);
+        this.#cursor = end + skip;
+        return type === Buffer ? slice : slice.toString();
+      }
+      #continueDecodeStringWithLength(length, chunks, skip, type, chunk) {
+        const end = this.#cursor + length;
+        if (end >= chunk.length) {
+          const slice = chunk.subarray(this.#cursor);
+          chunks.push(slice);
+          this.#cursor = chunk.length;
+          return this.#continueDecodeStringWithLength.bind(this, length - slice.length, chunks, skip, type);
+        }
+        chunks.push(chunk.subarray(this.#cursor, end));
+        this.#cursor = end + skip;
+        const buffer = Buffer.concat(chunks);
+        return type === Buffer ? buffer : buffer.toString();
+      }
+      #decodeBlobStringWithLength(length, type, chunk) {
+        return this.#decodeStringWithLength(length, 2, type, chunk);
+      }
+      #decodeVerbatimString(type, chunk) {
+        return this.#continueDecodeVerbatimStringLength(this.#decodeUnsingedNumber.bind(this, 0), type, chunk);
+      }
+      #continueDecodeVerbatimStringLength(lengthCb, type, chunk) {
+        const length = lengthCb(chunk);
+        return typeof length === "function" ? this.#continueDecodeVerbatimStringLength.bind(this, length, type) : this.#decodeVerbatimStringWithLength(length, type, chunk);
+      }
+      #decodeVerbatimStringWithLength(length, type, chunk) {
+        const stringLength = length - 4;
+        if (type === verbatim_string_1.VerbatimString) {
+          return this.#decodeVerbatimStringFormat(stringLength, chunk);
+        }
+        this.#cursor += 4;
+        return this.#cursor >= chunk.length ? this.#decodeBlobStringWithLength.bind(this, stringLength, type) : this.#decodeBlobStringWithLength(stringLength, type, chunk);
+      }
+      #decodeVerbatimStringFormat(stringLength, chunk) {
+        const formatCb = this.#decodeStringWithLength.bind(this, 3, 1, String);
+        return this.#cursor >= chunk.length ? this.#continueDecodeVerbatimStringFormat.bind(this, stringLength, formatCb) : this.#continueDecodeVerbatimStringFormat(stringLength, formatCb, chunk);
+      }
+      #continueDecodeVerbatimStringFormat(stringLength, formatCb, chunk) {
+        const format = formatCb(chunk);
+        return typeof format === "function" ? this.#continueDecodeVerbatimStringFormat.bind(this, stringLength, format) : this.#decodeVerbatimStringWithFormat(stringLength, format, chunk);
+      }
+      #decodeVerbatimStringWithFormat(stringLength, format, chunk) {
+        return this.#continueDecodeVerbatimStringWithFormat(format, this.#decodeBlobStringWithLength.bind(this, stringLength, String), chunk);
+      }
+      #continueDecodeVerbatimStringWithFormat(format, stringCb, chunk) {
+        const string3 = stringCb(chunk);
+        return typeof string3 === "function" ? this.#continueDecodeVerbatimStringWithFormat.bind(this, format, string3) : new verbatim_string_1.VerbatimString(format, string3);
+      }
+      #decodeSimpleError(chunk) {
+        const string3 = this.#decodeSimpleString(String, chunk);
+        return typeof string3 === "function" ? this.#continueDecodeSimpleError.bind(this, string3) : new errors_1.SimpleError(string3);
+      }
+      #continueDecodeSimpleError(stringCb, chunk) {
+        const string3 = stringCb(chunk);
+        return typeof string3 === "function" ? this.#continueDecodeSimpleError.bind(this, string3) : new errors_1.SimpleError(string3);
+      }
+      #decodeBlobError(chunk) {
+        const string3 = this.#decodeBlobString(String, chunk);
+        return typeof string3 === "function" ? this.#continueDecodeBlobError.bind(this, string3) : new errors_1.BlobError(string3);
+      }
+      #continueDecodeBlobError(stringCb, chunk) {
+        const string3 = stringCb(chunk);
+        return typeof string3 === "function" ? this.#continueDecodeBlobError.bind(this, string3) : new errors_1.BlobError(string3);
+      }
+      #decodeNestedType(typeMapping, chunk) {
+        const type = chunk[this.#cursor];
+        return ++this.#cursor === chunk.length ? this.#decodeNestedTypeValue.bind(this, type, typeMapping) : this.#decodeNestedTypeValue(type, typeMapping, chunk);
+      }
+      #decodeNestedTypeValue(type, typeMapping, chunk) {
+        switch (type) {
+          case exports.RESP_TYPES.NULL:
+            return this.#decodeNull();
+          case exports.RESP_TYPES.BOOLEAN:
+            return this.#decodeBoolean(chunk);
+          case exports.RESP_TYPES.NUMBER:
+            return this.#decodeNumber(typeMapping[exports.RESP_TYPES.NUMBER], chunk);
+          case exports.RESP_TYPES.BIG_NUMBER:
+            return this.#decodeBigNumber(typeMapping[exports.RESP_TYPES.BIG_NUMBER], chunk);
+          case exports.RESP_TYPES.DOUBLE:
+            return this.#decodeDouble(typeMapping[exports.RESP_TYPES.DOUBLE], chunk);
+          case exports.RESP_TYPES.SIMPLE_STRING:
+            return this.#decodeSimpleString(typeMapping[exports.RESP_TYPES.SIMPLE_STRING], chunk);
+          case exports.RESP_TYPES.BLOB_STRING:
+            return this.#decodeBlobString(typeMapping[exports.RESP_TYPES.BLOB_STRING], chunk);
+          case exports.RESP_TYPES.VERBATIM_STRING:
+            return this.#decodeVerbatimString(typeMapping[exports.RESP_TYPES.VERBATIM_STRING], chunk);
+          case exports.RESP_TYPES.SIMPLE_ERROR:
+            return this.#decodeSimpleError(chunk);
+          case exports.RESP_TYPES.BLOB_ERROR:
+            return this.#decodeBlobError(chunk);
+          case exports.RESP_TYPES.ARRAY:
+            return this.#decodeArray(typeMapping, chunk);
+          case exports.RESP_TYPES.SET:
+            return this.#decodeSet(typeMapping, chunk);
+          case exports.RESP_TYPES.MAP:
+            return this.#decodeMap(typeMapping, chunk);
+          default:
+            throw new Error(`Unknown RESP type ${type} "${String.fromCharCode(type)}"`);
+        }
+      }
+      #decodeArray(typeMapping, chunk) {
+        if (chunk[this.#cursor] === ASCII["-"]) {
+          this.#cursor += 4;
+          return null;
+        }
+        return this.#decodeArrayWithLength(this.#decodeUnsingedNumber(0, chunk), typeMapping, chunk);
+      }
+      #decodeArrayWithLength(length, typeMapping, chunk) {
+        return typeof length === "function" ? this.#continueDecodeArrayLength.bind(this, length, typeMapping) : this.#decodeArrayItems(new Array(length), 0, typeMapping, chunk);
+      }
+      #continueDecodeArrayLength(lengthCb, typeMapping, chunk) {
+        return this.#decodeArrayWithLength(lengthCb(chunk), typeMapping, chunk);
+      }
+      #decodeArrayItems(array2, filled, typeMapping, chunk) {
+        for (let i = filled; i < array2.length; i++) {
+          if (this.#cursor >= chunk.length) {
+            return this.#decodeArrayItems.bind(this, array2, i, typeMapping);
+          }
+          const item = this.#decodeNestedType(typeMapping, chunk);
+          if (typeof item === "function") {
+            return this.#continueDecodeArrayItems.bind(this, array2, i, item, typeMapping);
+          }
+          array2[i] = item;
+        }
+        return array2;
+      }
+      #continueDecodeArrayItems(array2, filled, itemCb, typeMapping, chunk) {
+        const item = itemCb(chunk);
+        if (typeof item === "function") {
+          return this.#continueDecodeArrayItems.bind(this, array2, filled, item, typeMapping);
+        }
+        array2[filled++] = item;
+        return this.#decodeArrayItems(array2, filled, typeMapping, chunk);
+      }
+      #decodeSet(typeMapping, chunk) {
+        const length = this.#decodeUnsingedNumber(0, chunk);
+        if (typeof length === "function") {
+          return this.#continueDecodeSetLength.bind(this, length, typeMapping);
+        }
+        return this.#decodeSetItems(length, typeMapping, chunk);
+      }
+      #continueDecodeSetLength(lengthCb, typeMapping, chunk) {
+        const length = lengthCb(chunk);
+        return typeof length === "function" ? this.#continueDecodeSetLength.bind(this, length, typeMapping) : this.#decodeSetItems(length, typeMapping, chunk);
+      }
+      #decodeSetItems(length, typeMapping, chunk) {
+        return typeMapping[exports.RESP_TYPES.SET] === Set ? this.#decodeSetAsSet(/* @__PURE__ */ new Set(), length, typeMapping, chunk) : this.#decodeArrayItems(new Array(length), 0, typeMapping, chunk);
+      }
+      #decodeSetAsSet(set, remaining, typeMapping, chunk) {
+        while (remaining > 0) {
+          if (this.#cursor >= chunk.length) {
+            return this.#decodeSetAsSet.bind(this, set, remaining, typeMapping);
+          }
+          const item = this.#decodeNestedType(typeMapping, chunk);
+          if (typeof item === "function") {
+            return this.#continueDecodeSetAsSet.bind(this, set, remaining, item, typeMapping);
+          }
+          set.add(item);
+          --remaining;
+        }
+        return set;
+      }
+      #continueDecodeSetAsSet(set, remaining, itemCb, typeMapping, chunk) {
+        const item = itemCb(chunk);
+        if (typeof item === "function") {
+          return this.#continueDecodeSetAsSet.bind(this, set, remaining, item, typeMapping);
+        }
+        set.add(item);
+        return this.#decodeSetAsSet(set, remaining - 1, typeMapping, chunk);
+      }
+      #decodeMap(typeMapping, chunk) {
+        const length = this.#decodeUnsingedNumber(0, chunk);
+        if (typeof length === "function") {
+          return this.#continueDecodeMapLength.bind(this, length, typeMapping);
+        }
+        return this.#decodeMapItems(length, typeMapping, chunk);
+      }
+      #continueDecodeMapLength(lengthCb, typeMapping, chunk) {
+        const length = lengthCb(chunk);
+        return typeof length === "function" ? this.#continueDecodeMapLength.bind(this, length, typeMapping) : this.#decodeMapItems(length, typeMapping, chunk);
+      }
+      #decodeMapItems(length, typeMapping, chunk) {
+        switch (typeMapping[exports.RESP_TYPES.MAP]) {
+          case Map:
+            return this.#decodeMapAsMap(/* @__PURE__ */ new Map(), length, typeMapping, chunk);
+          case Array:
+            return this.#decodeArrayItems(new Array(length * 2), 0, typeMapping, chunk);
+          default:
+            return this.#decodeMapAsObject(/* @__PURE__ */ Object.create(null), length, typeMapping, chunk);
+        }
+      }
+      #decodeMapAsMap(map, remaining, typeMapping, chunk) {
+        while (remaining > 0) {
+          if (this.#cursor >= chunk.length) {
+            return this.#decodeMapAsMap.bind(this, map, remaining, typeMapping);
+          }
+          const key = this.#decodeMapKey(typeMapping, chunk);
+          if (typeof key === "function") {
+            return this.#continueDecodeMapKey.bind(this, map, remaining, key, typeMapping);
+          }
+          if (this.#cursor >= chunk.length) {
+            return this.#continueDecodeMapValue.bind(this, map, remaining, key, this.#decodeNestedType.bind(this, typeMapping), typeMapping);
+          }
+          const value = this.#decodeNestedType(typeMapping, chunk);
+          if (typeof value === "function") {
+            return this.#continueDecodeMapValue.bind(this, map, remaining, key, value, typeMapping);
+          }
+          map.set(key, value);
+          --remaining;
+        }
+        return map;
+      }
+      #decodeMapKey(typeMapping, chunk) {
+        const type = chunk[this.#cursor];
+        return ++this.#cursor === chunk.length ? this.#decodeMapKeyValue.bind(this, type, typeMapping) : this.#decodeMapKeyValue(type, typeMapping, chunk);
+      }
+      #decodeMapKeyValue(type, typeMapping, chunk) {
+        switch (type) {
+          // decode simple string map key as string (and not as buffer)
+          case exports.RESP_TYPES.SIMPLE_STRING:
+            return this.#decodeSimpleString(String, chunk);
+          // decode blob string map key as string (and not as buffer)
+          case exports.RESP_TYPES.BLOB_STRING:
+            return this.#decodeBlobString(String, chunk);
+          default:
+            return this.#decodeNestedTypeValue(type, typeMapping, chunk);
+        }
+      }
+      #continueDecodeMapKey(map, remaining, keyCb, typeMapping, chunk) {
+        const key = keyCb(chunk);
+        if (typeof key === "function") {
+          return this.#continueDecodeMapKey.bind(this, map, remaining, key, typeMapping);
+        }
+        if (this.#cursor >= chunk.length) {
+          return this.#continueDecodeMapValue.bind(this, map, remaining, key, this.#decodeNestedType.bind(this, typeMapping), typeMapping);
+        }
+        const value = this.#decodeNestedType(typeMapping, chunk);
+        if (typeof value === "function") {
+          return this.#continueDecodeMapValue.bind(this, map, remaining, key, value, typeMapping);
+        }
+        map.set(key, value);
+        return this.#decodeMapAsMap(map, remaining - 1, typeMapping, chunk);
+      }
+      #continueDecodeMapValue(map, remaining, key, valueCb, typeMapping, chunk) {
+        const value = valueCb(chunk);
+        if (typeof value === "function") {
+          return this.#continueDecodeMapValue.bind(this, map, remaining, key, value, typeMapping);
+        }
+        map.set(key, value);
+        return this.#decodeMapAsMap(map, remaining - 1, typeMapping, chunk);
+      }
+      #decodeMapAsObject(object3, remaining, typeMapping, chunk) {
+        while (remaining > 0) {
+          if (this.#cursor >= chunk.length) {
+            return this.#decodeMapAsObject.bind(this, object3, remaining, typeMapping);
+          }
+          const key = this.#decodeMapKey(typeMapping, chunk);
+          if (typeof key === "function") {
+            return this.#continueDecodeMapAsObjectKey.bind(this, object3, remaining, key, typeMapping);
+          }
+          if (this.#cursor >= chunk.length) {
+            return this.#continueDecodeMapAsObjectValue.bind(this, object3, remaining, key, this.#decodeNestedType.bind(this, typeMapping), typeMapping);
+          }
+          const value = this.#decodeNestedType(typeMapping, chunk);
+          if (typeof value === "function") {
+            return this.#continueDecodeMapAsObjectValue.bind(this, object3, remaining, key, value, typeMapping);
+          }
+          object3[key] = value;
+          --remaining;
+        }
+        return object3;
+      }
+      #continueDecodeMapAsObjectKey(object3, remaining, keyCb, typeMapping, chunk) {
+        const key = keyCb(chunk);
+        if (typeof key === "function") {
+          return this.#continueDecodeMapAsObjectKey.bind(this, object3, remaining, key, typeMapping);
+        }
+        if (this.#cursor >= chunk.length) {
+          return this.#continueDecodeMapAsObjectValue.bind(this, object3, remaining, key, this.#decodeNestedType.bind(this, typeMapping), typeMapping);
+        }
+        const value = this.#decodeNestedType(typeMapping, chunk);
+        if (typeof value === "function") {
+          return this.#continueDecodeMapAsObjectValue.bind(this, object3, remaining, key, value, typeMapping);
+        }
+        object3[key] = value;
+        return this.#decodeMapAsObject(object3, remaining - 1, typeMapping, chunk);
+      }
+      #continueDecodeMapAsObjectValue(object3, remaining, key, valueCb, typeMapping, chunk) {
+        const value = valueCb(chunk);
+        if (typeof value === "function") {
+          return this.#continueDecodeMapAsObjectValue.bind(this, object3, remaining, key, value, typeMapping);
+        }
+        object3[key] = value;
+        return this.#decodeMapAsObject(object3, remaining - 1, typeMapping, chunk);
+      }
+    };
+    exports.Decoder = Decoder;
+    _a = Decoder;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/lua-script.js
+var require_lua_script = __commonJS({
+  "node_modules/@redis/client/dist/lib/lua-script.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.scriptSha1 = exports.defineScript = void 0;
+    var node_crypto_1 = __require("node:crypto");
+    function defineScript(script) {
+      return {
+        ...script,
+        SHA1: scriptSha1(script.SCRIPT)
+      };
+    }
+    exports.defineScript = defineScript;
+    function scriptSha1(script) {
+      return (0, node_crypto_1.createHash)("sha1").update(script).digest("hex");
+    }
+    exports.scriptSha1 = scriptSha1;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/utils/digest.js
+var require_digest = __commonJS({
+  "node_modules/@redis/client/dist/lib/utils/digest.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.digest = void 0;
+    var xxh3Cache = null;
+    async function getXxh3() {
+      if (!xxh3Cache) {
+        try {
+          const module2 = await import("@node-rs/xxhash");
+          xxh3Cache = module2.xxh3;
+        } catch {
+          throw new Error('The "digest" function requires the "@node-rs/xxhash" package, but it was not found.');
+        }
+      }
+      return xxh3Cache;
+    }
+    async function digest(value) {
+      const xxh3 = await getXxh3();
+      const data = typeof value === "string" ? value : new Uint8Array(value);
+      const hash = xxh3.xxh64(data);
+      return hash.toString(16).padStart(16, "0");
+    }
+    exports.digest = digest;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_CAT.js
+var require_ACL_CAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_CAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Lists ACL categories or commands in a category
+       * @param parser - The Redis command parser
+       * @param categoryName - Optional category name to filter commands
+       */
+      parseCommand(parser, categoryName) {
+        parser.push("ACL", "CAT");
+        if (categoryName) {
+          parser.push(categoryName);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_DELUSER.js
+var require_ACL_DELUSER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_DELUSER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Deletes one or more users from the ACL
+       * @param parser - The Redis command parser
+       * @param username - Username(s) to delete
+       */
+      parseCommand(parser, username) {
+        parser.push("ACL", "DELUSER");
+        parser.pushVariadic(username);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_DRYRUN.js
+var require_ACL_DRYRUN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_DRYRUN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Simulates ACL operations without executing them
+       * @param parser - The Redis command parser
+       * @param username - Username to simulate ACL operations for
+       * @param command - Command arguments to simulate
+       */
+      parseCommand(parser, username, command) {
+        parser.push("ACL", "DRYRUN", username, ...command);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_GENPASS.js
+var require_ACL_GENPASS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_GENPASS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Generates a secure password for ACL users
+       * @param parser - The Redis command parser
+       * @param bits - Optional number of bits for password entropy
+       */
+      parseCommand(parser, bits) {
+        parser.push("ACL", "GENPASS");
+        if (bits) {
+          parser.push(bits.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_GETUSER.js
+var require_ACL_GETUSER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_GETUSER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns ACL information about a specific user
+       * @param parser - The Redis command parser
+       * @param username - Username to get information for
+       */
+      parseCommand(parser, username) {
+        parser.push("ACL", "GETUSER", username);
+      },
+      transformReply: {
+        2: (reply) => ({
+          flags: reply[1],
+          passwords: reply[3],
+          commands: reply[5],
+          keys: reply[7],
+          channels: reply[9],
+          selectors: reply[11]?.map((selector) => {
+            const inferred = selector;
+            return {
+              commands: inferred[1],
+              keys: inferred[3],
+              channels: inferred[5]
+            };
+          })
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_LIST.js
+var require_ACL_LIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_LIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns all configured ACL users and their permissions
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "LIST");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_LOAD.js
+var require_ACL_LOAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_LOAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Reloads ACL configuration from the ACL file
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "LOAD");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/parser.js
+var require_parser = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/parser.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BasicCommandParser = void 0;
+    var BasicCommandParser = class {
+      #redisArgs = [];
+      #keys = [];
+      preserve;
+      get redisArgs() {
+        return this.#redisArgs;
+      }
+      get keys() {
+        return this.#keys;
+      }
+      get firstKey() {
+        return this.#keys[0];
+      }
+      get cacheKey() {
+        const tmp = new Array(this.#redisArgs.length * 2);
+        for (let i = 0; i < this.#redisArgs.length; i++) {
+          tmp[i] = this.#redisArgs[i].length;
+          tmp[i + this.#redisArgs.length] = this.#redisArgs[i];
+        }
+        return tmp.join("_");
+      }
+      push(...arg) {
+        this.#redisArgs.push(...arg);
+      }
+      pushVariadic(vals) {
+        if (Array.isArray(vals)) {
+          for (const val of vals) {
+            this.push(val);
+          }
+        } else {
+          this.push(vals);
+        }
+      }
+      pushVariadicWithLength(vals) {
+        if (Array.isArray(vals)) {
+          this.#redisArgs.push(vals.length.toString());
+        } else {
+          this.#redisArgs.push("1");
+        }
+        this.pushVariadic(vals);
+      }
+      pushVariadicNumber(vals) {
+        if (Array.isArray(vals)) {
+          for (const val of vals) {
+            this.push(val.toString());
+          }
+        } else {
+          this.push(vals.toString());
+        }
+      }
+      pushKey(key) {
+        this.#keys.push(key);
+        this.#redisArgs.push(key);
+      }
+      pushKeysLength(keys) {
+        if (Array.isArray(keys)) {
+          this.#redisArgs.push(keys.length.toString());
+        } else {
+          this.#redisArgs.push("1");
+        }
+        this.pushKeys(keys);
+      }
+      pushKeys(keys) {
+        if (Array.isArray(keys)) {
+          this.#keys.push(...keys);
+          this.#redisArgs.push(...keys);
+        } else {
+          this.#keys.push(keys);
+          this.#redisArgs.push(keys);
+        }
+      }
+    };
+    exports.BasicCommandParser = BasicCommandParser;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/generic-transformers.js
+var require_generic_transformers = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/generic-transformers.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.transformRedisJsonNullReply = exports.transformRedisJsonReply = exports.transformRedisJsonArgument = exports.transformStreamsMessagesReplyResp3 = exports.transformStreamsMessagesReplyResp2 = exports.transformStreamMessagesReply = exports.transformStreamMessageNullReply = exports.transformStreamMessageReply = exports.parseArgs = exports.parseZKeysArguments = exports.transformRangeReply = exports.parseSlotRangesArguments = exports.transformFunctionListItemReply = exports.RedisFunctionFlags = exports.transformCommandReply = exports.CommandCategories = exports.CommandFlags = exports.parseOptionalVariadicArgument = exports.pushVariadicArgument = exports.pushVariadicNumberArguments = exports.pushVariadicArguments = exports.pushEvalArguments = exports.evalFirstKeyIndex = exports.transformPXAT = exports.transformEXAT = exports.transformSortedSetReply = exports.transformTuplesReply = exports.createTransformTuplesReplyFunc = exports.transformTuplesToMap = exports.transformNullableDoubleReply = exports.createTransformNullableDoubleReplyResp2Func = exports.transformDoubleArrayReply = exports.createTransformDoubleReplyResp2Func = exports.transformDoubleReply = exports.transformStringDoubleArgument = exports.transformDoubleArgument = exports.transformBooleanArrayReply = exports.transformBooleanReply = exports.isArrayReply = exports.isNullReply = void 0;
+    var parser_1 = require_parser();
+    var decoder_1 = require_decoder();
+    function isNullReply(reply) {
+      return reply === null;
+    }
+    exports.isNullReply = isNullReply;
+    function isArrayReply(reply) {
+      return Array.isArray(reply);
+    }
+    exports.isArrayReply = isArrayReply;
+    exports.transformBooleanReply = {
+      2: (reply) => reply === 1,
+      3: void 0
+    };
+    exports.transformBooleanArrayReply = {
+      2: (reply) => {
+        return reply.map(exports.transformBooleanReply[2]);
+      },
+      3: void 0
+    };
+    function transformDoubleArgument(num) {
+      switch (num) {
+        case Infinity:
+          return "+inf";
+        case -Infinity:
+          return "-inf";
+        default:
+          return num.toString();
+      }
+    }
+    exports.transformDoubleArgument = transformDoubleArgument;
+    function transformStringDoubleArgument(num) {
+      if (typeof num !== "number")
+        return num;
+      return transformDoubleArgument(num);
+    }
+    exports.transformStringDoubleArgument = transformStringDoubleArgument;
+    exports.transformDoubleReply = {
+      2: (reply, preserve, typeMapping) => {
+        const double = typeMapping ? typeMapping[decoder_1.RESP_TYPES.DOUBLE] : void 0;
+        switch (double) {
+          case String: {
+            return reply;
+          }
+          default: {
+            let ret;
+            switch (reply.toString()) {
+              case "inf":
+              case "+inf":
+                ret = Infinity;
+                break;
+              case "-inf":
+                ret = -Infinity;
+                break;
+              case "nan":
+                ret = NaN;
+                break;
+              default:
+                ret = Number(reply);
+            }
+            return ret;
+          }
+        }
+      },
+      3: void 0
+    };
+    function createTransformDoubleReplyResp2Func(preserve, typeMapping) {
+      return (reply) => {
+        return exports.transformDoubleReply[2](reply, preserve, typeMapping);
+      };
+    }
+    exports.createTransformDoubleReplyResp2Func = createTransformDoubleReplyResp2Func;
+    exports.transformDoubleArrayReply = {
+      2: (reply, preserve, typeMapping) => {
+        return reply.map(createTransformDoubleReplyResp2Func(preserve, typeMapping));
+      },
+      3: void 0
+    };
+    function createTransformNullableDoubleReplyResp2Func(preserve, typeMapping) {
+      return (reply) => {
+        return exports.transformNullableDoubleReply[2](reply, preserve, typeMapping);
+      };
+    }
+    exports.createTransformNullableDoubleReplyResp2Func = createTransformNullableDoubleReplyResp2Func;
+    exports.transformNullableDoubleReply = {
+      2: (reply, preserve, typeMapping) => {
+        if (reply === null)
+          return null;
+        return exports.transformDoubleReply[2](reply, preserve, typeMapping);
+      },
+      3: void 0
+    };
+    function transformTuplesToMap(reply, func) {
+      const message = /* @__PURE__ */ Object.create(null);
+      for (let i = 0; i < reply.length; i += 2) {
+        message[reply[i].toString()] = func(reply[i + 1]);
+      }
+      return message;
+    }
+    exports.transformTuplesToMap = transformTuplesToMap;
+    function createTransformTuplesReplyFunc(preserve, typeMapping) {
+      return (reply) => {
+        return transformTuplesReply(reply, preserve, typeMapping);
+      };
+    }
+    exports.createTransformTuplesReplyFunc = createTransformTuplesReplyFunc;
+    function transformTuplesReply(reply, preserve, typeMapping) {
+      const mapType2 = typeMapping ? typeMapping[decoder_1.RESP_TYPES.MAP] : void 0;
+      const inferred = reply;
+      switch (mapType2) {
+        case Array: {
+          return reply;
+        }
+        case Map: {
+          const ret = /* @__PURE__ */ new Map();
+          for (let i = 0; i < inferred.length; i += 2) {
+            ret.set(inferred[i].toString(), inferred[i + 1]);
+          }
+          return ret;
+          ;
+        }
+        default: {
+          const ret = /* @__PURE__ */ Object.create(null);
+          for (let i = 0; i < inferred.length; i += 2) {
+            ret[inferred[i].toString()] = inferred[i + 1];
+          }
+          return ret;
+          ;
+        }
+      }
+    }
+    exports.transformTuplesReply = transformTuplesReply;
+    exports.transformSortedSetReply = {
+      2: (reply, preserve, typeMapping) => {
+        const inferred = reply, members = [];
+        for (let i = 0; i < inferred.length; i += 2) {
+          members.push({
+            value: inferred[i],
+            score: exports.transformDoubleReply[2](inferred[i + 1], preserve, typeMapping)
+          });
+        }
+        return members;
+      },
+      3: (reply) => {
+        return reply.map((member) => {
+          const [value, score] = member;
+          return {
+            value,
+            score
+          };
+        });
+      }
+    };
+    function transformEXAT(EXAT) {
+      return (typeof EXAT === "number" ? EXAT : Math.floor(EXAT.getTime() / 1e3)).toString();
+    }
+    exports.transformEXAT = transformEXAT;
+    function transformPXAT(PXAT) {
+      return (typeof PXAT === "number" ? PXAT : PXAT.getTime()).toString();
+    }
+    exports.transformPXAT = transformPXAT;
+    function evalFirstKeyIndex(options) {
+      return options?.keys?.[0];
+    }
+    exports.evalFirstKeyIndex = evalFirstKeyIndex;
+    function pushEvalArguments(args, options) {
+      if (options?.keys) {
+        args.push(options.keys.length.toString(), ...options.keys);
+      } else {
+        args.push("0");
+      }
+      if (options?.arguments) {
+        args.push(...options.arguments);
+      }
+      return args;
+    }
+    exports.pushEvalArguments = pushEvalArguments;
+    function pushVariadicArguments(args, value) {
+      if (Array.isArray(value)) {
+        args = args.concat(value);
+      } else {
+        args.push(value);
+      }
+      return args;
+    }
+    exports.pushVariadicArguments = pushVariadicArguments;
+    function pushVariadicNumberArguments(args, value) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          args.push(item.toString());
+        }
+      } else {
+        args.push(value.toString());
+      }
+      return args;
+    }
+    exports.pushVariadicNumberArguments = pushVariadicNumberArguments;
+    function pushVariadicArgument(args, value) {
+      if (Array.isArray(value)) {
+        args.push(value.length.toString(), ...value);
+      } else {
+        args.push("1", value);
+      }
+      return args;
+    }
+    exports.pushVariadicArgument = pushVariadicArgument;
+    function parseOptionalVariadicArgument(parser, name, value) {
+      if (value === void 0)
+        return;
+      parser.push(name);
+      parser.pushVariadicWithLength(value);
+    }
+    exports.parseOptionalVariadicArgument = parseOptionalVariadicArgument;
+    var CommandFlags;
+    (function(CommandFlags2) {
+      CommandFlags2["WRITE"] = "write";
+      CommandFlags2["READONLY"] = "readonly";
+      CommandFlags2["DENYOOM"] = "denyoom";
+      CommandFlags2["ADMIN"] = "admin";
+      CommandFlags2["PUBSUB"] = "pubsub";
+      CommandFlags2["NOSCRIPT"] = "noscript";
+      CommandFlags2["RANDOM"] = "random";
+      CommandFlags2["SORT_FOR_SCRIPT"] = "sort_for_script";
+      CommandFlags2["LOADING"] = "loading";
+      CommandFlags2["STALE"] = "stale";
+      CommandFlags2["SKIP_MONITOR"] = "skip_monitor";
+      CommandFlags2["ASKING"] = "asking";
+      CommandFlags2["FAST"] = "fast";
+      CommandFlags2["MOVABLEKEYS"] = "movablekeys";
+    })(CommandFlags || (exports.CommandFlags = CommandFlags = {}));
+    var CommandCategories;
+    (function(CommandCategories2) {
+      CommandCategories2["KEYSPACE"] = "@keyspace";
+      CommandCategories2["READ"] = "@read";
+      CommandCategories2["WRITE"] = "@write";
+      CommandCategories2["SET"] = "@set";
+      CommandCategories2["SORTEDSET"] = "@sortedset";
+      CommandCategories2["LIST"] = "@list";
+      CommandCategories2["HASH"] = "@hash";
+      CommandCategories2["STRING"] = "@string";
+      CommandCategories2["BITMAP"] = "@bitmap";
+      CommandCategories2["HYPERLOGLOG"] = "@hyperloglog";
+      CommandCategories2["GEO"] = "@geo";
+      CommandCategories2["STREAM"] = "@stream";
+      CommandCategories2["PUBSUB"] = "@pubsub";
+      CommandCategories2["ADMIN"] = "@admin";
+      CommandCategories2["FAST"] = "@fast";
+      CommandCategories2["SLOW"] = "@slow";
+      CommandCategories2["BLOCKING"] = "@blocking";
+      CommandCategories2["DANGEROUS"] = "@dangerous";
+      CommandCategories2["CONNECTION"] = "@connection";
+      CommandCategories2["TRANSACTION"] = "@transaction";
+      CommandCategories2["SCRIPTING"] = "@scripting";
+    })(CommandCategories || (exports.CommandCategories = CommandCategories = {}));
+    function transformCommandReply([name, arity, flags, firstKeyIndex, lastKeyIndex, step, categories]) {
+      return {
+        name,
+        arity,
+        flags: new Set(flags),
+        firstKeyIndex,
+        lastKeyIndex,
+        step,
+        categories: new Set(categories)
+      };
+    }
+    exports.transformCommandReply = transformCommandReply;
+    var RedisFunctionFlags;
+    (function(RedisFunctionFlags2) {
+      RedisFunctionFlags2["NO_WRITES"] = "no-writes";
+      RedisFunctionFlags2["ALLOW_OOM"] = "allow-oom";
+      RedisFunctionFlags2["ALLOW_STALE"] = "allow-stale";
+      RedisFunctionFlags2["NO_CLUSTER"] = "no-cluster";
+    })(RedisFunctionFlags || (exports.RedisFunctionFlags = RedisFunctionFlags = {}));
+    function transformFunctionListItemReply(reply) {
+      return {
+        libraryName: reply[1],
+        engine: reply[3],
+        functions: reply[5].map((fn) => ({
+          name: fn[1],
+          description: fn[3],
+          flags: fn[5]
+        }))
+      };
+    }
+    exports.transformFunctionListItemReply = transformFunctionListItemReply;
+    function parseSlotRangeArguments(parser, range) {
+      parser.push(range.start.toString(), range.end.toString());
+    }
+    function parseSlotRangesArguments(parser, ranges) {
+      if (Array.isArray(ranges)) {
+        for (const range of ranges) {
+          parseSlotRangeArguments(parser, range);
+        }
+      } else {
+        parseSlotRangeArguments(parser, ranges);
+      }
+    }
+    exports.parseSlotRangesArguments = parseSlotRangesArguments;
+    function transformRangeReply([start, end]) {
+      return {
+        start,
+        end
+      };
+    }
+    exports.transformRangeReply = transformRangeReply;
+    function parseZKeysArguments(parser, keys) {
+      if (Array.isArray(keys)) {
+        parser.push(keys.length.toString());
+        if (keys.length) {
+          if (isPlainKeys(keys)) {
+            parser.pushKeys(keys);
+          } else {
+            for (let i = 0; i < keys.length; i++) {
+              parser.pushKey(keys[i].key);
+            }
+            parser.push("WEIGHTS");
+            for (let i = 0; i < keys.length; i++) {
+              parser.push(transformDoubleArgument(keys[i].weight));
+            }
+          }
+        }
+      } else {
+        parser.push("1");
+        if (isPlainKey(keys)) {
+          parser.pushKey(keys);
+        } else {
+          parser.pushKey(keys.key);
+          parser.push("WEIGHTS", transformDoubleArgument(keys.weight));
+        }
+      }
+    }
+    exports.parseZKeysArguments = parseZKeysArguments;
+    function isPlainKey(key) {
+      return typeof key === "string" || key instanceof Buffer;
+    }
+    function isPlainKeys(keys) {
+      return isPlainKey(keys[0]);
+    }
+    function parseArgs(command, ...args) {
+      const parser = new parser_1.BasicCommandParser();
+      command.parseCommand(parser, ...args);
+      const redisArgs = parser.redisArgs;
+      if (parser.preserve) {
+        redisArgs.preserve = parser.preserve;
+      }
+      return redisArgs;
+    }
+    exports.parseArgs = parseArgs;
+    function transformStreamMessageReply(typeMapping, reply) {
+      const [id, message, millisElapsedFromDelivery, deliveriesCounter] = reply;
+      return {
+        id,
+        message: transformTuplesReply(message, void 0, typeMapping),
+        ...millisElapsedFromDelivery !== void 0 ? { millisElapsedFromDelivery } : {},
+        ...deliveriesCounter !== void 0 ? { deliveriesCounter } : {}
+      };
+    }
+    exports.transformStreamMessageReply = transformStreamMessageReply;
+    function transformStreamMessageNullReply(typeMapping, reply) {
+      return isNullReply(reply) ? reply : transformStreamMessageReply(typeMapping, reply);
+    }
+    exports.transformStreamMessageNullReply = transformStreamMessageNullReply;
+    function transformStreamMessagesReply(r, typeMapping) {
+      const reply = r;
+      return reply.map(transformStreamMessageReply.bind(void 0, typeMapping));
+    }
+    exports.transformStreamMessagesReply = transformStreamMessagesReply;
+    function transformStreamsMessagesReplyResp2(reply, preserve, typeMapping) {
+      if (reply === null)
+        return null;
+      switch (typeMapping ? typeMapping[decoder_1.RESP_TYPES.MAP] : void 0) {
+        /* FUTURE: a response type for when resp3 is working properly
+            case Map: {
+              const ret = new Map<string, StreamMessagesReply>();
+
+              for (let i=0; i < reply.length; i++) {
+                const stream = reply[i] as unknown as UnwrapReply<StreamMessagesRawReply>;
+
+                const name = stream[0];
+                const rawMessages = stream[1];
+
+                ret.set(name.toString(), transformStreamMessagesReply(rawMessages, typeMapping));
+              }
+
+              return ret as unknown as MapReply<string, StreamMessagesReply>;
+            }
+            case Array: {
+              const ret: Array<BlobStringReply | StreamMessagesReply> = [];
+
+              for (let i=0; i < reply.length; i++) {
+                const stream = reply[i] as unknown as UnwrapReply<StreamMessagesRawReply>;
+
+                const name = stream[0];
+                const rawMessages = stream[1];
+
+                ret.push(name);
+                ret.push(transformStreamMessagesReply(rawMessages, typeMapping));
+              }
+
+              return ret as unknown as MapReply<string, StreamMessagesReply>;
+            }
+            default: {
+              const ret: Record<string, StreamMessagesReply> = Object.create(null);
+
+              for (let i=0; i < reply.length; i++) {
+                const stream = reply[i] as unknown as UnwrapReply<StreamMessagesRawReply>;
+
+                const name = stream[0] as unknown as UnwrapReply<BlobStringReply>;
+                const rawMessages = stream[1];
+
+                ret[name.toString()] = transformStreamMessagesReply(rawMessages);
+              }
+
+              return ret as unknown as MapReply<string, StreamMessagesReply>;
+            }
+        */
+        // V4 compatible response type
+        default: {
+          const ret = [];
+          for (let i = 0; i < reply.length; i++) {
+            const stream = reply[i];
+            ret.push({
+              name: stream[0],
+              messages: transformStreamMessagesReply(stream[1])
+            });
+          }
+          return ret;
+        }
+      }
+    }
+    exports.transformStreamsMessagesReplyResp2 = transformStreamsMessagesReplyResp2;
+    function transformStreamsMessagesReplyResp3(reply) {
+      if (reply === null)
+        return null;
+      if (reply instanceof Map) {
+        const ret = /* @__PURE__ */ new Map();
+        for (const [n, rawMessages] of reply) {
+          const name = n;
+          ret.set(name.toString(), transformStreamMessagesReply(rawMessages));
+        }
+        return ret;
+      } else if (reply instanceof Array) {
+        const ret = [];
+        for (let i = 0; i < reply.length; i += 2) {
+          const name = reply[i];
+          const rawMessages = reply[i + 1];
+          ret.push(name);
+          ret.push(transformStreamMessagesReply(rawMessages));
+        }
+        return ret;
+      } else {
+        const ret = /* @__PURE__ */ Object.create(null);
+        for (const [name, rawMessages] of Object.entries(reply)) {
+          ret[name] = transformStreamMessagesReply(rawMessages);
+        }
+        return ret;
+      }
+    }
+    exports.transformStreamsMessagesReplyResp3 = transformStreamsMessagesReplyResp3;
+    function transformRedisJsonArgument(json) {
+      return JSON.stringify(json);
+    }
+    exports.transformRedisJsonArgument = transformRedisJsonArgument;
+    function transformRedisJsonReply(json) {
+      const res = JSON.parse(json.toString());
+      return res;
+    }
+    exports.transformRedisJsonReply = transformRedisJsonReply;
+    function transformRedisJsonNullReply(json) {
+      return isNullReply(json) ? json : transformRedisJsonReply(json);
+    }
+    exports.transformRedisJsonNullReply = transformRedisJsonNullReply;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_LOG.js
+var require_ACL_LOG = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_LOG.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns ACL security events log entries
+       * @param parser - The Redis command parser
+       * @param count - Optional maximum number of entries to return
+       */
+      parseCommand(parser, count) {
+        parser.push("ACL", "LOG");
+        if (count != void 0) {
+          parser.push(count.toString());
+        }
+      },
+      transformReply: {
+        2: (reply, preserve, typeMapping) => {
+          return reply.map((item) => {
+            const inferred = item;
+            return {
+              count: inferred[1],
+              reason: inferred[3],
+              context: inferred[5],
+              object: inferred[7],
+              username: inferred[9],
+              "age-seconds": generic_transformers_1.transformDoubleReply[2](inferred[11], preserve, typeMapping),
+              "client-info": inferred[13],
+              "entry-id": inferred[15],
+              "timestamp-created": inferred[17],
+              "timestamp-last-updated": inferred[19]
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_LOG_RESET.js
+var require_ACL_LOG_RESET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_LOG_RESET.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ACL_LOG_1 = __importDefault(require_ACL_LOG());
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: ACL_LOG_1.default.IS_READ_ONLY,
+      /**
+       * Clears the ACL security events log
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "LOG", "RESET");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_SAVE.js
+var require_ACL_SAVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_SAVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Saves the current ACL configuration to the ACL file
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "SAVE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_SETUSER.js
+var require_ACL_SETUSER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_SETUSER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Creates or modifies ACL user with specified rules
+       * @param parser - The Redis command parser
+       * @param username - Username to create or modify
+       * @param rule - ACL rule(s) to apply to the user
+       */
+      parseCommand(parser, username, rule) {
+        parser.push("ACL", "SETUSER", username);
+        parser.pushVariadic(rule);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_USERS.js
+var require_ACL_USERS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_USERS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns a list of all configured ACL usernames
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "USERS");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ACL_WHOAMI.js
+var require_ACL_WHOAMI = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ACL_WHOAMI.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the username of the current connection
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("ACL", "WHOAMI");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/APPEND.js
+var require_APPEND = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/APPEND.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Appends a value to a string key
+       * @param parser - The Redis command parser
+       * @param key - The key to append to
+       * @param value - The value to append
+       */
+      parseCommand(parser, key, value) {
+        parser.push("APPEND", key, value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ASKING.js
+var require_ASKING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ASKING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ASKING_CMD = void 0;
+    exports.ASKING_CMD = "ASKING";
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Tells a Redis cluster node that the client is ok receiving such redirects
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push(exports.ASKING_CMD);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/AUTH.js
+var require_AUTH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/AUTH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Authenticates the connection using a password or username and password
+       * @param parser - The Redis command parser
+       * @param options - Authentication options containing username and/or password
+       * @param options.username - Optional username for authentication
+       * @param options.password - Password for authentication
+       */
+      parseCommand(parser, { username, password }) {
+        parser.push("AUTH");
+        if (username !== void 0) {
+          parser.push(username);
+        }
+        parser.push(password);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BGREWRITEAOF.js
+var require_BGREWRITEAOF = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BGREWRITEAOF.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Asynchronously rewrites the append-only file
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("BGREWRITEAOF");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BGSAVE.js
+var require_BGSAVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BGSAVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Asynchronously saves the dataset to disk
+       * @param parser - The Redis command parser
+       * @param options - Optional configuration
+       * @param options.SCHEDULE - Schedule a BGSAVE operation when no BGSAVE is already in progress
+       */
+      parseCommand(parser, options) {
+        parser.push("BGSAVE");
+        if (options?.SCHEDULE) {
+          parser.push("SCHEDULE");
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BITCOUNT.js
+var require_BITCOUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BITCOUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the count of set bits in a string key
+       * @param parser - The Redis command parser
+       * @param key - The key to count bits in
+       * @param range - Optional range specification
+       * @param range.start - Start offset in bytes/bits
+       * @param range.end - End offset in bytes/bits
+       * @param range.mode - Optional counting mode: BYTE or BIT
+       */
+      parseCommand(parser, key, range) {
+        parser.push("BITCOUNT");
+        parser.pushKey(key);
+        if (range) {
+          parser.push(range.start.toString());
+          parser.push(range.end.toString());
+          if (range.mode) {
+            parser.push(range.mode);
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BITFIELD_RO.js
+var require_BITFIELD_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BITFIELD_RO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Performs read-only bitfield integer operations on strings
+       * @param parser - The Redis command parser
+       * @param key - The key holding the string
+       * @param operations - Array of GET operations to perform on the bitfield
+       */
+      parseCommand(parser, key, operations) {
+        parser.push("BITFIELD_RO");
+        parser.pushKey(key);
+        for (const operation of operations) {
+          parser.push("GET");
+          parser.push(operation.encoding);
+          parser.push(operation.offset.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BITFIELD.js
+var require_BITFIELD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BITFIELD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Performs arbitrary bitfield integer operations on strings
+       * @param parser - The Redis command parser
+       * @param key - The key holding the string
+       * @param operations - Array of bitfield operations to perform: GET, SET, INCRBY or OVERFLOW
+       */
+      parseCommand(parser, key, operations) {
+        parser.push("BITFIELD");
+        parser.pushKey(key);
+        for (const options of operations) {
+          switch (options.operation) {
+            case "GET":
+              parser.push("GET", options.encoding, options.offset.toString());
+              break;
+            case "SET":
+              parser.push("SET", options.encoding, options.offset.toString(), options.value.toString());
+              break;
+            case "INCRBY":
+              parser.push("INCRBY", options.encoding, options.offset.toString(), options.increment.toString());
+              break;
+            case "OVERFLOW":
+              parser.push("OVERFLOW", options.behavior);
+              break;
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BITOP.js
+var require_BITOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BITOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Performs bitwise operations between strings
+       * @param parser - The Redis command parser
+       * @param operation - Bitwise operation to perform: AND, OR, XOR, NOT, DIFF, DIFF1, ANDOR, ONE
+       * @param destKey - Destination key to store the result
+       * @param key - Source key(s) to perform operation on
+       */
+      parseCommand(parser, operation, destKey, key) {
+        parser.push("BITOP", operation);
+        parser.pushKey(destKey);
+        parser.pushKeys(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BITPOS.js
+var require_BITPOS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BITPOS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the position of first bit set to 0 or 1 in a string
+       * @param parser - The Redis command parser
+       * @param key - The key holding the string
+       * @param bit - The bit value to look for (0 or 1)
+       * @param start - Optional starting position in bytes/bits
+       * @param end - Optional ending position in bytes/bits
+       * @param mode - Optional counting mode: BYTE or BIT
+       */
+      parseCommand(parser, key, bit, start, end, mode) {
+        parser.push("BITPOS");
+        parser.pushKey(key);
+        parser.push(bit.toString());
+        if (start !== void 0) {
+          parser.push(start.toString());
+        }
+        if (end !== void 0) {
+          parser.push(end.toString());
+        }
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BLMOVE.js
+var require_BLMOVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BLMOVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Pop an element from a list, push it to another list and return it; or block until one is available
+       * @param parser - The Redis command parser
+       * @param source - Key of the source list
+       * @param destination - Key of the destination list
+       * @param sourceSide - Side of source list to pop from (LEFT or RIGHT)
+       * @param destinationSide - Side of destination list to push to (LEFT or RIGHT)
+       * @param timeout - Timeout in seconds, 0 to block indefinitely
+       */
+      parseCommand(parser, source, destination, sourceSide, destinationSide, timeout) {
+        parser.push("BLMOVE");
+        parser.pushKeys([source, destination]);
+        parser.push(sourceSide, destinationSide, timeout.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LMPOP.js
+var require_LMPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LMPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseLMPopArguments = void 0;
+    function parseLMPopArguments(parser, keys, side, options) {
+      parser.pushKeysLength(keys);
+      parser.push(side);
+      if (options?.COUNT !== void 0) {
+        parser.push("COUNT", options.COUNT.toString());
+      }
+    }
+    exports.parseLMPopArguments = parseLMPopArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the LMPOP command
+       *
+       * @param parser - The command parser
+       * @param args - Arguments including keys, side (LEFT or RIGHT), and options
+       * @see https://redis.io/commands/lmpop/
+       */
+      parseCommand(parser, ...args) {
+        parser.push("LMPOP");
+        parseLMPopArguments(parser, ...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BLMPOP.js
+var require_BLMPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BLMPOP.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LMPOP_1 = __importStar(require_LMPOP());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Pops elements from multiple lists; blocks until elements are available
+       * @param parser - The Redis command parser
+       * @param timeout - Timeout in seconds, 0 to block indefinitely
+       * @param args - Additional arguments for LMPOP command
+       */
+      parseCommand(parser, timeout, ...args) {
+        parser.push("BLMPOP", timeout.toString());
+        (0, LMPOP_1.parseLMPopArguments)(parser, ...args);
+      },
+      transformReply: LMPOP_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BLPOP.js
+var require_BLPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BLPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Removes and returns the first element in a list, or blocks until one is available
+       * @param parser - The Redis command parser
+       * @param key - Key of the list to pop from, or array of keys to try sequentially
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       */
+      parseCommand(parser, key, timeout) {
+        parser.push("BLPOP");
+        parser.pushKeys(key);
+        parser.push(timeout.toString());
+      },
+      transformReply(reply) {
+        if (reply === null)
+          return null;
+        return {
+          key: reply[0],
+          element: reply[1]
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BRPOP.js
+var require_BRPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BRPOP.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var BLPOP_1 = __importDefault(require_BLPOP());
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Removes and returns the last element in a list, or blocks until one is available
+       * @param parser - The Redis command parser
+       * @param key - Key of the list to pop from, or array of keys to try sequentially
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       */
+      parseCommand(parser, key, timeout) {
+        parser.push("BRPOP");
+        parser.pushKeys(key);
+        parser.push(timeout.toString());
+      },
+      transformReply: BLPOP_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BRPOPLPUSH.js
+var require_BRPOPLPUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BRPOPLPUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Pops an element from a list, pushes it to another list and returns it; blocks until element is available
+       * @param parser - The Redis command parser
+       * @param source - Key of the source list to pop from
+       * @param destination - Key of the destination list to push to
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       */
+      parseCommand(parser, source, destination, timeout) {
+        parser.push("BRPOPLPUSH");
+        parser.pushKeys([source, destination]);
+        parser.push(timeout.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZMPOP.js
+var require_ZMPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZMPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseZMPopArguments = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    function parseZMPopArguments(parser, keys, side, options) {
+      parser.pushKeysLength(keys);
+      parser.push(side);
+      if (options?.COUNT) {
+        parser.push("COUNT", options.COUNT.toString());
+      }
+    }
+    exports.parseZMPopArguments = parseZMPopArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns up to count members with the highest/lowest scores from the first non-empty sorted set.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets to pop from.
+       * @param side - Side to pop from (MIN or MAX).
+       * @param options - Optional parameters including COUNT.
+       */
+      parseCommand(parser, keys, side, options) {
+        parser.push("ZMPOP");
+        parseZMPopArguments(parser, keys, side, options);
+      },
+      transformReply: {
+        2(reply, preserve, typeMapping) {
+          return reply === null ? null : {
+            key: reply[0],
+            members: reply[1].map((member) => {
+              const [value, score] = member;
+              return {
+                value,
+                score: generic_transformers_1.transformDoubleReply[2](score, preserve, typeMapping)
+              };
+            })
+          };
+        },
+        3(reply) {
+          return reply === null ? null : {
+            key: reply[0],
+            members: generic_transformers_1.transformSortedSetReply[3](reply[1])
+          };
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BZMPOP.js
+var require_BZMPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BZMPOP.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZMPOP_1 = __importStar(require_ZMPOP());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns members from one or more sorted sets in the specified order; blocks until elements are available
+       * @param parser - The Redis command parser
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       * @param args - Additional arguments specifying the keys, min/max count, and order (MIN/MAX)
+       */
+      parseCommand(parser, timeout, ...args) {
+        parser.push("BZMPOP", timeout.toString());
+        (0, ZMPOP_1.parseZMPopArguments)(parser, ...args);
+      },
+      transformReply: ZMPOP_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BZPOPMAX.js
+var require_BZPOPMAX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BZPOPMAX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns the member with the highest score in a sorted set, or blocks until one is available
+       * @param parser - The Redis command parser
+       * @param keys - Key of the sorted set, or array of keys to try sequentially
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       */
+      parseCommand(parser, keys, timeout) {
+        parser.push("BZPOPMAX");
+        parser.pushKeys(keys);
+        parser.push(timeout.toString());
+      },
+      transformReply: {
+        2(reply, preserve, typeMapping) {
+          return reply === null ? null : {
+            key: reply[0],
+            value: reply[1],
+            score: generic_transformers_1.transformDoubleReply[2](reply[2], preserve, typeMapping)
+          };
+        },
+        3(reply) {
+          return reply === null ? null : {
+            key: reply[0],
+            value: reply[1],
+            score: reply[2]
+          };
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/BZPOPMIN.js
+var require_BZPOPMIN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/BZPOPMIN.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var BZPOPMAX_1 = __importDefault(require_BZPOPMAX());
+    exports.default = {
+      IS_READ_ONLY: BZPOPMAX_1.default.IS_READ_ONLY,
+      /**
+       * Removes and returns the member with the lowest score in a sorted set, or blocks until one is available
+       * @param parser - The Redis command parser
+       * @param keys - Key of the sorted set, or array of keys to try sequentially
+       * @param timeout - Maximum seconds to block, 0 to block indefinitely
+       */
+      parseCommand(parser, keys, timeout) {
+        parser.push("BZPOPMIN");
+        parser.pushKeys(keys);
+        parser.push(timeout.toString());
+      },
+      transformReply: BZPOPMAX_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_CACHING.js
+var require_CLIENT_CACHING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_CACHING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Instructs the server about tracking or not keys in the next request
+       * @param parser - The Redis command parser
+       * @param value - Whether to enable (true) or disable (false) tracking
+       */
+      parseCommand(parser, value) {
+        parser.push("CLIENT", "CACHING", value ? "YES" : "NO");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_GETNAME.js
+var require_CLIENT_GETNAME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_GETNAME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the name of the current connection
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "GETNAME");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_GETREDIR.js
+var require_CLIENT_GETREDIR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_GETREDIR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the ID of the client to which the current client is redirecting tracking notifications
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "GETREDIR");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_ID.js
+var require_CLIENT_ID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_ID.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the client ID for the current connection
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "ID");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_INFO.js
+var require_CLIENT_INFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_INFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var CLIENT_INFO_REGEX = /([^\s=]+)=([^\s]*)/g;
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information and statistics about the current client connection
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "INFO");
+      },
+      transformReply(rawReply) {
+        const map = {};
+        for (const item of rawReply.toString().matchAll(CLIENT_INFO_REGEX)) {
+          map[item[1]] = item[2];
+        }
+        const reply = {
+          id: Number(map.id),
+          addr: map.addr,
+          fd: Number(map.fd),
+          name: map.name,
+          age: Number(map.age),
+          idle: Number(map.idle),
+          flags: map.flags,
+          db: Number(map.db),
+          sub: Number(map.sub),
+          psub: Number(map.psub),
+          multi: Number(map.multi),
+          qbuf: Number(map.qbuf),
+          qbufFree: Number(map["qbuf-free"]),
+          argvMem: Number(map["argv-mem"]),
+          obl: Number(map.obl),
+          oll: Number(map.oll),
+          omem: Number(map.omem),
+          totMem: Number(map["tot-mem"]),
+          events: map.events,
+          cmd: map.cmd,
+          user: map.user,
+          libName: map["lib-name"],
+          libVer: map["lib-ver"]
+        };
+        if (map.laddr !== void 0) {
+          reply.laddr = map.laddr;
+        }
+        if (map.redir !== void 0) {
+          reply.redir = Number(map.redir);
+        }
+        if (map.ssub !== void 0) {
+          reply.ssub = Number(map.ssub);
+        }
+        if (map["multi-mem"] !== void 0) {
+          reply.multiMem = Number(map["multi-mem"]);
+        }
+        if (map.resp !== void 0) {
+          reply.resp = Number(map.resp);
+        }
+        return reply;
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_KILL.js
+var require_CLIENT_KILL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_KILL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CLIENT_KILL_FILTERS = void 0;
+    exports.CLIENT_KILL_FILTERS = {
+      ADDRESS: "ADDR",
+      LOCAL_ADDRESS: "LADDR",
+      ID: "ID",
+      TYPE: "TYPE",
+      USER: "USER",
+      SKIP_ME: "SKIPME",
+      MAXAGE: "MAXAGE"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Closes client connections matching the specified filters
+       * @param parser - The Redis command parser
+       * @param filters - One or more filters to match client connections to kill
+       */
+      parseCommand(parser, filters) {
+        parser.push("CLIENT", "KILL");
+        if (Array.isArray(filters)) {
+          for (const filter of filters) {
+            pushFilter(parser, filter);
+          }
+        } else {
+          pushFilter(parser, filters);
+        }
+      },
+      transformReply: void 0
+    };
+    function pushFilter(parser, filter) {
+      if (filter === exports.CLIENT_KILL_FILTERS.SKIP_ME) {
+        parser.push("SKIPME");
+        return;
+      }
+      parser.push(filter.filter);
+      switch (filter.filter) {
+        case exports.CLIENT_KILL_FILTERS.ADDRESS:
+          parser.push(filter.address);
+          break;
+        case exports.CLIENT_KILL_FILTERS.LOCAL_ADDRESS:
+          parser.push(filter.localAddress);
+          break;
+        case exports.CLIENT_KILL_FILTERS.ID:
+          parser.push(typeof filter.id === "number" ? filter.id.toString() : filter.id);
+          break;
+        case exports.CLIENT_KILL_FILTERS.TYPE:
+          parser.push(filter.type);
+          break;
+        case exports.CLIENT_KILL_FILTERS.USER:
+          parser.push(filter.username);
+          break;
+        case exports.CLIENT_KILL_FILTERS.SKIP_ME:
+          parser.push(filter.skipMe ? "yes" : "no");
+          break;
+        case exports.CLIENT_KILL_FILTERS.MAXAGE:
+          parser.push(filter.maxAge.toString());
+          break;
+      }
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_LIST.js
+var require_CLIENT_LIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_LIST.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var CLIENT_INFO_1 = __importDefault(require_CLIENT_INFO());
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about all client connections. Can be filtered by type or ID
+       * @param parser - The Redis command parser
+       * @param filter - Optional filter to return only specific client types or IDs
+       */
+      parseCommand(parser, filter) {
+        parser.push("CLIENT", "LIST");
+        if (filter) {
+          if (filter.TYPE !== void 0) {
+            parser.push("TYPE", filter.TYPE);
+          } else {
+            parser.push("ID");
+            parser.pushVariadic(filter.ID);
+          }
+        }
+      },
+      transformReply(rawReply) {
+        const split = rawReply.toString().split("\n"), length = split.length - 1, reply = [];
+        for (let i = 0; i < length; i++) {
+          reply.push(CLIENT_INFO_1.default.transformReply(split[i]));
+        }
+        return reply;
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_NO-EVICT.js
+var require_CLIENT_NO_EVICT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_NO-EVICT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Controls whether to prevent the client's connections from being evicted
+       * @param parser - The Redis command parser
+       * @param value - Whether to enable (true) or disable (false) the no-evict mode
+       */
+      parseCommand(parser, value) {
+        parser.push("CLIENT", "NO-EVICT", value ? "ON" : "OFF");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_NO-TOUCH.js
+var require_CLIENT_NO_TOUCH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_NO-TOUCH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Controls whether to prevent the client from touching the LRU/LFU of keys
+       * @param parser - The Redis command parser
+       * @param value - Whether to enable (true) or disable (false) the no-touch mode
+       */
+      parseCommand(parser, value) {
+        parser.push("CLIENT", "NO-TOUCH", value ? "ON" : "OFF");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_PAUSE.js
+var require_CLIENT_PAUSE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_PAUSE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Stops the server from processing client commands for the specified duration
+       * @param parser - The Redis command parser
+       * @param timeout - Time in milliseconds to pause command processing
+       * @param mode - Optional mode: 'WRITE' to pause only write commands, 'ALL' to pause all commands
+       */
+      parseCommand(parser, timeout, mode) {
+        parser.push("CLIENT", "PAUSE", timeout.toString());
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_SETNAME.js
+var require_CLIENT_SETNAME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_SETNAME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Assigns a name to the current connection
+       * @param parser - The Redis command parser
+       * @param name - The name to assign to the connection
+       */
+      parseCommand(parser, name) {
+        parser.push("CLIENT", "SETNAME", name);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_TRACKING.js
+var require_CLIENT_TRACKING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_TRACKING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Controls server-assisted client side caching for the current connection
+       * @param parser - The Redis command parser
+       * @param mode - Whether to enable (true) or disable (false) tracking
+       * @param options - Optional configuration including REDIRECT, BCAST, PREFIX, OPTIN, OPTOUT, and NOLOOP options
+       */
+      parseCommand(parser, mode, options) {
+        parser.push("CLIENT", "TRACKING", mode ? "ON" : "OFF");
+        if (mode) {
+          if (options?.REDIRECT) {
+            parser.push("REDIRECT", options.REDIRECT.toString());
+          }
+          if (isBroadcast(options)) {
+            parser.push("BCAST");
+            if (options?.PREFIX) {
+              if (Array.isArray(options.PREFIX)) {
+                for (const prefix of options.PREFIX) {
+                  parser.push("PREFIX", prefix);
+                }
+              } else {
+                parser.push("PREFIX", options.PREFIX);
+              }
+            }
+          } else if (isOptIn(options)) {
+            parser.push("OPTIN");
+          } else if (isOptOut(options)) {
+            parser.push("OPTOUT");
+          }
+          if (options?.NOLOOP) {
+            parser.push("NOLOOP");
+          }
+        }
+      },
+      transformReply: void 0
+    };
+    function isBroadcast(options) {
+      return options?.BCAST === true;
+    }
+    function isOptIn(options) {
+      return options?.OPTIN === true;
+    }
+    function isOptOut(options) {
+      return options?.OPTOUT === true;
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_TRACKINGINFO.js
+var require_CLIENT_TRACKINGINFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_TRACKINGINFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about the current connection's key tracking state
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "TRACKINGINFO");
+      },
+      transformReply: {
+        2: (reply) => ({
+          flags: reply[1],
+          redirect: reply[3],
+          prefixes: reply[5]
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLIENT_UNPAUSE.js
+var require_CLIENT_UNPAUSE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLIENT_UNPAUSE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Resumes processing of client commands after a CLIENT PAUSE
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLIENT", "UNPAUSE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_ADDSLOTS.js
+var require_CLUSTER_ADDSLOTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_ADDSLOTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Assigns hash slots to the current node in a Redis Cluster
+       * @param parser - The Redis command parser
+       * @param slots - One or more hash slots to be assigned
+       */
+      parseCommand(parser, slots) {
+        parser.push("CLUSTER", "ADDSLOTS");
+        parser.pushVariadicNumber(slots);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_ADDSLOTSRANGE.js
+var require_CLUSTER_ADDSLOTSRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_ADDSLOTSRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Assigns hash slot ranges to the current node in a Redis Cluster
+       * @param parser - The Redis command parser
+       * @param ranges - One or more slot ranges to be assigned, each specified as [start, end]
+       */
+      parseCommand(parser, ranges) {
+        parser.push("CLUSTER", "ADDSLOTSRANGE");
+        (0, generic_transformers_1.parseSlotRangesArguments)(parser, ranges);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_BUMPEPOCH.js
+var require_CLUSTER_BUMPEPOCH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_BUMPEPOCH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Advances the cluster config epoch
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "BUMPEPOCH");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_COUNT-FAILURE-REPORTS.js
+var require_CLUSTER_COUNT_FAILURE_REPORTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_COUNT-FAILURE-REPORTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the number of failure reports for a given node
+       * @param parser - The Redis command parser
+       * @param nodeId - The ID of the node to check
+       */
+      parseCommand(parser, nodeId) {
+        parser.push("CLUSTER", "COUNT-FAILURE-REPORTS", nodeId);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_COUNTKEYSINSLOT.js
+var require_CLUSTER_COUNTKEYSINSLOT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_COUNTKEYSINSLOT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the number of keys in the specified hash slot
+       * @param parser - The Redis command parser
+       * @param slot - The hash slot to check
+       */
+      parseCommand(parser, slot) {
+        parser.push("CLUSTER", "COUNTKEYSINSLOT", slot.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_DELSLOTS.js
+var require_CLUSTER_DELSLOTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_DELSLOTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Removes hash slots from the current node in a Redis Cluster
+       * @param parser - The Redis command parser
+       * @param slots - One or more hash slots to be removed
+       */
+      parseCommand(parser, slots) {
+        parser.push("CLUSTER", "DELSLOTS");
+        parser.pushVariadicNumber(slots);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_DELSLOTSRANGE.js
+var require_CLUSTER_DELSLOTSRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_DELSLOTSRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Removes hash slot ranges from the current node in a Redis Cluster
+       * @param parser - The Redis command parser
+       * @param ranges - One or more slot ranges to be removed, each specified as [start, end]
+       */
+      parseCommand(parser, ranges) {
+        parser.push("CLUSTER", "DELSLOTSRANGE");
+        (0, generic_transformers_1.parseSlotRangesArguments)(parser, ranges);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_FAILOVER.js
+var require_CLUSTER_FAILOVER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_FAILOVER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.FAILOVER_MODES = void 0;
+    exports.FAILOVER_MODES = {
+      FORCE: "FORCE",
+      TAKEOVER: "TAKEOVER"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Forces a replica to perform a manual failover of its master
+       * @param parser - The Redis command parser
+       * @param options - Optional configuration with FORCE or TAKEOVER mode
+       */
+      parseCommand(parser, options) {
+        parser.push("CLUSTER", "FAILOVER");
+        if (options?.mode) {
+          parser.push(options.mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_FLUSHSLOTS.js
+var require_CLUSTER_FLUSHSLOTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_FLUSHSLOTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Deletes all hash slots from the current node in a Redis Cluster
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "FLUSHSLOTS");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_FORGET.js
+var require_CLUSTER_FORGET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_FORGET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Removes a node from the cluster
+       * @param parser - The Redis command parser
+       * @param nodeId - The ID of the node to remove
+       */
+      parseCommand(parser, nodeId) {
+        parser.push("CLUSTER", "FORGET", nodeId);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_GETKEYSINSLOT.js
+var require_CLUSTER_GETKEYSINSLOT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_GETKEYSINSLOT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns a number of keys from the specified hash slot
+       * @param parser - The Redis command parser
+       * @param slot - The hash slot to get keys from
+       * @param count - Maximum number of keys to return
+       */
+      parseCommand(parser, slot, count) {
+        parser.push("CLUSTER", "GETKEYSINSLOT", slot.toString(), count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_INFO.js
+var require_CLUSTER_INFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_INFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about the state of a Redis Cluster
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "INFO");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_KEYSLOT.js
+var require_CLUSTER_KEYSLOT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_KEYSLOT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the hash slot number for a given key
+       * @param parser - The Redis command parser
+       * @param key - The key to get the hash slot for
+       */
+      parseCommand(parser, key) {
+        parser.push("CLUSTER", "KEYSLOT", key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_LINKS.js
+var require_CLUSTER_LINKS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_LINKS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about all cluster links (lower level connections to other nodes)
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "LINKS");
+      },
+      transformReply: {
+        2: (reply) => reply.map((link) => {
+          const unwrapped = link;
+          return {
+            direction: unwrapped[1],
+            node: unwrapped[3],
+            "create-time": unwrapped[5],
+            events: unwrapped[7],
+            "send-buffer-allocated": unwrapped[9],
+            "send-buffer-used": unwrapped[11]
+          };
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_MEET.js
+var require_CLUSTER_MEET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_MEET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Initiates a handshake with another node in the cluster
+       * @param parser - The Redis command parser
+       * @param host - Host name or IP address of the node
+       * @param port - TCP port of the node
+       */
+      parseCommand(parser, host, port) {
+        parser.push("CLUSTER", "MEET", host, port.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_MYID.js
+var require_CLUSTER_MYID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_MYID.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the node ID of the current Redis Cluster node
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "MYID");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_MYSHARDID.js
+var require_CLUSTER_MYSHARDID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_MYSHARDID.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the shard ID of the current Redis Cluster node
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "MYSHARDID");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_NODES.js
+var require_CLUSTER_NODES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_NODES.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns serialized information about the nodes in a Redis Cluster
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "NODES");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_REPLICAS.js
+var require_CLUSTER_REPLICAS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_REPLICAS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the replica nodes replicating from the specified primary node
+       * @param parser - The Redis command parser
+       * @param nodeId - Node ID of the primary node
+       */
+      parseCommand(parser, nodeId) {
+        parser.push("CLUSTER", "REPLICAS", nodeId);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_REPLICATE.js
+var require_CLUSTER_REPLICATE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_REPLICATE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Reconfigures a node as a replica of the specified primary node
+       * @param parser - The Redis command parser
+       * @param nodeId - Node ID of the primary node to replicate
+       */
+      parseCommand(parser, nodeId) {
+        parser.push("CLUSTER", "REPLICATE", nodeId);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_RESET.js
+var require_CLUSTER_RESET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_RESET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Resets a Redis Cluster node, clearing all information and returning it to a brand new state
+       * @param parser - The Redis command parser
+       * @param options - Options for the reset operation
+       */
+      parseCommand(parser, options) {
+        parser.push("CLUSTER", "RESET");
+        if (options?.mode) {
+          parser.push(options.mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_SAVECONFIG.js
+var require_CLUSTER_SAVECONFIG = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_SAVECONFIG.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Forces a Redis Cluster node to save the cluster configuration to disk
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "SAVECONFIG");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_SET-CONFIG-EPOCH.js
+var require_CLUSTER_SET_CONFIG_EPOCH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_SET-CONFIG-EPOCH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Sets the configuration epoch for a Redis Cluster node
+       * @param parser - The Redis command parser
+       * @param configEpoch - The configuration epoch to set
+       */
+      parseCommand(parser, configEpoch) {
+        parser.push("CLUSTER", "SET-CONFIG-EPOCH", configEpoch.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_SETSLOT.js
+var require_CLUSTER_SETSLOT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_SETSLOT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CLUSTER_SLOT_STATES = void 0;
+    exports.CLUSTER_SLOT_STATES = {
+      IMPORTING: "IMPORTING",
+      MIGRATING: "MIGRATING",
+      STABLE: "STABLE",
+      NODE: "NODE"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Assigns a hash slot to a specific Redis Cluster node
+       * @param parser - The Redis command parser
+       * @param slot - The slot number to assign
+       * @param state - The state to set for the slot (IMPORTING, MIGRATING, STABLE, NODE)
+       * @param nodeId - Node ID (required for IMPORTING, MIGRATING, and NODE states)
+       */
+      parseCommand(parser, slot, state, nodeId) {
+        parser.push("CLUSTER", "SETSLOT", slot.toString(), state);
+        if (nodeId) {
+          parser.push(nodeId);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CLUSTER_SLOTS.js
+var require_CLUSTER_SLOTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CLUSTER_SLOTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about which Redis Cluster node handles which hash slots
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CLUSTER", "SLOTS");
+      },
+      transformReply(reply) {
+        return reply.map(([from, to, master, ...replicas]) => ({
+          from,
+          to,
+          master: transformNode(master),
+          replicas: replicas.map(transformNode)
+        }));
+      }
+    };
+    function transformNode(node) {
+      const [host, port, id] = node;
+      return {
+        host,
+        port,
+        id
+      };
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND_COUNT.js
+var require_COMMAND_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the total number of commands available in the Redis server
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("COMMAND", "COUNT");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND_GETKEYS.js
+var require_COMMAND_GETKEYS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND_GETKEYS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Extracts the key names from a Redis command
+       * @param parser - The Redis command parser
+       * @param args - Command arguments to analyze
+       */
+      parseCommand(parser, args) {
+        parser.push("COMMAND", "GETKEYS");
+        parser.push(...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND_GETKEYSANDFLAGS.js
+var require_COMMAND_GETKEYSANDFLAGS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND_GETKEYSANDFLAGS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Extracts the key names and access flags from a Redis command
+       * @param parser - The Redis command parser
+       * @param args - Command arguments to analyze
+       */
+      parseCommand(parser, args) {
+        parser.push("COMMAND", "GETKEYSANDFLAGS");
+        parser.push(...args);
+      },
+      transformReply(reply) {
+        return reply.map((entry) => {
+          const [key, flags] = entry;
+          return {
+            key,
+            flags
+          };
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND_INFO.js
+var require_COMMAND_INFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND_INFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns details about specific Redis commands
+       * @param parser - The Redis command parser
+       * @param commands - Array of command names to get information about
+       */
+      parseCommand(parser, commands) {
+        parser.push("COMMAND", "INFO", ...commands);
+      },
+      // TODO: This works, as we don't currently handle any of the items returned as a map
+      transformReply(reply) {
+        return reply.map((command) => command ? (0, generic_transformers_1.transformCommandReply)(command) : null);
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND_LIST.js
+var require_COMMAND_LIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND_LIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.COMMAND_LIST_FILTER_BY = void 0;
+    exports.COMMAND_LIST_FILTER_BY = {
+      MODULE: "MODULE",
+      ACLCAT: "ACLCAT",
+      PATTERN: "PATTERN"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns a list of all commands supported by the Redis server
+       * @param parser - The Redis command parser
+       * @param options - Options for filtering the command list
+       */
+      parseCommand(parser, options) {
+        parser.push("COMMAND", "LIST");
+        if (options?.FILTERBY) {
+          parser.push("FILTERBY", options.FILTERBY.type, options.FILTERBY.value);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COMMAND.js
+var require_COMMAND = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COMMAND.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns an array with details about all Redis commands
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("COMMAND");
+      },
+      // TODO: This works, as we don't currently handle any of the items returned as a map
+      transformReply(reply) {
+        return reply.map(generic_transformers_1.transformCommandReply);
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CONFIG_GET.js
+var require_CONFIG_GET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CONFIG_GET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets the values of configuration parameters
+       * @param parser - The Redis command parser
+       * @param parameters - Pattern or specific configuration parameter names
+       */
+      parseCommand(parser, parameters) {
+        parser.push("CONFIG", "GET");
+        parser.pushVariadic(parameters);
+      },
+      transformReply: {
+        2: generic_transformers_1.transformTuplesReply,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CONFIG_RESETSTAT.js
+var require_CONFIG_RESETSTAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CONFIG_RESETSTAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Resets the statistics reported by Redis using the INFO command
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CONFIG", "RESETSTAT");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CONFIG_REWRITE.js
+var require_CONFIG_REWRITE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CONFIG_REWRITE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Rewrites the Redis configuration file with the current configuration
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("CONFIG", "REWRITE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/CONFIG_SET.js
+var require_CONFIG_SET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/CONFIG_SET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Sets configuration parameters to the specified values
+       * @param parser - The Redis command parser
+       * @param parameterOrConfig - Either a single parameter name or a configuration object
+       * @param value - Value for the parameter (when using single parameter format)
+       */
+      parseCommand(parser, ...[parameterOrConfig, value]) {
+        parser.push("CONFIG", "SET");
+        if (typeof parameterOrConfig === "string" || parameterOrConfig instanceof Buffer) {
+          parser.push(parameterOrConfig, value);
+        } else {
+          for (const [key, value2] of Object.entries(parameterOrConfig)) {
+            parser.push(key, value2);
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/COPY.js
+var require_COPY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/COPY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Copies the value stored at the source key to the destination key
+       * @param parser - The Redis command parser
+       * @param source - Source key
+       * @param destination - Destination key
+       * @param options - Options for the copy operation
+       */
+      parseCommand(parser, source, destination, options) {
+        parser.push("COPY");
+        parser.pushKeys([source, destination]);
+        if (options?.DB) {
+          parser.push("DB", options.DB.toString());
+        }
+        if (options?.REPLACE) {
+          parser.push("REPLACE");
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DBSIZE.js
+var require_DBSIZE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DBSIZE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the number of keys in the current database
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("DBSIZE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DECR.js
+var require_DECR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DECR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Decrements the integer value of a key by one
+       * @param parser - The Redis command parser
+       * @param key - Key to decrement
+       */
+      parseCommand(parser, key) {
+        parser.push("DECR");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DECRBY.js
+var require_DECRBY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DECRBY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Decrements the integer value of a key by the given number
+       * @param parser - The Redis command parser
+       * @param key - Key to decrement
+       * @param decrement - Decrement amount
+       */
+      parseCommand(parser, key, decrement) {
+        parser.push("DECRBY");
+        parser.pushKey(key);
+        parser.push(decrement.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DEL.js
+var require_DEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes the specified keys. A key is ignored if it does not exist
+       * @param parser - The Redis command parser
+       * @param keys - One or more keys to delete
+       */
+      parseCommand(parser, keys) {
+        parser.push("DEL");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DELEX.js
+var require_DELEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DELEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DelexCondition = void 0;
+    exports.DelexCondition = {
+      /**
+       * Delete if value equals match-value.
+       */
+      IFEQ: "IFEQ",
+      /**
+       * Delete if value does not equal match-value.
+       */
+      IFNE: "IFNE",
+      /**
+       * Delete if value digest equals match-digest.
+       */
+      IFDEQ: "IFDEQ",
+      /**
+       * Delete if value digest does not equal match-digest.
+       */
+      IFDNE: "IFDNE"
+    };
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       *
+       * @experimental
+       *
+       * Conditionally removes the specified key based on value or digest comparison.
+       *
+       * @param parser - The Redis command parser
+       * @param key - Key to delete
+       */
+      parseCommand(parser, key, options) {
+        parser.push("DELEX");
+        parser.pushKey(key);
+        if (options) {
+          parser.push(options.condition);
+          parser.push(options.matchValue);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DIGEST.js
+var require_DIGEST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DIGEST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       *
+       * @experimental
+       *
+       * Returns the XXH3 hash of a string value.
+       *
+       * @param parser - The Redis command parser
+       * @param key - Key to get the digest of
+       */
+      parseCommand(parser, key) {
+        parser.push("DIGEST");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/DUMP.js
+var require_DUMP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/DUMP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns a serialized version of the value stored at the key
+       * @param parser - The Redis command parser
+       * @param key - Key to dump
+       */
+      parseCommand(parser, key) {
+        parser.push("DUMP");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ECHO.js
+var require_ECHO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ECHO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the given string
+       * @param parser - The Redis command parser
+       * @param message - Message to echo back
+       */
+      parseCommand(parser, message) {
+        parser.push("ECHO", message);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EVAL.js
+var require_EVAL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EVAL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseEvalArguments = void 0;
+    function parseEvalArguments(parser, script, options) {
+      parser.push(script);
+      if (options?.keys) {
+        parser.pushKeysLength(options.keys);
+      } else {
+        parser.push("0");
+      }
+      if (options?.arguments) {
+        parser.push(...options.arguments);
+      }
+    }
+    exports.parseEvalArguments = parseEvalArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Executes a Lua script server side
+       * @param parser - The Redis command parser
+       * @param script - Lua script to execute
+       * @param options - Script execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("EVAL");
+        parseEvalArguments(...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EVAL_RO.js
+var require_EVAL_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EVAL_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EVAL_1 = __importStar(require_EVAL());
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Executes a read-only Lua script server side
+       * @param parser - The Redis command parser
+       * @param script - Lua script to execute
+       * @param options - Script execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("EVAL_RO");
+        (0, EVAL_1.parseEvalArguments)(...args);
+      },
+      transformReply: EVAL_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EVALSHA_RO.js
+var require_EVALSHA_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EVALSHA_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EVAL_1 = __importStar(require_EVAL());
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Executes a read-only Lua script server side using the script's SHA1 digest
+       * @param parser - The Redis command parser
+       * @param sha1 - SHA1 digest of the script
+       * @param options - Script execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("EVALSHA_RO");
+        (0, EVAL_1.parseEvalArguments)(...args);
+      },
+      transformReply: EVAL_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EVALSHA.js
+var require_EVALSHA = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EVALSHA.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EVAL_1 = __importStar(require_EVAL());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Executes a Lua script server side using the script's SHA1 digest
+       * @param parser - The Redis command parser
+       * @param sha1 - SHA1 digest of the script
+       * @param options - Script execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("EVALSHA");
+        (0, EVAL_1.parseEvalArguments)(...args);
+      },
+      transformReply: EVAL_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOADD.js
+var require_GEOADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Adds geospatial items to the specified key
+       * @param parser - The Redis command parser
+       * @param key - Key to add the geospatial items to
+       * @param toAdd - Geospatial member(s) to add
+       * @param options - Options for the GEOADD command
+       */
+      parseCommand(parser, key, toAdd, options) {
+        parser.push("GEOADD");
+        parser.pushKey(key);
+        if (options?.condition) {
+          parser.push(options.condition);
+        } else if (options?.NX) {
+          parser.push("NX");
+        } else if (options?.XX) {
+          parser.push("XX");
+        }
+        if (options?.CH) {
+          parser.push("CH");
+        }
+        if (Array.isArray(toAdd)) {
+          for (const member of toAdd) {
+            pushMember(parser, member);
+          }
+        } else {
+          pushMember(parser, toAdd);
+        }
+      },
+      transformReply: void 0
+    };
+    function pushMember(parser, { longitude, latitude, member }) {
+      parser.push(longitude.toString(), latitude.toString(), member);
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEODIST.js
+var require_GEODIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEODIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the distance between two members in a geospatial index
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param member1 - First member in the geospatial index
+       * @param member2 - Second member in the geospatial index
+       * @param unit - Unit of distance (m, km, ft, mi)
+       */
+      parseCommand(parser, key, member1, member2, unit) {
+        parser.push("GEODIST");
+        parser.pushKey(key);
+        parser.push(member1, member2);
+        if (unit) {
+          parser.push(unit);
+        }
+      },
+      transformReply(reply) {
+        return reply === null ? null : Number(reply);
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOHASH.js
+var require_GEOHASH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOHASH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the Geohash string representation of one or more position members
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param member - One or more members in the geospatial index
+       */
+      parseCommand(parser, key, member) {
+        parser.push("GEOHASH");
+        parser.pushKey(key);
+        parser.pushVariadic(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOPOS.js
+var require_GEOPOS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOPOS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the longitude and latitude of one or more members in a geospatial index
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param member - One or more members in the geospatial index
+       */
+      parseCommand(parser, key, member) {
+        parser.push("GEOPOS");
+        parser.pushKey(key);
+        parser.pushVariadic(member);
+      },
+      transformReply(reply) {
+        return reply.map((item) => {
+          const unwrapped = item;
+          return unwrapped === null ? null : {
+            longitude: unwrapped[0],
+            latitude: unwrapped[1]
+          };
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOSEARCH.js
+var require_GEOSEARCH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOSEARCH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseGeoSearchOptions = exports.parseGeoSearchArguments = void 0;
+    function parseGeoSearchArguments(parser, key, from, by, options) {
+      parser.pushKey(key);
+      if (typeof from === "string" || from instanceof Buffer) {
+        parser.push("FROMMEMBER", from);
+      } else {
+        parser.push("FROMLONLAT", from.longitude.toString(), from.latitude.toString());
+      }
+      if ("radius" in by) {
+        parser.push("BYRADIUS", by.radius.toString(), by.unit);
+      } else {
+        parser.push("BYBOX", by.width.toString(), by.height.toString(), by.unit);
+      }
+      parseGeoSearchOptions(parser, options);
+    }
+    exports.parseGeoSearchArguments = parseGeoSearchArguments;
+    function parseGeoSearchOptions(parser, options) {
+      if (options?.SORT) {
+        parser.push(options.SORT);
+      }
+      if (options?.COUNT) {
+        if (typeof options.COUNT === "number") {
+          parser.push("COUNT", options.COUNT.toString());
+        } else {
+          parser.push("COUNT", options.COUNT.value.toString());
+          if (options.COUNT.ANY) {
+            parser.push("ANY");
+          }
+        }
+      }
+    }
+    exports.parseGeoSearchOptions = parseGeoSearchOptions;
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Queries members inside an area of a geospatial index
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center point of the search (member name or coordinates)
+       * @param by - Search area specification (radius or box dimensions)
+       * @param options - Additional search options
+       */
+      parseCommand(parser, key, from, by, options) {
+        parser.push("GEOSEARCH");
+        parseGeoSearchArguments(parser, key, from, by, options);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUS.js
+var require_GEORADIUS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseGeoRadiusArguments = void 0;
+    var GEOSEARCH_1 = require_GEOSEARCH();
+    function parseGeoRadiusArguments(parser, key, from, radius, unit, options) {
+      parser.pushKey(key);
+      parser.push(from.longitude.toString(), from.latitude.toString(), radius.toString(), unit);
+      (0, GEOSEARCH_1.parseGeoSearchOptions)(parser, options);
+    }
+    exports.parseGeoRadiusArguments = parseGeoRadiusArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Queries members in a geospatial index based on a radius from a center point
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center coordinates for the search
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param options - Additional search options
+       */
+      parseCommand(...args) {
+        args[0].push("GEORADIUS");
+        return parseGeoRadiusArguments(...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOSEARCH_WITH.js
+var require_GEOSEARCH_WITH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOSEARCH_WITH.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.GEO_REPLY_WITH = void 0;
+    var GEOSEARCH_1 = __importDefault(require_GEOSEARCH());
+    exports.GEO_REPLY_WITH = {
+      DISTANCE: "WITHDIST",
+      HASH: "WITHHASH",
+      COORDINATES: "WITHCOORD"
+    };
+    exports.default = {
+      IS_READ_ONLY: GEOSEARCH_1.default.IS_READ_ONLY,
+      /**
+       * Queries members inside an area of a geospatial index with additional information
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center point of the search (member name or coordinates)
+       * @param by - Search area specification (radius or box dimensions)
+       * @param replyWith - Information to include with each returned member
+       * @param options - Additional search options
+       */
+      parseCommand(parser, key, from, by, replyWith, options) {
+        GEOSEARCH_1.default.parseCommand(parser, key, from, by, options);
+        parser.push(...replyWith);
+        parser.preserve = replyWith;
+      },
+      transformReply(reply, replyWith) {
+        const replyWithSet = new Set(replyWith);
+        let index = 0;
+        const distanceIndex = replyWithSet.has(exports.GEO_REPLY_WITH.DISTANCE) && ++index, hashIndex = replyWithSet.has(exports.GEO_REPLY_WITH.HASH) && ++index, coordinatesIndex = replyWithSet.has(exports.GEO_REPLY_WITH.COORDINATES) && ++index;
+        return reply.map((raw) => {
+          const unwrapped = raw;
+          const item = {
+            member: unwrapped[0]
+          };
+          if (distanceIndex) {
+            item.distance = unwrapped[distanceIndex];
+          }
+          if (hashIndex) {
+            item.hash = unwrapped[hashIndex];
+          }
+          if (coordinatesIndex) {
+            const [longitude, latitude] = unwrapped[coordinatesIndex];
+            item.coordinates = {
+              longitude,
+              latitude
+            };
+          }
+          return item;
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUS_WITH.js
+var require_GEORADIUS_WITH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUS_WITH.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseGeoRadiusWithArguments = void 0;
+    var GEORADIUS_1 = __importStar(require_GEORADIUS());
+    var GEOSEARCH_WITH_1 = __importDefault(require_GEOSEARCH_WITH());
+    function parseGeoRadiusWithArguments(parser, key, from, radius, unit, replyWith, options) {
+      (0, GEORADIUS_1.parseGeoRadiusArguments)(parser, key, from, radius, unit, options);
+      parser.pushVariadic(replyWith);
+      parser.preserve = replyWith;
+    }
+    exports.parseGeoRadiusWithArguments = parseGeoRadiusWithArguments;
+    exports.default = {
+      IS_READ_ONLY: GEORADIUS_1.default.IS_READ_ONLY,
+      /**
+       * Queries members in a geospatial index based on a radius from a center point with additional information
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center coordinates for the search
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param replyWith - Information to include with each returned member
+       * @param options - Additional search options
+       */
+      parseCommand(parser, key, from, radius, unit, replyWith, options) {
+        parser.push("GEORADIUS");
+        parseGeoRadiusWithArguments(parser, key, from, radius, unit, replyWith, options);
+      },
+      transformReply: GEOSEARCH_WITH_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUS_RO_WITH.js
+var require_GEORADIUS_RO_WITH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUS_RO_WITH.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUS_WITH_1 = require_GEORADIUS_WITH();
+    var GEORADIUS_WITH_2 = __importDefault(require_GEORADIUS_WITH());
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Read-only variant that queries members in a geospatial index based on a radius from a center point with additional information
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center coordinates for the search
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param replyWith - Information to include with each returned member
+       * @param options - Additional search options
+       */
+      parseCommand(...args) {
+        args[0].push("GEORADIUS_RO");
+        (0, GEORADIUS_WITH_1.parseGeoRadiusWithArguments)(...args);
+      },
+      transformReply: GEORADIUS_WITH_2.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUS_RO.js
+var require_GEORADIUS_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUS_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUS_1 = __importStar(require_GEORADIUS());
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Read-only variant that queries members in a geospatial index based on a radius from a center point
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center coordinates for the search
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param options - Additional search options
+       */
+      parseCommand(...args) {
+        args[0].push("GEORADIUS_RO");
+        (0, GEORADIUS_1.parseGeoRadiusArguments)(...args);
+      },
+      transformReply: GEORADIUS_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUS_STORE.js
+var require_GEORADIUS_STORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUS_STORE.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUS_1 = __importStar(require_GEORADIUS());
+    exports.default = {
+      IS_READ_ONLY: GEORADIUS_1.default.IS_READ_ONLY,
+      /**
+       * Queries members in a geospatial index based on a radius from a center point and stores the results
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Center coordinates for the search
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param destination - Key to store the results
+       * @param options - Additional search and storage options
+       */
+      parseCommand(parser, key, from, radius, unit, destination, options) {
+        parser.push("GEORADIUS");
+        (0, GEORADIUS_1.parseGeoRadiusArguments)(parser, key, from, radius, unit, options);
+        if (options?.STOREDIST) {
+          parser.push("STOREDIST");
+          parser.pushKey(destination);
+        } else {
+          parser.push("STORE");
+          parser.pushKey(destination);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER.js
+var require_GEORADIUSBYMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseGeoRadiusByMemberArguments = void 0;
+    var GEOSEARCH_1 = require_GEOSEARCH();
+    function parseGeoRadiusByMemberArguments(parser, key, from, radius, unit, options) {
+      parser.pushKey(key);
+      parser.push(from, radius.toString(), unit);
+      (0, GEOSEARCH_1.parseGeoSearchOptions)(parser, options);
+    }
+    exports.parseGeoRadiusByMemberArguments = parseGeoRadiusByMemberArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Queries members in a geospatial index based on a radius from a member
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Member name to use as center point
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param options - Additional search options
+       */
+      parseCommand(parser, key, from, radius, unit, options) {
+        parser.push("GEORADIUSBYMEMBER");
+        parseGeoRadiusByMemberArguments(parser, key, from, radius, unit, options);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_WITH.js
+var require_GEORADIUSBYMEMBER_WITH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_WITH.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseGeoRadiusByMemberWithArguments = void 0;
+    var GEORADIUSBYMEMBER_1 = __importDefault(require_GEORADIUSBYMEMBER());
+    var GEOSEARCH_1 = require_GEOSEARCH();
+    var GEOSEARCH_WITH_1 = __importDefault(require_GEOSEARCH_WITH());
+    function parseGeoRadiusByMemberWithArguments(parser, key, from, radius, unit, replyWith, options) {
+      parser.pushKey(key);
+      parser.push(from, radius.toString(), unit);
+      (0, GEOSEARCH_1.parseGeoSearchOptions)(parser, options);
+      parser.push(...replyWith);
+      parser.preserve = replyWith;
+    }
+    exports.parseGeoRadiusByMemberWithArguments = parseGeoRadiusByMemberWithArguments;
+    exports.default = {
+      IS_READ_ONLY: GEORADIUSBYMEMBER_1.default.IS_READ_ONLY,
+      /**
+       * Queries members in a geospatial index based on a radius from a member with additional information
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Member name to use as center point
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param replyWith - Information to include with each returned member
+       * @param options - Additional search options
+       */
+      parseCommand(parser, key, from, radius, unit, replyWith, options) {
+        parser.push("GEORADIUSBYMEMBER");
+        parseGeoRadiusByMemberWithArguments(parser, key, from, radius, unit, replyWith, options);
+      },
+      transformReply: GEOSEARCH_WITH_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_RO_WITH.js
+var require_GEORADIUSBYMEMBER_RO_WITH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_RO_WITH.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUSBYMEMBER_WITH_1 = __importStar(require_GEORADIUSBYMEMBER_WITH());
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Read-only variant that queries members in a geospatial index based on a radius from a member with additional information
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Member name to use as center point
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param withValues - Information to include with each returned member
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        parser.push("GEORADIUSBYMEMBER_RO");
+        (0, GEORADIUSBYMEMBER_WITH_1.parseGeoRadiusByMemberWithArguments)(...args);
+      },
+      transformReply: GEORADIUSBYMEMBER_WITH_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_RO.js
+var require_GEORADIUSBYMEMBER_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUSBYMEMBER_1 = __importStar(require_GEORADIUSBYMEMBER());
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Read-only variant that queries members in a geospatial index based on a radius from a member
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Member name to use as center point
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param options - Additional search options
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        parser.push("GEORADIUSBYMEMBER_RO");
+        (0, GEORADIUSBYMEMBER_1.parseGeoRadiusByMemberArguments)(...args);
+      },
+      transformReply: GEORADIUSBYMEMBER_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_STORE.js
+var require_GEORADIUSBYMEMBER_STORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEORADIUSBYMEMBER_STORE.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEORADIUSBYMEMBER_1 = __importStar(require_GEORADIUSBYMEMBER());
+    exports.default = {
+      IS_READ_ONLY: GEORADIUSBYMEMBER_1.default.IS_READ_ONLY,
+      /**
+       * Queries members in a geospatial index based on a radius from a member and stores the results
+       * @param parser - The Redis command parser
+       * @param key - Key of the geospatial index
+       * @param from - Member name to use as center point
+       * @param radius - Radius of the search area
+       * @param unit - Unit of distance (m, km, ft, mi)
+       * @param destination - Key to store the results
+       * @param options - Additional search and storage options
+       */
+      parseCommand(parser, key, from, radius, unit, destination, options) {
+        parser.push("GEORADIUSBYMEMBER");
+        (0, GEORADIUSBYMEMBER_1.parseGeoRadiusByMemberArguments)(parser, key, from, radius, unit, options);
+        if (options?.STOREDIST) {
+          parser.push("STOREDIST");
+          parser.pushKey(destination);
+        } else {
+          parser.push("STORE");
+          parser.pushKey(destination);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GEOSEARCHSTORE.js
+var require_GEOSEARCHSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GEOSEARCHSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var GEOSEARCH_1 = require_GEOSEARCH();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Searches a geospatial index and stores the results in a new sorted set
+       * @param parser - The Redis command parser
+       * @param destination - Key to store the results
+       * @param source - Key of the geospatial index to search
+       * @param from - Center point of the search (member name or coordinates)
+       * @param by - Search area specification (radius or box dimensions)
+       * @param options - Additional search and storage options
+       */
+      parseCommand(parser, destination, source, from, by, options) {
+        parser.push("GEOSEARCHSTORE");
+        if (destination !== void 0) {
+          parser.pushKey(destination);
+        }
+        (0, GEOSEARCH_1.parseGeoSearchArguments)(parser, source, from, by, options);
+        if (options?.STOREDIST) {
+          parser.push("STOREDIST");
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GET.js
+var require_GET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets the value of a key
+       * @param parser - The Redis command parser
+       * @param key - Key to get the value of
+       */
+      parseCommand(parser, key) {
+        parser.push("GET");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GETBIT.js
+var require_GETBIT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GETBIT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the bit value at a given offset in a string value
+       * @param parser - The Redis command parser
+       * @param key - Key to retrieve the bit from
+       * @param offset - Bit offset
+       */
+      parseCommand(parser, key, offset) {
+        parser.push("GETBIT");
+        parser.pushKey(key);
+        parser.push(offset.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GETDEL.js
+var require_GETDEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GETDEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Gets the value of a key and deletes the key
+       * @param parser - The Redis command parser
+       * @param key - Key to get and delete
+       */
+      parseCommand(parser, key) {
+        parser.push("GETDEL");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GETEX.js
+var require_GETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Gets the value of a key and optionally sets its expiration
+       * @param parser - The Redis command parser
+       * @param key - Key to get value from
+       * @param options - Options for setting expiration
+       */
+      parseCommand(parser, key, options) {
+        parser.push("GETEX");
+        parser.pushKey(key);
+        if ("type" in options) {
+          switch (options.type) {
+            case "EX":
+            case "PX":
+              parser.push(options.type, options.value.toString());
+              break;
+            case "EXAT":
+            case "PXAT":
+              parser.push(options.type, (0, generic_transformers_1.transformEXAT)(options.value));
+              break;
+            case "PERSIST":
+              parser.push("PERSIST");
+              break;
+          }
+        } else {
+          if ("EX" in options) {
+            parser.push("EX", options.EX.toString());
+          } else if ("PX" in options) {
+            parser.push("PX", options.PX.toString());
+          } else if ("EXAT" in options) {
+            parser.push("EXAT", (0, generic_transformers_1.transformEXAT)(options.EXAT));
+          } else if ("PXAT" in options) {
+            parser.push("PXAT", (0, generic_transformers_1.transformPXAT)(options.PXAT));
+          } else {
+            parser.push("PERSIST");
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GETRANGE.js
+var require_GETRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GETRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns a substring of the string stored at a key
+       * @param parser - The Redis command parser
+       * @param key - Key to get substring from
+       * @param start - Start position of the substring
+       * @param end - End position of the substring
+       */
+      parseCommand(parser, key, start, end) {
+        parser.push("GETRANGE");
+        parser.pushKey(key);
+        parser.push(start.toString(), end.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/GETSET.js
+var require_GETSET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/GETSET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Sets a key to a new value and returns its old value
+       * @param parser - The Redis command parser
+       * @param key - Key to set
+       * @param value - Value to set
+       */
+      parseCommand(parser, key, value) {
+        parser.push("GETSET");
+        parser.pushKey(key);
+        parser.push(value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EXISTS.js
+var require_EXISTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EXISTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Determines if the specified keys exist
+       * @param parser - The Redis command parser
+       * @param keys - One or more keys to check
+       */
+      parseCommand(parser, keys) {
+        parser.push("EXISTS");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EXPIRE.js
+var require_EXPIRE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EXPIRE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Sets a timeout on key. After the timeout has expired, the key will be automatically deleted
+       * @param parser - The Redis command parser
+       * @param key - Key to set expiration on
+       * @param seconds - Number of seconds until key expiration
+       * @param mode - Expiration mode: NX (only if key has no expiry), XX (only if key has existing expiry), GT (only if new expiry is greater than current), LT (only if new expiry is less than current)
+       */
+      parseCommand(parser, key, seconds, mode) {
+        parser.push("EXPIRE");
+        parser.pushKey(key);
+        parser.push(seconds.toString());
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EXPIREAT.js
+var require_EXPIREAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EXPIREAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Sets the expiration for a key at a specific Unix timestamp
+       * @param parser - The Redis command parser
+       * @param key - Key to set expiration on
+       * @param timestamp - Unix timestamp (seconds since January 1, 1970) or Date object
+       * @param mode - Expiration mode: NX (only if key has no expiry), XX (only if key has existing expiry), GT (only if new expiry is greater than current), LT (only if new expiry is less than current)
+       */
+      parseCommand(parser, key, timestamp, mode) {
+        parser.push("EXPIREAT");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformEXAT)(timestamp));
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/EXPIRETIME.js
+var require_EXPIRETIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/EXPIRETIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the absolute Unix timestamp (since January 1, 1970) at which the given key will expire
+       * @param parser - The Redis command parser
+       * @param key - Key to check expiration time
+       */
+      parseCommand(parser, key) {
+        parser.push("EXPIRETIME");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FLUSHALL.js
+var require_FLUSHALL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FLUSHALL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.REDIS_FLUSH_MODES = void 0;
+    exports.REDIS_FLUSH_MODES = {
+      ASYNC: "ASYNC",
+      SYNC: "SYNC"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Removes all keys from all databases
+       * @param parser - The Redis command parser
+       * @param mode - Optional flush mode (ASYNC or SYNC)
+       */
+      parseCommand(parser, mode) {
+        parser.push("FLUSHALL");
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FLUSHDB.js
+var require_FLUSHDB = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FLUSHDB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Removes all keys from the current database
+       * @param parser - The Redis command parser
+       * @param mode - Optional flush mode (ASYNC or SYNC)
+       */
+      parseCommand(parser, mode) {
+        parser.push("FLUSHDB");
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FCALL.js
+var require_FCALL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FCALL.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EVAL_1 = __importStar(require_EVAL());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Invokes a Redis function
+       * @param parser - The Redis command parser
+       * @param functionName - Name of the function to call
+       * @param options - Function execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("FCALL");
+        (0, EVAL_1.parseEvalArguments)(...args);
+      },
+      transformReply: EVAL_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FCALL_RO.js
+var require_FCALL_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FCALL_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var EVAL_1 = __importStar(require_EVAL());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Invokes a read-only Redis function
+       * @param parser - The Redis command parser
+       * @param functionName - Name of the function to call
+       * @param options - Function execution options including keys and arguments
+       */
+      parseCommand(...args) {
+        args[0].push("FCALL_RO");
+        (0, EVAL_1.parseEvalArguments)(...args);
+      },
+      transformReply: EVAL_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_DELETE.js
+var require_FUNCTION_DELETE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_DELETE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Deletes a library and all its functions
+       * @param parser - The Redis command parser
+       * @param library - Name of the library to delete
+       */
+      parseCommand(parser, library) {
+        parser.push("FUNCTION", "DELETE", library);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_DUMP.js
+var require_FUNCTION_DUMP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_DUMP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns a serialized payload representing the current functions loaded in the server
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("FUNCTION", "DUMP");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_FLUSH.js
+var require_FUNCTION_FLUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_FLUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Deletes all the libraries and functions from a Redis server
+       * @param parser - The Redis command parser
+       * @param mode - Optional flush mode (ASYNC or SYNC)
+       */
+      parseCommand(parser, mode) {
+        parser.push("FUNCTION", "FLUSH");
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_KILL.js
+var require_FUNCTION_KILL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_KILL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Kills a function that is currently executing
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("FUNCTION", "KILL");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_LIST.js
+var require_FUNCTION_LIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_LIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Returns all libraries and functions
+       * @param parser - The Redis command parser
+       * @param options - Options for listing functions
+       */
+      parseCommand(parser, options) {
+        parser.push("FUNCTION", "LIST");
+        if (options?.LIBRARYNAME) {
+          parser.push("LIBRARYNAME", options.LIBRARYNAME);
+        }
+      },
+      transformReply: {
+        2: (reply) => {
+          return reply.map((library) => {
+            const unwrapped = library;
+            return {
+              library_name: unwrapped[1],
+              engine: unwrapped[3],
+              functions: unwrapped[5].map((fn) => {
+                const unwrapped2 = fn;
+                return {
+                  name: unwrapped2[1],
+                  description: unwrapped2[3],
+                  flags: unwrapped2[5]
+                };
+              })
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_LIST_WITHCODE.js
+var require_FUNCTION_LIST_WITHCODE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_LIST_WITHCODE.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var FUNCTION_LIST_1 = __importDefault(require_FUNCTION_LIST());
+    exports.default = {
+      NOT_KEYED_COMMAND: FUNCTION_LIST_1.default.NOT_KEYED_COMMAND,
+      IS_READ_ONLY: FUNCTION_LIST_1.default.IS_READ_ONLY,
+      /**
+       * Returns all libraries and functions including their source code
+       * @param parser - The Redis command parser
+       * @param options - Options for listing functions
+       */
+      parseCommand(...args) {
+        FUNCTION_LIST_1.default.parseCommand(...args);
+        args[0].push("WITHCODE");
+      },
+      transformReply: {
+        2: (reply) => {
+          return reply.map((library) => {
+            const unwrapped = library;
+            return {
+              library_name: unwrapped[1],
+              engine: unwrapped[3],
+              functions: unwrapped[5].map((fn) => {
+                const unwrapped2 = fn;
+                return {
+                  name: unwrapped2[1],
+                  description: unwrapped2[3],
+                  flags: unwrapped2[5]
+                };
+              }),
+              library_code: unwrapped[7]
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_LOAD.js
+var require_FUNCTION_LOAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_LOAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Loads a library to Redis
+       * @param parser - The Redis command parser
+       * @param code - Library code to load
+       * @param options - Function load options
+       */
+      parseCommand(parser, code, options) {
+        parser.push("FUNCTION", "LOAD");
+        if (options?.REPLACE) {
+          parser.push("REPLACE");
+        }
+        parser.push(code);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_RESTORE.js
+var require_FUNCTION_RESTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_RESTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Restores libraries from the dump payload
+       * @param parser - The Redis command parser
+       * @param dump - Serialized payload of functions to restore
+       * @param options - Options for the restore operation
+       */
+      parseCommand(parser, dump, options) {
+        parser.push("FUNCTION", "RESTORE", dump);
+        if (options?.mode) {
+          parser.push(options.mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/FUNCTION_STATS.js
+var require_FUNCTION_STATS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/FUNCTION_STATS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns information about the function that is currently running and information about the available execution engines
+       * @param parser - The Redis command parser
+       */
+      parseCommand(parser) {
+        parser.push("FUNCTION", "STATS");
+      },
+      transformReply: {
+        2: (reply) => {
+          return {
+            running_script: transformRunningScript(reply[1]),
+            engines: transformEngines(reply[3])
+          };
+        },
+        3: void 0
+      }
+    };
+    function transformRunningScript(reply) {
+      if ((0, generic_transformers_1.isNullReply)(reply)) {
+        return null;
+      }
+      const unwraped = reply;
+      return {
+        name: unwraped[1],
+        command: unwraped[3],
+        duration_ms: unwraped[5]
+      };
+    }
+    function transformEngines(reply) {
+      const unwraped = reply;
+      const engines = /* @__PURE__ */ Object.create(null);
+      for (let i = 0; i < unwraped.length; i++) {
+        const name = unwraped[i], stats = unwraped[++i], unwrapedStats = stats;
+        engines[name.toString()] = {
+          libraries_count: unwrapedStats[1],
+          functions_count: unwrapedStats[3]
+        };
+      }
+      return engines;
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HDEL.js
+var require_HDEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HDEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Removes one or more fields from a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param field - Field(s) to remove
+       */
+      parseCommand(parser, key, field) {
+        parser.push("HDEL");
+        parser.pushKey(key);
+        parser.pushVariadic(field);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HELLO.js
+var require_HELLO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HELLO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Handshakes with the Redis server and switches to the specified protocol version
+       * @param parser - The Redis command parser
+       * @param protover - Protocol version to use
+       * @param options - Additional options for authentication and connection naming
+       */
+      parseCommand(parser, protover, options) {
+        parser.push("HELLO");
+        if (protover) {
+          parser.push(protover.toString());
+          if (options?.AUTH) {
+            parser.push("AUTH", options.AUTH.username, options.AUTH.password);
+          }
+          if (options?.SETNAME) {
+            parser.push("SETNAME", options.SETNAME);
+          }
+        }
+      },
+      transformReply: {
+        2: (reply) => ({
+          server: reply[1],
+          version: reply[3],
+          proto: reply[5],
+          id: reply[7],
+          mode: reply[9],
+          role: reply[11],
+          modules: reply[13]
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HEXISTS.js
+var require_HEXISTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HEXISTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Determines whether a field exists in a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param field - Field to check
+       */
+      parseCommand(parser, key, field) {
+        parser.push("HEXISTS");
+        parser.pushKey(key);
+        parser.push(field);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HEXPIRE.js
+var require_HEXPIRE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HEXPIRE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HASH_EXPIRATION = void 0;
+    exports.HASH_EXPIRATION = {
+      /** The field does not exist */
+      FIELD_NOT_EXISTS: -2,
+      /** Specified NX | XX | GT | LT condition not met */
+      CONDITION_NOT_MET: 0,
+      /** Expiration time was set or updated */
+      UPDATED: 1,
+      /** Field deleted because the specified expiration time is in the past */
+      DELETED: 2
+    };
+    exports.default = {
+      /**
+       * Sets a timeout on hash fields. After the timeout has expired, the fields will be automatically deleted
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param fields - Fields to set expiration on
+       * @param seconds - Number of seconds until field expiration
+       * @param mode - Expiration mode: NX (only if field has no expiry), XX (only if field has existing expiry), GT (only if new expiry is greater than current), LT (only if new expiry is less than current)
+       */
+      parseCommand(parser, key, fields, seconds, mode) {
+        parser.push("HEXPIRE");
+        parser.pushKey(key);
+        parser.push(seconds.toString());
+        if (mode) {
+          parser.push(mode);
+        }
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HEXPIREAT.js
+var require_HEXPIREAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HEXPIREAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Sets the expiration for hash fields at a specific Unix timestamp
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param fields - Fields to set expiration on
+       * @param timestamp - Unix timestamp (seconds since January 1, 1970) or Date object
+       * @param mode - Expiration mode: NX (only if field has no expiry), XX (only if field has existing expiry), GT (only if new expiry is greater than current), LT (only if new expiry is less than current)
+       */
+      parseCommand(parser, key, fields, timestamp, mode) {
+        parser.push("HEXPIREAT");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformEXAT)(timestamp));
+        if (mode) {
+          parser.push(mode);
+        }
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HEXPIRETIME.js
+var require_HEXPIRETIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HEXPIRETIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HASH_EXPIRATION_TIME = void 0;
+    exports.HASH_EXPIRATION_TIME = {
+      /** The field does not exist */
+      FIELD_NOT_EXISTS: -2,
+      /** The field exists but has no associated expire */
+      NO_EXPIRATION: -1
+    };
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the absolute Unix timestamp (since January 1, 1970) at which the given hash fields will expire
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param fields - Fields to check expiration time
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HEXPIRETIME");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HGET.js
+var require_HGET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HGET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets the value of a field in a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param field - Field to get the value of
+       */
+      parseCommand(parser, key, field) {
+        parser.push("HGET");
+        parser.pushKey(key);
+        parser.push(field);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HGETALL.js
+var require_HGETALL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HGETALL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets all fields and values in a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       */
+      parseCommand(parser, key) {
+        parser.push("HGETALL");
+        parser.pushKey(key);
+      },
+      TRANSFORM_LEGACY_REPLY: true,
+      transformReply: {
+        2: generic_transformers_1.transformTuplesReply,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HGETDEL.js
+var require_HGETDEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HGETDEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Gets and deletes the specified fields from a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param fields - Fields to get and delete
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HGETDEL");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HGETEX.js
+var require_HGETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HGETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Gets the values of the specified fields in a hash and optionally sets their expiration
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param fields - Fields to get values from
+       * @param options - Options for setting expiration
+       */
+      parseCommand(parser, key, fields, options) {
+        parser.push("HGETEX");
+        parser.pushKey(key);
+        if (options?.expiration) {
+          if (typeof options.expiration === "string") {
+            parser.push(options.expiration);
+          } else if (options.expiration.type === "PERSIST") {
+            parser.push("PERSIST");
+          } else {
+            parser.push(options.expiration.type, options.expiration.value.toString());
+          }
+        }
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HINCRBY.js
+var require_HINCRBY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HINCRBY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Increments the integer value of a field in a hash by the given number
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param field - Field to increment
+       * @param increment - Increment amount
+       */
+      parseCommand(parser, key, field, increment) {
+        parser.push("HINCRBY");
+        parser.pushKey(key);
+        parser.push(field, increment.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HINCRBYFLOAT.js
+var require_HINCRBYFLOAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HINCRBYFLOAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Increments the float value of a field in a hash by the given amount
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       * @param field - Field to increment
+       * @param increment - Increment amount (float)
+       */
+      parseCommand(parser, key, field, increment) {
+        parser.push("HINCRBYFLOAT");
+        parser.pushKey(key);
+        parser.push(field, increment.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HKEYS.js
+var require_HKEYS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HKEYS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets all field names in a hash
+       * @param parser - The Redis command parser
+       * @param key - Key of the hash
+       */
+      parseCommand(parser, key) {
+        parser.push("HKEYS");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HLEN.js
+var require_HLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HLEN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets the number of fields in a hash.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the hash.
+       */
+      parseCommand(parser, key) {
+        parser.push("HLEN");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HMGET.js
+var require_HMGET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HMGET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets the values of all the specified fields in a hash.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the hash.
+       * @param fields - Fields to get from the hash.
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HMGET");
+        parser.pushKey(key);
+        parser.pushVariadic(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HPERSIST.js
+var require_HPERSIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HPERSIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Removes the expiration from the specified fields in a hash.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the hash.
+       * @param fields - Fields to remove expiration from.
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HPERSIST");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HPEXPIRE.js
+var require_HPEXPIRE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HPEXPIRE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Parses the arguments for the `HPEXPIRE` command.
+       *
+       * @param parser - The command parser instance.
+       * @param key - The key of the hash.
+       * @param fields - The fields to set the expiration for.
+       * @param ms - The expiration time in milliseconds.
+       * @param mode - Optional mode for the command ('NX', 'XX', 'GT', 'LT').
+       */
+      parseCommand(parser, key, fields, ms, mode) {
+        parser.push("HPEXPIRE");
+        parser.pushKey(key);
+        parser.push(ms.toString());
+        if (mode) {
+          parser.push(mode);
+        }
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HPEXPIREAT.js
+var require_HPEXPIREAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HPEXPIREAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Parses the arguments for the `HPEXPIREAT` command.
+       *
+       * @param parser - The command parser instance.
+       * @param key - The key of the hash.
+       * @param fields - The fields to set the expiration for.
+       * @param timestamp - The expiration timestamp (Unix timestamp or Date object).
+       * @param mode - Optional mode for the command ('NX', 'XX', 'GT', 'LT').
+       */
+      parseCommand(parser, key, fields, timestamp, mode) {
+        parser.push("HPEXPIREAT");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformPXAT)(timestamp));
+        if (mode) {
+          parser.push(mode);
+        }
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HPEXPIRETIME.js
+var require_HPEXPIRETIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HPEXPIRETIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HPEXPIRETIME command
+       *
+       * @param parser - The command parser
+       * @param key - The key to retrieve expiration time for
+       * @param fields - The fields to retrieve expiration time for
+       * @see https://redis.io/commands/hpexpiretime/
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HPEXPIRETIME");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HPTTL.js
+var require_HPTTL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HPTTL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HPTTL command
+       *
+       * @param parser - The command parser
+       * @param key - The key to check time-to-live for
+       * @param fields - The fields to check time-to-live for
+       * @see https://redis.io/commands/hpttl/
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HPTTL");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HRANDFIELD_COUNT_WITHVALUES.js
+var require_HRANDFIELD_COUNT_WITHVALUES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HRANDFIELD_COUNT_WITHVALUES.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HRANDFIELD command with count parameter and WITHVALUES option
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash to get random fields from
+       * @param count - The number of fields to return (positive: unique fields, negative: may repeat fields)
+       * @see https://redis.io/commands/hrandfield/
+       */
+      parseCommand(parser, key, count) {
+        parser.push("HRANDFIELD");
+        parser.pushKey(key);
+        parser.push(count.toString(), "WITHVALUES");
+      },
+      transformReply: {
+        2: (rawReply) => {
+          const reply = [];
+          let i = 0;
+          while (i < rawReply.length) {
+            reply.push({
+              field: rawReply[i++],
+              value: rawReply[i++]
+            });
+          }
+          return reply;
+        },
+        3: (reply) => {
+          return reply.map((entry) => {
+            const [field, value] = entry;
+            return {
+              field,
+              value
+            };
+          });
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HRANDFIELD_COUNT.js
+var require_HRANDFIELD_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HRANDFIELD_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HRANDFIELD command with count parameter
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash to get random fields from
+       * @param count - The number of fields to return (positive: unique fields, negative: may repeat fields)
+       * @see https://redis.io/commands/hrandfield/
+       */
+      parseCommand(parser, key, count) {
+        parser.push("HRANDFIELD");
+        parser.pushKey(key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HRANDFIELD.js
+var require_HRANDFIELD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HRANDFIELD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HRANDFIELD command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash to get a random field from
+       * @see https://redis.io/commands/hrandfield/
+       */
+      parseCommand(parser, key) {
+        parser.push("HRANDFIELD");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCAN.js
+var require_SCAN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCAN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.pushScanArguments = exports.parseScanArguments = void 0;
+    function parseScanArguments(parser, cursor, options) {
+      parser.push(cursor);
+      if (options?.MATCH) {
+        parser.push("MATCH", options.MATCH);
+      }
+      if (options?.COUNT) {
+        parser.push("COUNT", options.COUNT.toString());
+      }
+    }
+    exports.parseScanArguments = parseScanArguments;
+    function pushScanArguments(args, cursor, options) {
+      args.push(cursor.toString());
+      if (options?.MATCH) {
+        args.push("MATCH", options.MATCH);
+      }
+      if (options?.COUNT) {
+        args.push("COUNT", options.COUNT.toString());
+      }
+      return args;
+    }
+    exports.pushScanArguments = pushScanArguments;
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCAN command
+       *
+       * @param parser - The command parser
+       * @param cursor - The cursor position to start scanning from
+       * @param options - Scan options
+       * @see https://redis.io/commands/scan/
+       */
+      parseCommand(parser, cursor, options) {
+        parser.push("SCAN");
+        parseScanArguments(parser, cursor, options);
+        if (options?.TYPE) {
+          parser.push("TYPE", options.TYPE);
+        }
+      },
+      /**
+       * Transforms the SCAN reply into a structured object
+       *
+       * @param reply - The raw reply containing cursor and keys
+       * @returns Object with cursor and keys properties
+       */
+      transformReply([cursor, keys]) {
+        return {
+          cursor,
+          keys
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSCAN.js
+var require_HSCAN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSCAN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SCAN_1 = require_SCAN();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HSCAN command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash to scan
+       * @param cursor - The cursor position to start scanning from
+       * @param options - Options for the scan (COUNT, MATCH, TYPE)
+       * @see https://redis.io/commands/hscan/
+       */
+      parseCommand(parser, key, cursor, options) {
+        parser.push("HSCAN");
+        parser.pushKey(key);
+        (0, SCAN_1.parseScanArguments)(parser, cursor, options);
+      },
+      transformReply([cursor, rawEntries]) {
+        const entries = [];
+        let i = 0;
+        while (i < rawEntries.length) {
+          entries.push({
+            field: rawEntries[i++],
+            value: rawEntries[i++]
+          });
+        }
+        return {
+          cursor,
+          entries
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSCAN_NOVALUES.js
+var require_HSCAN_NOVALUES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSCAN_NOVALUES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var HSCAN_1 = __importDefault(require_HSCAN());
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HSCAN command with NOVALUES option
+       *
+       * @param args - The same parameters as HSCAN command
+       * @see https://redis.io/commands/hscan/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        HSCAN_1.default.parseCommand(...args);
+        parser.push("NOVALUES");
+      },
+      transformReply([cursor, fields]) {
+        return {
+          cursor,
+          fields
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSET.js
+var require_HSET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the HSET command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash
+       * @param value - Either the field name (when using single field) or an object/map/array of field-value pairs
+       * @param fieldValue - The value to set (only used with single field variant)
+       * @see https://redis.io/commands/hset/
+       */
+      parseCommand(parser, ...[key, value, fieldValue]) {
+        parser.push("HSET");
+        parser.pushKey(key);
+        if (typeof value === "string" || typeof value === "number" || value instanceof Buffer) {
+          parser.push(convertValue(value), convertValue(fieldValue));
+        } else if (value instanceof Map) {
+          pushMap(parser, value);
+        } else if (Array.isArray(value)) {
+          pushTuples(parser, value);
+        } else {
+          pushObject(parser, value);
+        }
+      },
+      transformReply: void 0
+    };
+    function pushMap(parser, map) {
+      for (const [key, value] of map.entries()) {
+        parser.push(convertValue(key), convertValue(value));
+      }
+    }
+    function pushTuples(parser, tuples) {
+      for (const tuple of tuples) {
+        if (Array.isArray(tuple)) {
+          pushTuples(parser, tuple);
+          continue;
+        }
+        parser.push(convertValue(tuple));
+      }
+    }
+    function pushObject(parser, object3) {
+      for (const key of Object.keys(object3)) {
+        parser.push(convertValue(key), convertValue(object3[key]));
+      }
+    }
+    function convertValue(value) {
+      return typeof value === "number" ? value.toString() : value;
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSETEX.js
+var require_HSETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var parser_1 = require_parser();
+    exports.default = {
+      /**
+       * Constructs the HSETEX command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash
+       * @param fields - Object, Map, or Array of field-value pairs to set
+       * @param options - Optional configuration for expiration and mode settings
+       * @see https://redis.io/commands/hsetex/
+       */
+      parseCommand(parser, key, fields, options) {
+        parser.push("HSETEX");
+        parser.pushKey(key);
+        if (options?.mode) {
+          parser.push(options.mode);
+        }
+        if (options?.expiration) {
+          if (typeof options.expiration === "string") {
+            parser.push(options.expiration);
+          } else if (options.expiration.type === "KEEPTTL") {
+            parser.push("KEEPTTL");
+          } else {
+            parser.push(options.expiration.type, options.expiration.value.toString());
+          }
+        }
+        parser.push("FIELDS");
+        if (fields instanceof Map) {
+          pushMap(parser, fields);
+        } else if (Array.isArray(fields)) {
+          pushTuples(parser, fields);
+        } else {
+          pushObject(parser, fields);
+        }
+      },
+      transformReply: void 0
+    };
+    function pushMap(parser, map) {
+      parser.push(map.size.toString());
+      for (const [key, value] of map.entries()) {
+        parser.push(convertValue(key), convertValue(value));
+      }
+    }
+    function pushTuples(parser, tuples) {
+      const tmpParser = new parser_1.BasicCommandParser();
+      _pushTuples(tmpParser, tuples);
+      if (tmpParser.redisArgs.length % 2 != 0) {
+        throw Error("invalid number of arguments, expected key value ....[key value] pairs, got key without value");
+      }
+      parser.push((tmpParser.redisArgs.length / 2).toString());
+      parser.push(...tmpParser.redisArgs);
+    }
+    function _pushTuples(parser, tuples) {
+      for (const tuple of tuples) {
+        if (Array.isArray(tuple)) {
+          _pushTuples(parser, tuple);
+          continue;
+        }
+        parser.push(convertValue(tuple));
+      }
+    }
+    function pushObject(parser, object3) {
+      const len = Object.keys(object3).length;
+      if (len == 0) {
+        throw Error("object without keys");
+      }
+      parser.push(len.toString());
+      for (const key of Object.keys(object3)) {
+        parser.push(convertValue(key), convertValue(object3[key]));
+      }
+    }
+    function convertValue(value) {
+      return typeof value === "number" ? value.toString() : value;
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSETNX.js
+var require_HSETNX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSETNX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HSETNX command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash
+       * @param field - The field to set if it does not exist
+       * @param value - The value to set
+       * @see https://redis.io/commands/hsetnx/
+       */
+      parseCommand(parser, key, field, value) {
+        parser.push("HSETNX");
+        parser.pushKey(key);
+        parser.push(field, value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HSTRLEN.js
+var require_HSTRLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HSTRLEN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the HSTRLEN command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the hash
+       * @param field - The field to get the string length of
+       * @see https://redis.io/commands/hstrlen/
+       */
+      parseCommand(parser, key, field) {
+        parser.push("HSTRLEN");
+        parser.pushKey(key);
+        parser.push(field);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HTTL.js
+var require_HTTL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HTTL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the remaining time to live of field(s) in a hash.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the hash.
+       * @param fields - Fields to check time to live.
+       */
+      parseCommand(parser, key, fields) {
+        parser.push("HTTL");
+        parser.pushKey(key);
+        parser.push("FIELDS");
+        parser.pushVariadicWithLength(fields);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HVALS.js
+var require_HVALS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HVALS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Gets all values in a hash.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the hash.
+       */
+      parseCommand(parser, key) {
+        parser.push("HVALS");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HOTKEYS_GET.js
+var require_HOTKEYS_GET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HOTKEYS_GET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    function parseHotkeysList(arr) {
+      const result = [];
+      for (let i = 0; i < arr.length; i += 2) {
+        result.push({
+          key: arr[i].toString(),
+          value: Number(arr[i + 1])
+        });
+      }
+      return result;
+    }
+    function parseSlotRanges(arr) {
+      return arr.map((range) => {
+        const unwrapped = range;
+        if (unwrapped.length === 1) {
+          return {
+            start: Number(unwrapped[0]),
+            end: Number(unwrapped[0])
+          };
+        }
+        return {
+          start: Number(unwrapped[0]),
+          end: Number(unwrapped[1])
+        };
+      });
+    }
+    function transformHotkeysGetReply(reply) {
+      const result = {};
+      const data = reply[0];
+      for (let i = 0; i < data.length; i += 2) {
+        const key = data[i].toString();
+        const value = data[i + 1];
+        switch (key) {
+          case "tracking-active":
+            result.trackingActive = Number(value);
+            break;
+          case "sample-ratio":
+            result.sampleRatio = Number(value);
+            break;
+          case "selected-slots":
+            result.selectedSlots = parseSlotRanges(value);
+            break;
+          case "sampled-commands-selected-slots-us":
+            result.sampledCommandsSelectedSlotsUs = Number(value);
+            break;
+          case "all-commands-selected-slots-us":
+            result.allCommandsSelectedSlotsUs = Number(value);
+            break;
+          case "all-commands-all-slots-us":
+            result.allCommandsAllSlotsUs = Number(value);
+            break;
+          case "net-bytes-sampled-commands-selected-slots":
+            result.netBytesSampledCommandsSelectedSlots = Number(value);
+            break;
+          case "net-bytes-all-commands-selected-slots":
+            result.netBytesAllCommandsSelectedSlots = Number(value);
+            break;
+          case "net-bytes-all-commands-all-slots":
+            result.netBytesAllCommandsAllSlots = Number(value);
+            break;
+          case "collection-start-time-unix-ms":
+            result.collectionStartTimeUnixMs = Number(value);
+            break;
+          case "collection-duration-ms":
+            result.collectionDurationMs = Number(value);
+            break;
+          case "total-cpu-time-sys-ms":
+            result.totalCpuTimeSysMs = Number(value);
+            break;
+          case "total-cpu-time-user-ms":
+            result.totalCpuTimeUserMs = Number(value);
+            break;
+          case "total-net-bytes":
+            result.totalNetBytes = Number(value);
+            break;
+          case "by-cpu-time-us":
+            result.byCpuTimeUs = parseHotkeysList(value);
+            break;
+          case "by-net-bytes":
+            result.byNetBytes = parseHotkeysList(value);
+            break;
+        }
+      }
+      return result;
+    }
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the top K hotkeys by CPU time and network bytes.
+       * Returns null if no tracking has been started or tracking was reset.
+       * @param parser - The Redis command parser
+       * @see https://redis.io/commands/hotkeys-get/
+       */
+      parseCommand(parser) {
+        parser.push("HOTKEYS", "GET");
+      },
+      transformReply: {
+        2: (reply) => {
+          if (reply === null)
+            return null;
+          return transformHotkeysGetReply(reply);
+        },
+        3: void 0
+      },
+      unstableResp3: true
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HOTKEYS_RESET.js
+var require_HOTKEYS_RESET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HOTKEYS_RESET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Releases resources used for hotkey tracking.
+       * Returns error if a session is active (must be stopped first).
+       * @param parser - The Redis command parser
+       * @see https://redis.io/commands/hotkeys-reset/
+       */
+      parseCommand(parser) {
+        parser.push("HOTKEYS", "RESET");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HOTKEYS_START.js
+var require_HOTKEYS_START = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HOTKEYS_START.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HOTKEYS_METRICS = void 0;
+    exports.HOTKEYS_METRICS = {
+      CPU: "CPU",
+      NET: "NET"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Starts hotkeys tracking with specified options.
+       * @param parser - The Redis command parser
+       * @param options - Configuration options for hotkeys tracking
+       * @see https://redis.io/commands/hotkeys-start/
+       */
+      parseCommand(parser, options) {
+        parser.push("HOTKEYS", "START");
+        parser.push("METRICS", options.METRICS.count.toString());
+        if (options.METRICS.CPU) {
+          parser.push("CPU");
+        }
+        if (options.METRICS.NET) {
+          parser.push("NET");
+        }
+        if (options.COUNT !== void 0) {
+          parser.push("COUNT", options.COUNT.toString());
+        }
+        if (options.DURATION !== void 0) {
+          parser.push("DURATION", options.DURATION.toString());
+        }
+        if (options.SAMPLE !== void 0) {
+          parser.push("SAMPLE", options.SAMPLE.toString());
+        }
+        if (options.SLOTS !== void 0) {
+          parser.push("SLOTS", options.SLOTS.count.toString());
+          for (const slot of options.SLOTS.slots) {
+            parser.push(slot.toString());
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/HOTKEYS_STOP.js
+var require_HOTKEYS_STOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/HOTKEYS_STOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Stops hotkeys tracking. Results remain available via HOTKEYS GET.
+       * Returns null if no session was started or is already stopped.
+       * @param parser - The Redis command parser
+       * @see https://redis.io/commands/hotkeys-stop/
+       */
+      parseCommand(parser) {
+        parser.push("HOTKEYS", "STOP");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/INCR.js
+var require_INCR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/INCR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the INCR command
+       *
+       * @param parser - The command parser
+       * @param key - The key to increment
+       * @see https://redis.io/commands/incr/
+       */
+      parseCommand(parser, key) {
+        parser.push("INCR");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/INCRBY.js
+var require_INCRBY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/INCRBY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the INCRBY command
+       *
+       * @param parser - The command parser
+       * @param key - The key to increment
+       * @param increment - The amount to increment by
+       * @see https://redis.io/commands/incrby/
+       */
+      parseCommand(parser, key, increment) {
+        parser.push("INCRBY");
+        parser.pushKey(key);
+        parser.push(increment.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/INCRBYFLOAT.js
+var require_INCRBYFLOAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/INCRBYFLOAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the INCRBYFLOAT command
+       *
+       * @param parser - The command parser
+       * @param key - The key to increment
+       * @param increment - The floating-point value to increment by
+       * @see https://redis.io/commands/incrbyfloat/
+       */
+      parseCommand(parser, key, increment) {
+        parser.push("INCRBYFLOAT");
+        parser.pushKey(key);
+        parser.push(increment.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/INFO.js
+var require_INFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/INFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the INFO command
+       *
+       * @param parser - The command parser
+       * @param section - Optional specific section of information to retrieve
+       * @see https://redis.io/commands/info/
+       */
+      parseCommand(parser, section) {
+        parser.push("INFO");
+        if (section) {
+          parser.push(section);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/KEYS.js
+var require_KEYS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/KEYS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the KEYS command
+       *
+       * @param parser - The command parser
+       * @param pattern - The pattern to match keys against
+       * @see https://redis.io/commands/keys/
+       */
+      parseCommand(parser, pattern) {
+        parser.push("KEYS", pattern);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LASTSAVE.js
+var require_LASTSAVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LASTSAVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LASTSAVE command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/lastsave/
+       */
+      parseCommand(parser) {
+        parser.push("LASTSAVE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_DOCTOR.js
+var require_LATENCY_DOCTOR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_DOCTOR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LATENCY DOCTOR command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/latency-doctor/
+       */
+      parseCommand(parser) {
+        parser.push("LATENCY", "DOCTOR");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_GRAPH.js
+var require_LATENCY_GRAPH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_GRAPH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LATENCY_EVENTS = void 0;
+    exports.LATENCY_EVENTS = {
+      ACTIVE_DEFRAG_CYCLE: "active-defrag-cycle",
+      AOF_FSYNC_ALWAYS: "aof-fsync-always",
+      AOF_STAT: "aof-stat",
+      AOF_REWRITE_DIFF_WRITE: "aof-rewrite-diff-write",
+      AOF_RENAME: "aof-rename",
+      AOF_WRITE: "aof-write",
+      AOF_WRITE_ACTIVE_CHILD: "aof-write-active-child",
+      AOF_WRITE_ALONE: "aof-write-alone",
+      AOF_WRITE_PENDING_FSYNC: "aof-write-pending-fsync",
+      COMMAND: "command",
+      EXPIRE_CYCLE: "expire-cycle",
+      EVICTION_CYCLE: "eviction-cycle",
+      EVICTION_DEL: "eviction-del",
+      FAST_COMMAND: "fast-command",
+      FORK: "fork",
+      RDB_UNLINK_TEMP_FILE: "rdb-unlink-temp-file"
+    };
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LATENCY GRAPH command
+       *
+       * @param parser - The command parser
+       * @param event - The latency event to get the graph for
+       * @see https://redis.io/commands/latency-graph/
+       */
+      parseCommand(parser, event) {
+        parser.push("LATENCY", "GRAPH", event);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_HISTORY.js
+var require_LATENCY_HISTORY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_HISTORY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LATENCY HISTORY command
+       *
+       * @param parser - The command parser
+       * @param event - The latency event to get the history for
+       * @see https://redis.io/commands/latency-history/
+       */
+      parseCommand(parser, event) {
+        parser.push("LATENCY", "HISTORY", event);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_LATEST.js
+var require_LATENCY_LATEST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_LATEST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LATENCY LATEST command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/latency-latest/
+       */
+      parseCommand(parser) {
+        parser.push("LATENCY", "LATEST");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_RESET.js
+var require_LATENCY_RESET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_RESET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LATENCY_EVENTS = void 0;
+    var LATENCY_GRAPH_1 = require_LATENCY_GRAPH();
+    Object.defineProperty(exports, "LATENCY_EVENTS", { enumerable: true, get: function() {
+      return LATENCY_GRAPH_1.LATENCY_EVENTS;
+    } });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the LATENCY RESET command
+       * * @param parser - The command parser
+       * @param events - The latency events to reset. If not specified, all events are reset.
+       * @see https://redis.io/commands/latency-reset/
+       */
+      parseCommand(parser, ...events) {
+        const args = ["LATENCY", "RESET"];
+        if (events.length > 0) {
+          args.push(...events);
+        }
+        parser.push(...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LCS.js
+var require_LCS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LCS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LCS command (Longest Common Substring)
+       *
+       * @param parser - The command parser
+       * @param key1 - First key containing the first string
+       * @param key2 - Second key containing the second string
+       * @see https://redis.io/commands/lcs/
+       */
+      parseCommand(parser, key1, key2) {
+        parser.push("LCS");
+        parser.pushKeys([key1, key2]);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LCS_IDX.js
+var require_LCS_IDX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LCS_IDX.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LCS_1 = __importDefault(require_LCS());
+    exports.default = {
+      IS_READ_ONLY: LCS_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the LCS command with IDX option
+       *
+       * @param parser - The command parser
+       * @param key1 - First key containing the first string
+       * @param key2 - Second key containing the second string
+       * @param options - Additional options for the LCS IDX command
+       * @see https://redis.io/commands/lcs/
+       */
+      parseCommand(parser, key1, key2, options) {
+        LCS_1.default.parseCommand(parser, key1, key2);
+        parser.push("IDX");
+        if (options?.MINMATCHLEN) {
+          parser.push("MINMATCHLEN", options.MINMATCHLEN.toString());
+        }
+      },
+      transformReply: {
+        2: (reply) => ({
+          matches: reply[1],
+          len: reply[3]
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LCS_IDX_WITHMATCHLEN.js
+var require_LCS_IDX_WITHMATCHLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LCS_IDX_WITHMATCHLEN.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LCS_IDX_1 = __importDefault(require_LCS_IDX());
+    exports.default = {
+      IS_READ_ONLY: LCS_IDX_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the LCS command with IDX and WITHMATCHLEN options
+       *
+       * @param args - The same parameters as LCS_IDX command
+       * @see https://redis.io/commands/lcs/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        LCS_IDX_1.default.parseCommand(...args);
+        parser.push("WITHMATCHLEN");
+      },
+      transformReply: {
+        2: (reply) => ({
+          matches: reply[1],
+          len: reply[3]
+        }),
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LCS_LEN.js
+var require_LCS_LEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LCS_LEN.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LCS_1 = __importDefault(require_LCS());
+    exports.default = {
+      IS_READ_ONLY: LCS_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the LCS command with LEN option
+       *
+       * @param args - The same parameters as LCS command
+       * @see https://redis.io/commands/lcs/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        LCS_1.default.parseCommand(...args);
+        parser.push("LEN");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LINDEX.js
+var require_LINDEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LINDEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LINDEX command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param index - The index of the element to retrieve
+       * @see https://redis.io/commands/lindex/
+       */
+      parseCommand(parser, key, index) {
+        parser.push("LINDEX");
+        parser.pushKey(key);
+        parser.push(index.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LINSERT.js
+var require_LINSERT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LINSERT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LINSERT command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param position - The position where to insert (BEFORE or AFTER)
+       * @param pivot - The element to find in the list
+       * @param element - The element to insert
+       * @see https://redis.io/commands/linsert/
+       */
+      parseCommand(parser, key, position, pivot, element) {
+        parser.push("LINSERT");
+        parser.pushKey(key);
+        parser.push(position, pivot, element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LLEN.js
+var require_LLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LLEN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LLEN command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list to get the length of
+       * @see https://redis.io/commands/llen/
+       */
+      parseCommand(parser, key) {
+        parser.push("LLEN");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LMOVE.js
+var require_LMOVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LMOVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the LMOVE command
+       *
+       * @param parser - The command parser
+       * @param source - The source list key
+       * @param destination - The destination list key
+       * @param sourceSide - The side to pop from (LEFT or RIGHT)
+       * @param destinationSide - The side to push to (LEFT or RIGHT)
+       * @see https://redis.io/commands/lmove/
+       */
+      parseCommand(parser, source, destination, sourceSide, destinationSide) {
+        parser.push("LMOVE");
+        parser.pushKeys([source, destination]);
+        parser.push(sourceSide, destinationSide);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LOLWUT.js
+var require_LOLWUT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LOLWUT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LOLWUT command
+       *
+       * @param parser - The command parser
+       * @param version - Optional version parameter
+       * @param optionalArguments - Additional optional numeric arguments
+       * @see https://redis.io/commands/lolwut/
+       */
+      parseCommand(parser, version2, ...optionalArguments) {
+        parser.push("LOLWUT");
+        if (version2) {
+          parser.push("VERSION", version2.toString());
+          parser.pushVariadic(optionalArguments.map(String));
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPOP.js
+var require_LPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the LPOP command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list to pop from
+       * @see https://redis.io/commands/lpop/
+       */
+      parseCommand(parser, key) {
+        parser.push("LPOP");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPOP_COUNT.js
+var require_LPOP_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPOP_COUNT.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LPOP_1 = __importDefault(require_LPOP());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the LPOP command with count parameter
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list to pop from
+       * @param count - The number of elements to pop
+       * @see https://redis.io/commands/lpop/
+       */
+      parseCommand(parser, key, count) {
+        LPOP_1.default.parseCommand(parser, key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPOS.js
+var require_LPOS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPOS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LPOS command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param element - The element to search for
+       * @param options - Optional parameters for RANK and MAXLEN
+       * @see https://redis.io/commands/lpos/
+       */
+      parseCommand(parser, key, element, options) {
+        parser.push("LPOS");
+        parser.pushKey(key);
+        parser.push(element);
+        if (options?.RANK !== void 0) {
+          parser.push("RANK", options.RANK.toString());
+        }
+        if (options?.MAXLEN !== void 0) {
+          parser.push("MAXLEN", options.MAXLEN.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPOS_COUNT.js
+var require_LPOS_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPOS_COUNT.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var LPOS_1 = __importDefault(require_LPOS());
+    exports.default = {
+      CACHEABLE: LPOS_1.default.CACHEABLE,
+      IS_READ_ONLY: LPOS_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the LPOS command with COUNT option
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param element - The element to search for
+       * @param count - The number of positions to return
+       * @param options - Optional parameters for RANK and MAXLEN
+       * @see https://redis.io/commands/lpos/
+       */
+      parseCommand(parser, key, element, count, options) {
+        LPOS_1.default.parseCommand(parser, key, element, options);
+        parser.push("COUNT", count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPUSH.js
+var require_LPUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the LPUSH command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param elements - One or more elements to push to the list
+       * @see https://redis.io/commands/lpush/
+       */
+      parseCommand(parser, key, elements) {
+        parser.push("LPUSH");
+        parser.pushKey(key);
+        parser.pushVariadic(elements);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LPUSHX.js
+var require_LPUSHX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LPUSHX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the LPUSHX command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param elements - One or more elements to push to the list if it exists
+       * @see https://redis.io/commands/lpushx/
+       */
+      parseCommand(parser, key, elements) {
+        parser.push("LPUSHX");
+        parser.pushKey(key);
+        parser.pushVariadic(elements);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LRANGE.js
+var require_LRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LRANGE command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param start - The starting index
+       * @param stop - The ending index
+       * @see https://redis.io/commands/lrange/
+       */
+      parseCommand(parser, key, start, stop) {
+        parser.push("LRANGE");
+        parser.pushKey(key);
+        parser.push(start.toString(), stop.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LREM.js
+var require_LREM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LREM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LREM command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param count - The count of elements to remove (negative: from tail to head, 0: all occurrences, positive: from head to tail)
+       * @param element - The element to remove
+       * @see https://redis.io/commands/lrem/
+       */
+      parseCommand(parser, key, count, element) {
+        parser.push("LREM");
+        parser.pushKey(key);
+        parser.push(count.toString());
+        parser.push(element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LSET.js
+var require_LSET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LSET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LSET command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param index - The index of the element to replace
+       * @param element - The new value to set
+       * @see https://redis.io/commands/lset/
+       */
+      parseCommand(parser, key, index, element) {
+        parser.push("LSET");
+        parser.pushKey(key);
+        parser.push(index.toString(), element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LTRIM.js
+var require_LTRIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LTRIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the LTRIM command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the list
+       * @param start - The starting index
+       * @param stop - The ending index
+       * @see https://redis.io/commands/ltrim/
+       */
+      parseCommand(parser, key, start, stop) {
+        parser.push("LTRIM");
+        parser.pushKey(key);
+        parser.push(start.toString(), stop.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MEMORY_DOCTOR.js
+var require_MEMORY_DOCTOR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MEMORY_DOCTOR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MEMORY DOCTOR command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/memory-doctor/
+       */
+      parseCommand(parser) {
+        parser.push("MEMORY", "DOCTOR");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MEMORY_MALLOC-STATS.js
+var require_MEMORY_MALLOC_STATS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MEMORY_MALLOC-STATS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MEMORY MALLOC-STATS command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/memory-malloc-stats/
+       */
+      parseCommand(parser) {
+        parser.push("MEMORY", "MALLOC-STATS");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MEMORY_PURGE.js
+var require_MEMORY_PURGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MEMORY_PURGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the MEMORY PURGE command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/memory-purge/
+       */
+      parseCommand(parser) {
+        parser.push("MEMORY", "PURGE");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MEMORY_STATS.js
+var require_MEMORY_STATS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MEMORY_STATS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MEMORY STATS command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/memory-stats/
+       */
+      parseCommand(parser) {
+        parser.push("MEMORY", "STATS");
+      },
+      transformReply: {
+        2: (rawReply, preserve, typeMapping) => {
+          const reply = {};
+          let i = 0;
+          while (i < rawReply.length) {
+            switch (rawReply[i].toString()) {
+              case "dataset.percentage":
+              case "peak.percentage":
+              case "allocator-fragmentation.ratio":
+              case "allocator-rss.ratio":
+              case "rss-overhead.ratio":
+              case "fragmentation":
+                reply[rawReply[i++]] = generic_transformers_1.transformDoubleReply[2](rawReply[i++], preserve, typeMapping);
+                break;
+              default:
+                reply[rawReply[i++]] = rawReply[i++];
+            }
+          }
+          return reply;
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MEMORY_USAGE.js
+var require_MEMORY_USAGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MEMORY_USAGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MEMORY USAGE command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get memory usage for
+       * @param options - Optional parameters including SAMPLES
+       * @see https://redis.io/commands/memory-usage/
+       */
+      parseCommand(parser, key, options) {
+        parser.push("MEMORY", "USAGE");
+        parser.pushKey(key);
+        if (options?.SAMPLES) {
+          parser.push("SAMPLES", options.SAMPLES.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MGET.js
+var require_MGET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MGET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MGET command
+       *
+       * @param parser - The command parser
+       * @param keys - Array of keys to get
+       * @see https://redis.io/commands/mget/
+       */
+      parseCommand(parser, keys) {
+        parser.push("MGET");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MIGRATE.js
+var require_MIGRATE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MIGRATE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the MIGRATE command
+       *
+       * @param parser - The command parser
+       * @param host - Target Redis instance host
+       * @param port - Target Redis instance port
+       * @param key - Key or keys to migrate
+       * @param destinationDb - Target database index
+       * @param timeout - Timeout in milliseconds
+       * @param options - Optional parameters including COPY, REPLACE, and AUTH
+       * @see https://redis.io/commands/migrate/
+       */
+      parseCommand(parser, host, port, key, destinationDb, timeout, options) {
+        parser.push("MIGRATE", host, port.toString());
+        const isKeyArray = Array.isArray(key);
+        if (isKeyArray) {
+          parser.push("");
+        } else {
+          parser.push(key);
+        }
+        parser.push(destinationDb.toString(), timeout.toString());
+        if (options?.COPY) {
+          parser.push("COPY");
+        }
+        if (options?.REPLACE) {
+          parser.push("REPLACE");
+        }
+        if (options?.AUTH) {
+          if (options.AUTH.username) {
+            parser.push("AUTH2", options.AUTH.username, options.AUTH.password);
+          } else {
+            parser.push("AUTH", options.AUTH.password);
+          }
+        }
+        if (isKeyArray) {
+          parser.push("KEYS");
+          parser.pushVariadic(key);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MODULE_LIST.js
+var require_MODULE_LIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MODULE_LIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MODULE LIST command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/module-list/
+       */
+      parseCommand(parser) {
+        parser.push("MODULE", "LIST");
+      },
+      transformReply: {
+        2: (reply) => {
+          return reply.map((module2) => {
+            const unwrapped = module2;
+            return {
+              name: unwrapped[1],
+              ver: unwrapped[3]
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MODULE_LOAD.js
+var require_MODULE_LOAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MODULE_LOAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MODULE LOAD command
+       *
+       * @param parser - The command parser
+       * @param path - Path to the module file
+       * @param moduleArguments - Optional arguments to pass to the module
+       * @see https://redis.io/commands/module-load/
+       */
+      parseCommand(parser, path, moduleArguments) {
+        parser.push("MODULE", "LOAD", path);
+        if (moduleArguments) {
+          parser.push(...moduleArguments);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MODULE_UNLOAD.js
+var require_MODULE_UNLOAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MODULE_UNLOAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MODULE UNLOAD command
+       *
+       * @param parser - The command parser
+       * @param name - The name of the module to unload
+       * @see https://redis.io/commands/module-unload/
+       */
+      parseCommand(parser, name) {
+        parser.push("MODULE", "UNLOAD", name);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MOVE.js
+var require_MOVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MOVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the MOVE command
+       *
+       * @param parser - The command parser
+       * @param key - The key to move
+       * @param db - The destination database index
+       * @see https://redis.io/commands/move/
+       */
+      parseCommand(parser, key, db) {
+        parser.push("MOVE");
+        parser.pushKey(key);
+        parser.push(db.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MSET.js
+var require_MSET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MSET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseMSetArguments = void 0;
+    function parseMSetArguments(parser, toSet) {
+      if (Array.isArray(toSet)) {
+        if (toSet.length == 0) {
+          throw new Error("empty toSet Argument");
+        }
+        if (Array.isArray(toSet[0])) {
+          for (const tuple of toSet) {
+            parser.pushKey(tuple[0]);
+            parser.push(tuple[1]);
+          }
+        } else {
+          const arr = toSet;
+          for (let i = 0; i < arr.length; i += 2) {
+            parser.pushKey(arr[i]);
+            parser.push(arr[i + 1]);
+          }
+        }
+      } else {
+        for (const tuple of Object.entries(toSet)) {
+          parser.pushKey(tuple[0]);
+          parser.push(tuple[1]);
+        }
+      }
+    }
+    exports.parseMSetArguments = parseMSetArguments;
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MSET command
+       *
+       * @param parser - The command parser
+       * @param toSet - Key-value pairs to set (array of tuples, flat array, or object)
+       * @see https://redis.io/commands/mset/
+       */
+      parseCommand(parser, toSet) {
+        parser.push("MSET");
+        return parseMSetArguments(parser, toSet);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MSETEX.js
+var require_MSETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MSETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseMSetExArguments = exports.ExpirationMode = exports.SetMode = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    exports.SetMode = {
+      /**
+       * Only set if all keys exist
+       */
+      XX: "XX",
+      /**
+       * Only set if none of the keys exist
+       */
+      NX: "NX"
+    };
+    exports.ExpirationMode = {
+      /**
+       * Relative expiration (seconds)
+       */
+      EX: "EX",
+      /**
+       * Relative expiration (milliseconds)
+       */
+      PX: "PX",
+      /**
+       * Absolute expiration (Unix timestamp in seconds)
+       */
+      EXAT: "EXAT",
+      /**
+       * Absolute expiration (Unix timestamp in milliseconds)
+       */
+      PXAT: "PXAT",
+      /**
+       * Keep existing TTL
+       */
+      KEEPTTL: "KEEPTTL"
+    };
+    function parseMSetExArguments(parser, keyValuePairs) {
+      let tuples = [];
+      if (Array.isArray(keyValuePairs)) {
+        if (keyValuePairs.length == 0) {
+          throw new Error("empty keyValuePairs Argument");
+        }
+        if (Array.isArray(keyValuePairs[0])) {
+          tuples = keyValuePairs;
+        } else {
+          const arr = keyValuePairs;
+          for (let i = 0; i < arr.length; i += 2) {
+            tuples.push([arr[i], arr[i + 1]]);
+          }
+        }
+      } else {
+        for (const tuple of Object.entries(keyValuePairs)) {
+          tuples.push([tuple[0], tuple[1]]);
+        }
+      }
+      parser.push(tuples.length.toString());
+      for (const tuple of tuples) {
+        parser.pushKey(tuple[0]);
+        parser.push(tuple[1]);
+      }
+    }
+    exports.parseMSetExArguments = parseMSetExArguments;
+    exports.default = {
+      /**
+       * Constructs the MSETEX command.
+       *
+       * Atomically sets multiple string keys with a shared expiration in a single operation.
+       *
+       * @param parser - The command parser
+       * @param keyValuePairs - Key-value pairs to set (array of tuples, flat array, or object)
+       * @param options - Configuration for expiration and set modes
+       * @see https://redis.io/commands/msetex/
+       */
+      parseCommand(parser, keyValuePairs, options) {
+        parser.push("MSETEX");
+        parseMSetExArguments(parser, keyValuePairs);
+        if (options?.mode) {
+          parser.push(options.mode);
+        }
+        if (options?.expiration) {
+          switch (options.expiration.type) {
+            case exports.ExpirationMode.EXAT:
+              parser.push(exports.ExpirationMode.EXAT, (0, generic_transformers_1.transformEXAT)(options.expiration.value));
+              break;
+            case exports.ExpirationMode.PXAT:
+              parser.push(exports.ExpirationMode.PXAT, (0, generic_transformers_1.transformPXAT)(options.expiration.value));
+              break;
+            case exports.ExpirationMode.KEEPTTL:
+              parser.push(exports.ExpirationMode.KEEPTTL);
+              break;
+            case exports.ExpirationMode.EX:
+            case exports.ExpirationMode.PX:
+              parser.push(options.expiration.type, options.expiration.value?.toString());
+              break;
+          }
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/MSETNX.js
+var require_MSETNX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/MSETNX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var MSET_1 = require_MSET();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the MSETNX command
+       *
+       * @param parser - The command parser
+       * @param toSet - Key-value pairs to set if none of the keys exist (array of tuples, flat array, or object)
+       * @see https://redis.io/commands/msetnx/
+       */
+      parseCommand(parser, toSet) {
+        parser.push("MSETNX");
+        return (0, MSET_1.parseMSetArguments)(parser, toSet);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/OBJECT_ENCODING.js
+var require_OBJECT_ENCODING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/OBJECT_ENCODING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the OBJECT ENCODING command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the internal encoding for
+       * @see https://redis.io/commands/object-encoding/
+       */
+      parseCommand(parser, key) {
+        parser.push("OBJECT", "ENCODING");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/OBJECT_FREQ.js
+var require_OBJECT_FREQ = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/OBJECT_FREQ.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the OBJECT FREQ command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the access frequency for
+       * @see https://redis.io/commands/object-freq/
+       */
+      parseCommand(parser, key) {
+        parser.push("OBJECT", "FREQ");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/OBJECT_IDLETIME.js
+var require_OBJECT_IDLETIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/OBJECT_IDLETIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the OBJECT IDLETIME command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the idle time for
+       * @see https://redis.io/commands/object-idletime/
+       */
+      parseCommand(parser, key) {
+        parser.push("OBJECT", "IDLETIME");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/OBJECT_REFCOUNT.js
+var require_OBJECT_REFCOUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/OBJECT_REFCOUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the OBJECT REFCOUNT command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the reference count for
+       * @see https://redis.io/commands/object-refcount/
+       */
+      parseCommand(parser, key) {
+        parser.push("OBJECT", "REFCOUNT");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PERSIST.js
+var require_PERSIST = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PERSIST.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the PERSIST command
+       *
+       * @param parser - The command parser
+       * @param key - The key to remove the expiration from
+       * @see https://redis.io/commands/persist/
+       */
+      parseCommand(parser, key) {
+        parser.push("PERSIST");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PEXPIRE.js
+var require_PEXPIRE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PEXPIRE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PEXPIRE command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set the expiration for
+       * @param ms - The expiration time in milliseconds
+       * @param mode - Optional mode for the command ('NX', 'XX', 'GT', 'LT')
+       * @see https://redis.io/commands/pexpire/
+       */
+      parseCommand(parser, key, ms, mode) {
+        parser.push("PEXPIRE");
+        parser.pushKey(key);
+        parser.push(ms.toString());
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PEXPIREAT.js
+var require_PEXPIREAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PEXPIREAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PEXPIREAT command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set the expiration for
+       * @param msTimestamp - The expiration timestamp in milliseconds (Unix timestamp or Date object)
+       * @param mode - Optional mode for the command ('NX', 'XX', 'GT', 'LT')
+       * @see https://redis.io/commands/pexpireat/
+       */
+      parseCommand(parser, key, msTimestamp, mode) {
+        parser.push("PEXPIREAT");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformPXAT)(msTimestamp));
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PEXPIRETIME.js
+var require_PEXPIRETIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PEXPIRETIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PEXPIRETIME command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the expiration time for in milliseconds
+       * @see https://redis.io/commands/pexpiretime/
+       */
+      parseCommand(parser, key) {
+        parser.push("PEXPIRETIME");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PFADD.js
+var require_PFADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PFADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PFADD command
+       *
+       * @param parser - The command parser
+       * @param key - The key of the HyperLogLog
+       * @param element - Optional elements to add
+       * @see https://redis.io/commands/pfadd/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("PFADD");
+        parser.pushKey(key);
+        if (element) {
+          parser.pushVariadic(element);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PFCOUNT.js
+var require_PFCOUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PFCOUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PFCOUNT command
+       *
+       * @param parser - The command parser
+       * @param keys - One or more keys of HyperLogLog structures to count
+       * @see https://redis.io/commands/pfcount/
+       */
+      parseCommand(parser, keys) {
+        parser.push("PFCOUNT");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PFMERGE.js
+var require_PFMERGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PFMERGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the PFMERGE command
+       *
+       * @param parser - The command parser
+       * @param destination - The destination key to merge to
+       * @param sources - One or more source keys to merge from
+       * @see https://redis.io/commands/pfmerge/
+       */
+      parseCommand(parser, destination, sources) {
+        parser.push("PFMERGE");
+        parser.pushKey(destination);
+        if (sources) {
+          parser.pushKeys(sources);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PING.js
+var require_PING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PING command
+       *
+       * @param parser - The command parser
+       * @param message - Optional message to be returned instead of PONG
+       * @see https://redis.io/commands/ping/
+       */
+      parseCommand(parser, message) {
+        parser.push("PING");
+        if (message) {
+          parser.push(message);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PSETEX.js
+var require_PSETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PSETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the PSETEX command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set
+       * @param ms - The expiration time in milliseconds
+       * @param value - The value to set
+       * @see https://redis.io/commands/psetex/
+       */
+      parseCommand(parser, key, ms, value) {
+        parser.push("PSETEX");
+        parser.pushKey(key);
+        parser.push(ms.toString(), value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PTTL.js
+var require_PTTL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PTTL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PTTL command
+       *
+       * @param parser - The command parser
+       * @param key - The key to get the time to live in milliseconds
+       * @see https://redis.io/commands/pttl/
+       */
+      parseCommand(parser, key) {
+        parser.push("PTTL");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBLISH.js
+var require_PUBLISH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBLISH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      IS_FORWARD_COMMAND: true,
+      /**
+       * Constructs the PUBLISH command
+       *
+       * @param parser - The command parser
+       * @param channel - The channel to publish to
+       * @param message - The message to publish
+       * @see https://redis.io/commands/publish/
+       */
+      parseCommand(parser, channel, message) {
+        parser.push("PUBLISH", channel, message);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBSUB_CHANNELS.js
+var require_PUBSUB_CHANNELS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBSUB_CHANNELS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PUBSUB CHANNELS command
+       *
+       * @param parser - The command parser
+       * @param pattern - Optional pattern to filter channels
+       * @see https://redis.io/commands/pubsub-channels/
+       */
+      parseCommand(parser, pattern) {
+        parser.push("PUBSUB", "CHANNELS");
+        if (pattern) {
+          parser.push(pattern);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBSUB_NUMPAT.js
+var require_PUBSUB_NUMPAT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBSUB_NUMPAT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PUBSUB NUMPAT command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/pubsub-numpat/
+       */
+      parseCommand(parser) {
+        parser.push("PUBSUB", "NUMPAT");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBSUB_NUMSUB.js
+var require_PUBSUB_NUMSUB = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBSUB_NUMSUB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PUBSUB NUMSUB command
+       *
+       * @param parser - The command parser
+       * @param channels - Optional channel names to get subscription count for
+       * @see https://redis.io/commands/pubsub-numsub/
+       */
+      parseCommand(parser, channels) {
+        parser.push("PUBSUB", "NUMSUB");
+        if (channels) {
+          parser.pushVariadic(channels);
+        }
+      },
+      /**
+       * Transforms the PUBSUB NUMSUB reply into a record of channel name to subscriber count
+       *
+       * @param rawReply - The raw reply from Redis
+       * @returns Record mapping channel names to their subscriber counts
+       */
+      transformReply(rawReply) {
+        const reply = /* @__PURE__ */ Object.create(null);
+        let i = 0;
+        while (i < rawReply.length) {
+          reply[rawReply[i++].toString()] = Number(rawReply[i++]);
+        }
+        return reply;
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBSUB_SHARDNUMSUB.js
+var require_PUBSUB_SHARDNUMSUB = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBSUB_SHARDNUMSUB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PUBSUB SHARDNUMSUB command
+       *
+       * @param parser - The command parser
+       * @param channels - Optional shard channel names to get subscription count for
+       * @see https://redis.io/commands/pubsub-shardnumsub/
+       */
+      parseCommand(parser, channels) {
+        parser.push("PUBSUB", "SHARDNUMSUB");
+        if (channels) {
+          parser.pushVariadic(channels);
+        }
+      },
+      /**
+       * Transforms the PUBSUB SHARDNUMSUB reply into a record of shard channel name to subscriber count
+       *
+       * @param reply - The raw reply from Redis
+       * @returns Record mapping shard channel names to their subscriber counts
+       */
+      transformReply(reply) {
+        const transformedReply = /* @__PURE__ */ Object.create(null);
+        for (let i = 0; i < reply.length; i += 2) {
+          transformedReply[reply[i].toString()] = reply[i + 1];
+        }
+        return transformedReply;
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/PUBSUB_SHARDCHANNELS.js
+var require_PUBSUB_SHARDCHANNELS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/PUBSUB_SHARDCHANNELS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the PUBSUB SHARDCHANNELS command
+       *
+       * @param parser - The command parser
+       * @param pattern - Optional pattern to filter shard channels
+       * @see https://redis.io/commands/pubsub-shardchannels/
+       */
+      parseCommand(parser, pattern) {
+        parser.push("PUBSUB", "SHARDCHANNELS");
+        if (pattern) {
+          parser.push(pattern);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RANDOMKEY.js
+var require_RANDOMKEY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RANDOMKEY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the RANDOMKEY command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/randomkey/
+       */
+      parseCommand(parser) {
+        parser.push("RANDOMKEY");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/READONLY.js
+var require_READONLY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/READONLY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the READONLY command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/readonly/
+       */
+      parseCommand(parser) {
+        parser.push("READONLY");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RENAME.js
+var require_RENAME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RENAME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the RENAME command
+       *
+       * @param parser - The command parser
+       * @param key - The key to rename
+       * @param newKey - The new key name
+       * @see https://redis.io/commands/rename/
+       */
+      parseCommand(parser, key, newKey) {
+        parser.push("RENAME");
+        parser.pushKeys([key, newKey]);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RENAMENX.js
+var require_RENAMENX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RENAMENX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the RENAMENX command
+       *
+       * @param parser - The command parser
+       * @param key - The key to rename
+       * @param newKey - The new key name, if it doesn't exist
+       * @see https://redis.io/commands/renamenx/
+       */
+      parseCommand(parser, key, newKey) {
+        parser.push("RENAMENX");
+        parser.pushKeys([key, newKey]);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/REPLICAOF.js
+var require_REPLICAOF = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/REPLICAOF.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the REPLICAOF command
+       *
+       * @param parser - The command parser
+       * @param host - The host of the master to replicate from
+       * @param port - The port of the master to replicate from
+       * @see https://redis.io/commands/replicaof/
+       */
+      parseCommand(parser, host, port) {
+        parser.push("REPLICAOF", host, port.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RESTORE-ASKING.js
+var require_RESTORE_ASKING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RESTORE-ASKING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the RESTORE-ASKING command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/restore-asking/
+       */
+      parseCommand(parser) {
+        parser.push("RESTORE-ASKING");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RESTORE.js
+var require_RESTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RESTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the RESTORE command
+       *
+       * @param parser - The command parser
+       * @param key - The key to restore
+       * @param ttl - Time to live in milliseconds, 0 for no expiry
+       * @param serializedValue - The serialized value from DUMP command
+       * @param options - Options for the RESTORE command
+       * @see https://redis.io/commands/restore/
+       */
+      parseCommand(parser, key, ttl, serializedValue, options) {
+        parser.push("RESTORE");
+        parser.pushKey(key);
+        parser.push(ttl.toString(), serializedValue);
+        if (options?.REPLACE) {
+          parser.push("REPLACE");
+        }
+        if (options?.ABSTTL) {
+          parser.push("ABSTTL");
+        }
+        if (options?.IDLETIME) {
+          parser.push("IDLETIME", options.IDLETIME.toString());
+        }
+        if (options?.FREQ) {
+          parser.push("FREQ", options.FREQ.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ROLE.js
+var require_ROLE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ROLE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the ROLE command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/role/
+       */
+      parseCommand(parser) {
+        parser.push("ROLE");
+      },
+      /**
+       * Transforms the ROLE reply into a structured object
+       *
+       * @param reply - The raw reply from Redis
+       * @returns Structured object representing role information
+       */
+      transformReply(reply) {
+        switch (reply[0]) {
+          case "master": {
+            const [role, replicationOffest, replicas] = reply;
+            return {
+              role,
+              replicationOffest,
+              replicas: replicas.map((replica) => {
+                const [host, port, replicationOffest2] = replica;
+                return {
+                  host,
+                  port: Number(port),
+                  replicationOffest: Number(replicationOffest2)
+                };
+              })
+            };
+          }
+          case "slave": {
+            const [role, masterHost, masterPort, state, dataReceived] = reply;
+            return {
+              role,
+              master: {
+                host: masterHost,
+                port: masterPort
+              },
+              state,
+              dataReceived
+            };
+          }
+          case "sentinel": {
+            const [role, masterNames] = reply;
+            return {
+              role,
+              masterNames
+            };
+          }
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RPOP_COUNT.js
+var require_RPOP_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RPOP_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the RPOP command with count parameter
+       *
+       * @param parser - The command parser
+       * @param key - The list key to pop from
+       * @param count - The number of elements to pop
+       * @see https://redis.io/commands/rpop/
+       */
+      parseCommand(parser, key, count) {
+        parser.push("RPOP");
+        parser.pushKey(key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RPOP.js
+var require_RPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the RPOP command
+       *
+       * @param parser - The command parser
+       * @param key - The list key to pop from
+       * @see https://redis.io/commands/rpop/
+       */
+      parseCommand(parser, key) {
+        parser.push("RPOP");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RPOPLPUSH.js
+var require_RPOPLPUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RPOPLPUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the RPOPLPUSH command
+       *
+       * @param parser - The command parser
+       * @param source - The source list key
+       * @param destination - The destination list key
+       * @see https://redis.io/commands/rpoplpush/
+       */
+      parseCommand(parser, source, destination) {
+        parser.push("RPOPLPUSH");
+        parser.pushKeys([source, destination]);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RPUSH.js
+var require_RPUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RPUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the RPUSH command
+       *
+       * @param parser - The command parser
+       * @param key - The list key to push to
+       * @param element - One or more elements to push
+       * @see https://redis.io/commands/rpush/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("RPUSH");
+        parser.pushKey(key);
+        parser.pushVariadic(element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/RPUSHX.js
+var require_RPUSHX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/RPUSHX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the RPUSHX command
+       *
+       * @param parser - The command parser
+       * @param key - The list key to push to (only if it exists)
+       * @param element - One or more elements to push
+       * @see https://redis.io/commands/rpushx/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("RPUSHX");
+        parser.pushKey(key);
+        parser.pushVariadic(element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SADD.js
+var require_SADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SADD command
+       *
+       * @param parser - The command parser
+       * @param key - The set key to add members to
+       * @param members - One or more members to add to the set
+       * @see https://redis.io/commands/sadd/
+       */
+      parseCommand(parser, key, members) {
+        parser.push("SADD");
+        parser.pushKey(key);
+        parser.pushVariadic(members);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCARD.js
+var require_SCARD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCARD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCARD command
+       *
+       * @param parser - The command parser
+       * @param key - The set key to get the cardinality of
+       * @see https://redis.io/commands/scard/
+       */
+      parseCommand(parser, key) {
+        parser.push("SCARD");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCRIPT_DEBUG.js
+var require_SCRIPT_DEBUG = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCRIPT_DEBUG.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCRIPT DEBUG command
+       *
+       * @param parser - The command parser
+       * @param mode - Debug mode: YES, SYNC, or NO
+       * @see https://redis.io/commands/script-debug/
+       */
+      parseCommand(parser, mode) {
+        parser.push("SCRIPT", "DEBUG", mode);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCRIPT_EXISTS.js
+var require_SCRIPT_EXISTS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCRIPT_EXISTS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCRIPT EXISTS command
+       *
+       * @param parser - The command parser
+       * @param sha1 - One or more SHA1 digests of scripts
+       * @see https://redis.io/commands/script-exists/
+       */
+      parseCommand(parser, sha1) {
+        parser.push("SCRIPT", "EXISTS");
+        parser.pushVariadic(sha1);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCRIPT_FLUSH.js
+var require_SCRIPT_FLUSH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCRIPT_FLUSH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCRIPT FLUSH command
+       *
+       * @param parser - The command parser
+       * @param mode - Optional flush mode: ASYNC or SYNC
+       * @see https://redis.io/commands/script-flush/
+       */
+      parseCommand(parser, mode) {
+        parser.push("SCRIPT", "FLUSH");
+        if (mode) {
+          parser.push(mode);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCRIPT_KILL.js
+var require_SCRIPT_KILL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCRIPT_KILL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCRIPT KILL command
+       *
+       * @param parser - The command parser
+       * @see https://redis.io/commands/script-kill/
+       */
+      parseCommand(parser) {
+        parser.push("SCRIPT", "KILL");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SCRIPT_LOAD.js
+var require_SCRIPT_LOAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SCRIPT_LOAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SCRIPT LOAD command
+       *
+       * @param parser - The command parser
+       * @param script - The Lua script to load
+       * @see https://redis.io/commands/script-load/
+       */
+      parseCommand(parser, script) {
+        parser.push("SCRIPT", "LOAD", script);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SDIFF.js
+var require_SDIFF = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SDIFF.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SDIFF command
+       *
+       * @param parser - The command parser
+       * @param keys - One or more set keys to compute the difference from
+       * @see https://redis.io/commands/sdiff/
+       */
+      parseCommand(parser, keys) {
+        parser.push("SDIFF");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SDIFFSTORE.js
+var require_SDIFFSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SDIFFSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SDIFFSTORE command
+       *
+       * @param parser - The command parser
+       * @param destination - The destination key to store the result
+       * @param keys - One or more set keys to compute the difference from
+       * @see https://redis.io/commands/sdiffstore/
+       */
+      parseCommand(parser, destination, keys) {
+        parser.push("SDIFFSTORE");
+        parser.pushKey(destination);
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SET.js
+var require_SET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SET command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set
+       * @param value - The value to set
+       * @param options - Additional options for the SET command
+       * @see https://redis.io/commands/set/
+       */
+      parseCommand(parser, key, value, options) {
+        parser.push("SET");
+        parser.pushKey(key);
+        parser.push(typeof value === "number" ? value.toString() : value);
+        if (options?.expiration) {
+          if (typeof options.expiration === "string") {
+            parser.push(options.expiration);
+          } else if (options.expiration.type === "KEEPTTL") {
+            parser.push("KEEPTTL");
+          } else {
+            parser.push(options.expiration.type, options.expiration.value.toString());
+          }
+        } else if (options?.EX !== void 0) {
+          parser.push("EX", options.EX.toString());
+        } else if (options?.PX !== void 0) {
+          parser.push("PX", options.PX.toString());
+        } else if (options?.EXAT !== void 0) {
+          parser.push("EXAT", options.EXAT.toString());
+        } else if (options?.PXAT !== void 0) {
+          parser.push("PXAT", options.PXAT.toString());
+        } else if (options?.KEEPTTL) {
+          parser.push("KEEPTTL");
+        }
+        if (options?.condition) {
+          parser.push(options.condition);
+          if (options?.matchValue !== void 0) {
+            parser.push(options.matchValue);
+          }
+        } else if (options?.NX) {
+          parser.push("NX");
+        } else if (options?.XX) {
+          parser.push("XX");
+        }
+        if (options?.GET) {
+          parser.push("GET");
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SETBIT.js
+var require_SETBIT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SETBIT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SETBIT command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set the bit on
+       * @param offset - The bit offset (zero-based)
+       * @param value - The bit value (0 or 1)
+       * @see https://redis.io/commands/setbit/
+       */
+      parseCommand(parser, key, offset, value) {
+        parser.push("SETBIT");
+        parser.pushKey(key);
+        parser.push(offset.toString(), value.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SETEX.js
+var require_SETEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SETEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SETEX command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set
+       * @param seconds - The expiration time in seconds
+       * @param value - The value to set
+       * @see https://redis.io/commands/setex/
+       */
+      parseCommand(parser, key, seconds, value) {
+        parser.push("SETEX");
+        parser.pushKey(key);
+        parser.push(seconds.toString(), value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SETNX.js
+var require_SETNX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SETNX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SETNX command
+       *
+       * @param parser - The command parser
+       * @param key - The key to set if it doesn't exist
+       * @param value - The value to set
+       * @see https://redis.io/commands/setnx/
+       */
+      parseCommand(parser, key, value) {
+        parser.push("SETNX");
+        parser.pushKey(key);
+        parser.push(value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SETRANGE.js
+var require_SETRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SETRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Constructs the SETRANGE command
+       *
+       * @param parser - The command parser
+       * @param key - The key to modify
+       * @param offset - The offset at which to start writing
+       * @param value - The value to write at the offset
+       * @see https://redis.io/commands/setrange/
+       */
+      parseCommand(parser, key, offset, value) {
+        parser.push("SETRANGE");
+        parser.pushKey(key);
+        parser.push(offset.toString(), value);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SINTER.js
+var require_SINTER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SINTER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SINTER command
+       *
+       * @param parser - The command parser
+       * @param keys - One or more set keys to compute the intersection from
+       * @see https://redis.io/commands/sinter/
+       */
+      parseCommand(parser, keys) {
+        parser.push("SINTER");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SINTERCARD.js
+var require_SINTERCARD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SINTERCARD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SINTERCARD command
+       *
+       * @param parser - The command parser
+       * @param keys - One or more set keys to compute the intersection cardinality from
+       * @param options - Options for the SINTERCARD command or a number for LIMIT (backwards compatibility)
+       * @see https://redis.io/commands/sintercard/
+       */
+      parseCommand(parser, keys, options) {
+        parser.push("SINTERCARD");
+        parser.pushKeysLength(keys);
+        if (typeof options === "number") {
+          parser.push("LIMIT", options.toString());
+        } else if (options?.LIMIT !== void 0) {
+          parser.push("LIMIT", options.LIMIT.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SINTERSTORE.js
+var require_SINTERSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SINTERSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SINTERSTORE command
+       *
+       * @param parser - The command parser
+       * @param destination - The destination key to store the result
+       * @param keys - One or more set keys to compute the intersection from
+       * @see https://redis.io/commands/sinterstore/
+       */
+      parseCommand(parser, destination, keys) {
+        parser.push("SINTERSTORE");
+        parser.pushKey(destination);
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SISMEMBER.js
+var require_SISMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SISMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SISMEMBER command
+       *
+       * @param parser - The command parser
+       * @param key - The set key to check membership in
+       * @param member - The member to check for existence
+       * @see https://redis.io/commands/sismember/
+       */
+      parseCommand(parser, key, member) {
+        parser.push("SISMEMBER");
+        parser.pushKey(key);
+        parser.push(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SMEMBERS.js
+var require_SMEMBERS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SMEMBERS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SMEMBERS command
+       *
+       * @param parser - The command parser
+       * @param key - The set key to get all members from
+       * @see https://redis.io/commands/smembers/
+       */
+      parseCommand(parser, key) {
+        parser.push("SMEMBERS");
+        parser.pushKey(key);
+      },
+      transformReply: {
+        2: void 0,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SMISMEMBER.js
+var require_SMISMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SMISMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SMISMEMBER command
+       *
+       * @param parser - The command parser
+       * @param key - The set key to check membership in
+       * @param members - The members to check for existence
+       * @see https://redis.io/commands/smismember/
+       */
+      parseCommand(parser, key, members) {
+        parser.push("SMISMEMBER");
+        parser.pushKey(key);
+        parser.pushVariadic(members);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SMOVE.js
+var require_SMOVE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SMOVE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SMOVE command
+       *
+       * @param parser - The command parser
+       * @param source - The source set key
+       * @param destination - The destination set key
+       * @param member - The member to move
+       * @see https://redis.io/commands/smove/
+       */
+      parseCommand(parser, source, destination, member) {
+        parser.push("SMOVE");
+        parser.pushKeys([source, destination]);
+        parser.push(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SORT.js
+var require_SORT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SORT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseSortArguments = void 0;
+    function parseSortArguments(parser, key, options) {
+      parser.pushKey(key);
+      if (options?.BY) {
+        parser.push("BY", options.BY);
+      }
+      if (options?.LIMIT) {
+        parser.push("LIMIT", options.LIMIT.offset.toString(), options.LIMIT.count.toString());
+      }
+      if (options?.GET) {
+        if (Array.isArray(options.GET)) {
+          for (const pattern of options.GET) {
+            parser.push("GET", pattern);
+          }
+        } else {
+          parser.push("GET", options.GET);
+        }
+      }
+      if (options?.DIRECTION) {
+        parser.push(options.DIRECTION);
+      }
+      if (options?.ALPHA) {
+        parser.push("ALPHA");
+      }
+    }
+    exports.parseSortArguments = parseSortArguments;
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SORT command
+       *
+       * @param parser - The command parser
+       * @param key - The key to sort (list, set, or sorted set)
+       * @param options - Sort options
+       * @see https://redis.io/commands/sort/
+       */
+      parseCommand(parser, key, options) {
+        parser.push("SORT");
+        parseSortArguments(parser, key, options);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SORT_RO.js
+var require_SORT_RO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SORT_RO.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SORT_1 = __importStar(require_SORT());
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Read-only variant of SORT that sorts the elements in a list, set or sorted set.
+       * @param args - Same parameters as the SORT command.
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        parser.push("SORT_RO");
+        (0, SORT_1.parseSortArguments)(...args);
+      },
+      transformReply: SORT_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SORT_STORE.js
+var require_SORT_STORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SORT_STORE.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SORT_1 = __importDefault(require_SORT());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Sorts the elements in a list, set or sorted set and stores the result in a new list.
+       * @param parser - The Redis command parser.
+       * @param source - Key of the source list, set or sorted set.
+       * @param destination - Destination key where the result will be stored.
+       * @param options - Optional sorting parameters.
+       */
+      parseCommand(parser, source, destination, options) {
+        SORT_1.default.parseCommand(parser, source, options);
+        parser.push("STORE", destination);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SPOP_COUNT.js
+var require_SPOP_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SPOP_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SPOP command to remove and return multiple random members from a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to pop from
+       * @param count - The number of members to pop
+       * @see https://redis.io/commands/spop/
+       */
+      parseCommand(parser, key, count) {
+        parser.push("SPOP");
+        parser.pushKey(key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SPOP.js
+var require_SPOP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SPOP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SPOP command to remove and return a random member from a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to pop from
+       * @see https://redis.io/commands/spop/
+       */
+      parseCommand(parser, key) {
+        parser.push("SPOP");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SPUBLISH.js
+var require_SPUBLISH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SPUBLISH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SPUBLISH command to post a message to a Sharded Pub/Sub channel
+       *
+       * @param parser - The command parser
+       * @param channel - The channel to publish to
+       * @param message - The message to publish
+       * @see https://redis.io/commands/spublish/
+       */
+      parseCommand(parser, channel, message) {
+        parser.push("SPUBLISH");
+        parser.pushKey(channel);
+        parser.push(message);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SRANDMEMBER.js
+var require_SRANDMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SRANDMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SRANDMEMBER command to get a random member from a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to get random member from
+       * @see https://redis.io/commands/srandmember/
+       */
+      parseCommand(parser, key) {
+        parser.push("SRANDMEMBER");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SRANDMEMBER_COUNT.js
+var require_SRANDMEMBER_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SRANDMEMBER_COUNT.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SRANDMEMBER_1 = __importDefault(require_SRANDMEMBER());
+    exports.default = {
+      IS_READ_ONLY: SRANDMEMBER_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the SRANDMEMBER command to get multiple random members from a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to get random members from
+       * @param count - The number of members to return. If negative, may return the same member multiple times
+       * @see https://redis.io/commands/srandmember/
+       */
+      parseCommand(parser, key, count) {
+        SRANDMEMBER_1.default.parseCommand(parser, key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SREM.js
+var require_SREM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SREM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SREM command to remove one or more members from a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to remove members from
+       * @param members - One or more members to remove from the set
+       * @returns The number of members that were removed from the set
+       * @see https://redis.io/commands/srem/
+       */
+      parseCommand(parser, key, members) {
+        parser.push("SREM");
+        parser.pushKey(key);
+        parser.pushVariadic(members);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SSCAN.js
+var require_SSCAN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SSCAN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SCAN_1 = require_SCAN();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SSCAN command to incrementally iterate over elements in a set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the set to scan
+       * @param cursor - The cursor position to start scanning from
+       * @param options - Optional scanning parameters (COUNT and MATCH)
+       * @returns Iterator containing cursor position and matching members
+       * @see https://redis.io/commands/sscan/
+       */
+      parseCommand(parser, key, cursor, options) {
+        parser.push("SSCAN");
+        parser.pushKey(key);
+        (0, SCAN_1.parseScanArguments)(parser, cursor, options);
+      },
+      /**
+       * Transforms the SSCAN reply into a cursor result object
+       *
+       * @param cursor - The next cursor position
+       * @param members - Array of matching set members
+       * @returns Object containing cursor and members array
+       */
+      transformReply([cursor, members]) {
+        return {
+          cursor,
+          members
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/STRLEN.js
+var require_STRLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/STRLEN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the STRLEN command to get the length of a string value
+       *
+       * @param parser - The command parser
+       * @param key - The key holding the string value
+       * @returns The length of the string value, or 0 when key does not exist
+       * @see https://redis.io/commands/strlen/
+       */
+      parseCommand(parser, key) {
+        parser.push("STRLEN");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SUNION.js
+var require_SUNION = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SUNION.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the SUNION command to return the members of the set resulting from the union of all the given sets
+       *
+       * @param parser - The command parser
+       * @param keys - One or more set keys to compute the union from
+       * @returns Array of all elements that are members of at least one of the given sets
+       * @see https://redis.io/commands/sunion/
+       */
+      parseCommand(parser, keys) {
+        parser.push("SUNION");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SUNIONSTORE.js
+var require_SUNIONSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SUNIONSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the SUNIONSTORE command to store the union of multiple sets into a destination set
+       *
+       * @param parser - The command parser
+       * @param destination - The destination key to store the resulting set
+       * @param keys - One or more source set keys to compute the union from
+       * @returns The number of elements in the resulting set
+       * @see https://redis.io/commands/sunionstore/
+       */
+      parseCommand(parser, destination, keys) {
+        parser.push("SUNIONSTORE");
+        parser.pushKey(destination);
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/SWAPDB.js
+var require_SWAPDB = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/SWAPDB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: false,
+      /**
+       * Swaps the data of two Redis databases.
+       * @param parser - The Redis command parser.
+       * @param index1 - First database index.
+       * @param index2 - Second database index.
+       */
+      parseCommand(parser, index1, index2) {
+        parser.push("SWAPDB", index1.toString(), index2.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/TIME.js
+var require_TIME = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/TIME.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the TIME command to return the server's current time
+       *
+       * @param parser - The command parser
+       * @returns Array containing the Unix timestamp in seconds and microseconds
+       * @see https://redis.io/commands/time/
+       */
+      parseCommand(parser) {
+        parser.push("TIME");
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/TOUCH.js
+var require_TOUCH = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/TOUCH.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the TOUCH command to alter the last access time of keys
+       *
+       * @param parser - The command parser
+       * @param key - One or more keys to touch
+       * @returns The number of keys that were touched
+       * @see https://redis.io/commands/touch/
+       */
+      parseCommand(parser, key) {
+        parser.push("TOUCH");
+        parser.pushKeys(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/TTL.js
+var require_TTL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/TTL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the TTL command to get the remaining time to live of a key
+       *
+       * @param parser - The command parser
+       * @param key - Key to check
+       * @returns Time to live in seconds, -2 if key does not exist, -1 if has no timeout
+       * @see https://redis.io/commands/ttl/
+       */
+      parseCommand(parser, key) {
+        parser.push("TTL");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/TYPE.js
+var require_TYPE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/TYPE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the TYPE command to determine the data type stored at key
+       *
+       * @param parser - The command parser
+       * @param key - Key to check
+       * @returns String reply: "none", "string", "list", "set", "zset", "hash", "stream"
+       * @see https://redis.io/commands/type/
+       */
+      parseCommand(parser, key) {
+        parser.push("TYPE");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/UNLINK.js
+var require_UNLINK = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/UNLINK.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the UNLINK command to asynchronously delete one or more keys
+       *
+       * @param parser - The command parser
+       * @param keys - One or more keys to unlink
+       * @returns The number of keys that were unlinked
+       * @see https://redis.io/commands/unlink/
+       */
+      parseCommand(parser, keys) {
+        parser.push("UNLINK");
+        parser.pushKeys(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/WAIT.js
+var require_WAIT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/WAIT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      NOT_KEYED_COMMAND: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the WAIT command to synchronize with replicas
+       *
+       * @param parser - The command parser
+       * @param numberOfReplicas - Number of replicas that must acknowledge the write
+       * @param timeout - Maximum time to wait in milliseconds
+       * @returns The number of replicas that acknowledged the write
+       * @see https://redis.io/commands/wait/
+       */
+      parseCommand(parser, numberOfReplicas, timeout) {
+        parser.push("WAIT", numberOfReplicas.toString(), timeout.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XACK.js
+var require_XACK = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XACK.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XACK command to acknowledge the processing of stream messages in a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - The consumer group name
+       * @param id - One or more message IDs to acknowledge
+       * @returns The number of messages successfully acknowledged
+       * @see https://redis.io/commands/xack/
+       */
+      parseCommand(parser, key, group, id) {
+        parser.push("XACK");
+        parser.pushKey(key);
+        parser.push(group);
+        parser.pushVariadic(id);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XACKDEL.js
+var require_XACKDEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XACKDEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XACKDEL command to acknowledge and delete one or multiple messages for a stream consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - The consumer group name
+       * @param id - One or more message IDs to acknowledge and delete
+       * @param policy - Policy to apply when deleting entries (optional, defaults to KEEPREF)
+       * @returns Array of integers: -1 (not found), 1 (acknowledged and deleted), 2 (acknowledged with dangling refs)
+       * @see https://redis.io/commands/xackdel/
+       */
+      parseCommand(parser, key, group, id, policy) {
+        parser.push("XACKDEL");
+        parser.pushKey(key);
+        parser.push(group);
+        if (policy) {
+          parser.push(policy);
+        }
+        parser.push("IDS");
+        parser.pushVariadicWithLength(id);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XADD.js
+var require_XADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseXAddArguments = void 0;
+    function parseXAddArguments(optional2, parser, key, id, message, options) {
+      parser.push("XADD");
+      parser.pushKey(key);
+      if (optional2) {
+        parser.push(optional2);
+      }
+      if (options?.policy) {
+        parser.push(options.policy);
+      }
+      if (options?.IDMPAUTO) {
+        parser.push("IDMPAUTO", options.IDMPAUTO.pid);
+      } else if (options?.IDMP) {
+        parser.push("IDMP", options.IDMP.pid, options.IDMP.iid);
+      }
+      if (options?.TRIM) {
+        if (options.TRIM.strategy) {
+          parser.push(options.TRIM.strategy);
+        }
+        if (options.TRIM.strategyModifier) {
+          parser.push(options.TRIM.strategyModifier);
+        }
+        parser.push(options.TRIM.threshold.toString());
+        if (options.TRIM.limit) {
+          parser.push("LIMIT", options.TRIM.limit.toString());
+        }
+        if (options.TRIM.policy) {
+          parser.push(options.TRIM.policy);
+        }
+      }
+      parser.push(id);
+      for (const [key2, value] of Object.entries(message)) {
+        parser.push(key2, value);
+      }
+    }
+    exports.parseXAddArguments = parseXAddArguments;
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XADD command to append a new entry to a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param id - Message ID (* for auto-generation)
+       * @param message - Key-value pairs representing the message fields
+       * @param options - Additional options for stream trimming
+       * @returns The ID of the added entry
+       * @see https://redis.io/commands/xadd/
+       */
+      parseCommand(...args) {
+        return parseXAddArguments(void 0, ...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XADD_NOMKSTREAM.js
+var require_XADD_NOMKSTREAM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XADD_NOMKSTREAM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var XADD_1 = require_XADD();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XADD command with NOMKSTREAM option to append a new entry to an existing stream
+       *
+       * @param args - Arguments tuple containing parser, key, id, message, and options
+       * @returns The ID of the added entry, or null if the stream doesn't exist
+       * @see https://redis.io/commands/xadd/
+       */
+      parseCommand(...args) {
+        return (0, XADD_1.parseXAddArguments)("NOMKSTREAM", ...args);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XAUTOCLAIM.js
+var require_XAUTOCLAIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XAUTOCLAIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XAUTOCLAIM command to automatically claim pending messages in a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - The consumer group name
+       * @param consumer - The consumer name that will claim the messages
+       * @param minIdleTime - Minimum idle time in milliseconds for a message to be claimed
+       * @param start - Message ID to start scanning from
+       * @param options - Additional options for the claim operation
+       * @returns Object containing nextId, claimed messages, and list of deleted message IDs
+       * @see https://redis.io/commands/xautoclaim/
+       */
+      parseCommand(parser, key, group, consumer, minIdleTime, start, options) {
+        parser.push("XAUTOCLAIM");
+        parser.pushKey(key);
+        parser.push(group, consumer, minIdleTime.toString(), start);
+        if (options?.COUNT) {
+          parser.push("COUNT", options.COUNT.toString());
+        }
+      },
+      /**
+       * Transforms the raw XAUTOCLAIM reply into a structured object
+       *
+       * @param reply - Raw reply from Redis
+       * @param preserve - Preserve options (unused)
+       * @param typeMapping - Type mapping for message fields
+       * @returns Structured object containing nextId, messages, and deletedMessages
+       */
+      transformReply(reply, preserve, typeMapping) {
+        return {
+          nextId: reply[0],
+          messages: reply[1].map(generic_transformers_1.transformStreamMessageNullReply.bind(void 0, typeMapping)),
+          deletedMessages: reply[2]
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XAUTOCLAIM_JUSTID.js
+var require_XAUTOCLAIM_JUSTID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XAUTOCLAIM_JUSTID.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var XAUTOCLAIM_1 = __importDefault(require_XAUTOCLAIM());
+    exports.default = {
+      IS_READ_ONLY: XAUTOCLAIM_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the XAUTOCLAIM command with JUSTID option to get only message IDs
+       *
+       * @param args - Same parameters as XAUTOCLAIM command
+       * @returns Object containing nextId and arrays of claimed and deleted message IDs
+       * @see https://redis.io/commands/xautoclaim/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        XAUTOCLAIM_1.default.parseCommand(...args);
+        parser.push("JUSTID");
+      },
+      /**
+       * Transforms the raw XAUTOCLAIM JUSTID reply into a structured object
+       *
+       * @param reply - Raw reply from Redis
+       * @returns Structured object containing nextId, message IDs, and deleted message IDs
+       */
+      transformReply(reply) {
+        return {
+          nextId: reply[0],
+          messages: reply[1],
+          deletedMessages: reply[2]
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XCLAIM.js
+var require_XCLAIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XCLAIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XCLAIM command to claim pending messages in a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - The consumer group name
+       * @param consumer - The consumer name that will claim the messages
+       * @param minIdleTime - Minimum idle time in milliseconds for a message to be claimed
+       * @param id - One or more message IDs to claim
+       * @param options - Additional options for the claim operation
+       * @returns Array of claimed messages
+       * @see https://redis.io/commands/xclaim/
+       */
+      parseCommand(parser, key, group, consumer, minIdleTime, id, options) {
+        parser.push("XCLAIM");
+        parser.pushKey(key);
+        parser.push(group, consumer, minIdleTime.toString());
+        parser.pushVariadic(id);
+        if (options?.IDLE !== void 0) {
+          parser.push("IDLE", options.IDLE.toString());
+        }
+        if (options?.TIME !== void 0) {
+          parser.push("TIME", (options.TIME instanceof Date ? options.TIME.getTime() : options.TIME).toString());
+        }
+        if (options?.RETRYCOUNT !== void 0) {
+          parser.push("RETRYCOUNT", options.RETRYCOUNT.toString());
+        }
+        if (options?.FORCE) {
+          parser.push("FORCE");
+        }
+        if (options?.LASTID !== void 0) {
+          parser.push("LASTID", options.LASTID);
+        }
+      },
+      /**
+       * Transforms the raw XCLAIM reply into an array of messages
+       *
+       * @param reply - Raw reply from Redis
+       * @param preserve - Preserve options (unused)
+       * @param typeMapping - Type mapping for message fields
+       * @returns Array of claimed messages with their fields
+       */
+      transformReply(reply, preserve, typeMapping) {
+        return reply.map(generic_transformers_1.transformStreamMessageNullReply.bind(void 0, typeMapping));
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XCLAIM_JUSTID.js
+var require_XCLAIM_JUSTID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XCLAIM_JUSTID.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var XCLAIM_1 = __importDefault(require_XCLAIM());
+    exports.default = {
+      IS_READ_ONLY: XCLAIM_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the XCLAIM command with JUSTID option to get only message IDs
+       *
+       * @param args - Same parameters as XCLAIM command
+       * @returns Array of successfully claimed message IDs
+       * @see https://redis.io/commands/xclaim/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        XCLAIM_1.default.parseCommand(...args);
+        parser.push("JUSTID");
+      },
+      /**
+       * Transforms the XCLAIM JUSTID reply into an array of message IDs
+       *
+       * @returns Array of claimed message IDs
+       */
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XCFGSET.js
+var require_XCFGSET = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XCFGSET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Configures the idempotency parameters for a stream's IDMP map.
+       * Sets how long Redis remembers each iid and the maximum number of iids to track.
+       * This command clears the existing IDMP map (Redis forgets all previously stored iids),
+       * but only if the configuration value actually changes.
+       *
+       * @param parser - The command parser
+       * @param key - The name of the stream
+       * @param options - Optional idempotency configuration parameters
+       * @returns 'OK' on success
+       */
+      parseCommand(parser, key, options) {
+        parser.push("XCFGSET");
+        parser.pushKey(key);
+        if (options?.IDMP_DURATION !== void 0) {
+          parser.push("IDMP-DURATION", options.IDMP_DURATION.toString());
+        }
+        if (options?.IDMP_MAXSIZE !== void 0) {
+          parser.push("IDMP-MAXSIZE", options.IDMP_MAXSIZE.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XDEL.js
+var require_XDEL = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XDEL.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XDEL command to remove one or more messages from a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param id - One or more message IDs to delete
+       * @returns The number of messages actually deleted
+       * @see https://redis.io/commands/xdel/
+       */
+      parseCommand(parser, key, id) {
+        parser.push("XDEL");
+        parser.pushKey(key);
+        parser.pushVariadic(id);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XDELEX.js
+var require_XDELEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XDELEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XDELEX command to delete one or multiple entries from the stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param id - One or more message IDs to delete
+       * @param policy - Policy to apply when deleting entries (optional, defaults to KEEPREF)
+       * @returns Array of integers: -1 (not found), 1 (deleted), 2 (dangling refs)
+       * @see https://redis.io/commands/xdelex/
+       */
+      parseCommand(parser, key, id, policy) {
+        parser.push("XDELEX");
+        parser.pushKey(key);
+        if (policy) {
+          parser.push(policy);
+        }
+        parser.push("IDS");
+        parser.pushVariadicWithLength(id);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XGROUP_CREATE.js
+var require_XGROUP_CREATE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XGROUP_CREATE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XGROUP CREATE command to create a consumer group for a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @param id - ID of the last delivered item in the stream ('$' for last item, '0' for all items)
+       * @param options - Additional options for group creation
+       * @returns 'OK' if successful
+       * @see https://redis.io/commands/xgroup-create/
+       */
+      parseCommand(parser, key, group, id, options) {
+        parser.push("XGROUP", "CREATE");
+        parser.pushKey(key);
+        parser.push(group, id);
+        if (options?.MKSTREAM) {
+          parser.push("MKSTREAM");
+        }
+        if (options?.ENTRIESREAD) {
+          parser.push("ENTRIESREAD", options.ENTRIESREAD.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XGROUP_CREATECONSUMER.js
+var require_XGROUP_CREATECONSUMER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XGROUP_CREATECONSUMER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XGROUP CREATECONSUMER command to create a new consumer in a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @param consumer - Name of the consumer to create
+       * @returns 1 if the consumer was created, 0 if it already existed
+       * @see https://redis.io/commands/xgroup-createconsumer/
+       */
+      parseCommand(parser, key, group, consumer) {
+        parser.push("XGROUP", "CREATECONSUMER");
+        parser.pushKey(key);
+        parser.push(group, consumer);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XGROUP_DELCONSUMER.js
+var require_XGROUP_DELCONSUMER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XGROUP_DELCONSUMER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XGROUP DELCONSUMER command to remove a consumer from a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @param consumer - Name of the consumer to remove
+       * @returns The number of pending messages owned by the deleted consumer
+       * @see https://redis.io/commands/xgroup-delconsumer/
+       */
+      parseCommand(parser, key, group, consumer) {
+        parser.push("XGROUP", "DELCONSUMER");
+        parser.pushKey(key);
+        parser.push(group, consumer);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XGROUP_DESTROY.js
+var require_XGROUP_DESTROY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XGROUP_DESTROY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XGROUP DESTROY command to remove a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group to destroy
+       * @returns 1 if the group was destroyed, 0 if it did not exist
+       * @see https://redis.io/commands/xgroup-destroy/
+       */
+      parseCommand(parser, key, group) {
+        parser.push("XGROUP", "DESTROY");
+        parser.pushKey(key);
+        parser.push(group);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XGROUP_SETID.js
+var require_XGROUP_SETID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XGROUP_SETID.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XGROUP SETID command to set the last delivered ID for a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @param id - ID to set as last delivered message ('$' for last item, '0' for all items)
+       * @param options - Additional options for setting the group ID
+       * @returns 'OK' if successful
+       * @see https://redis.io/commands/xgroup-setid/
+       */
+      parseCommand(parser, key, group, id, options) {
+        parser.push("XGROUP", "SETID");
+        parser.pushKey(key);
+        parser.push(group, id);
+        if (options?.ENTRIESREAD) {
+          parser.push("ENTRIESREAD", options.ENTRIESREAD.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XINFO_CONSUMERS.js
+var require_XINFO_CONSUMERS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XINFO_CONSUMERS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XINFO CONSUMERS command to list the consumers in a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @returns Array of consumer information objects
+       * @see https://redis.io/commands/xinfo-consumers/
+       */
+      parseCommand(parser, key, group) {
+        parser.push("XINFO", "CONSUMERS");
+        parser.pushKey(key);
+        parser.push(group);
+      },
+      transformReply: {
+        /**
+         * Transforms RESP2 reply into a structured consumer information array
+         *
+         * @param reply - Raw RESP2 reply from Redis
+         * @returns Array of consumer information objects
+         */
+        2: (reply) => {
+          return reply.map((consumer) => {
+            const unwrapped = consumer;
+            return {
+              name: unwrapped[1],
+              pending: unwrapped[3],
+              idle: unwrapped[5],
+              inactive: unwrapped[7]
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XINFO_GROUPS.js
+var require_XINFO_GROUPS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XINFO_GROUPS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XINFO GROUPS command to list the consumer groups of a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @returns Array of consumer group information objects
+       * @see https://redis.io/commands/xinfo-groups/
+       */
+      parseCommand(parser, key) {
+        parser.push("XINFO", "GROUPS");
+        parser.pushKey(key);
+      },
+      transformReply: {
+        /**
+         * Transforms RESP2 reply into a structured consumer group information array
+         *
+         * @param reply - Raw RESP2 reply from Redis
+         * @returns Array of consumer group information objects containing:
+         *          name - Name of the consumer group
+         *          consumers - Number of consumers in the group
+         *          pending - Number of pending messages for the group
+         *          last-delivered-id - ID of the last delivered message
+         *          entries-read - Number of entries read in the group (Redis 7.0+)
+         *          lag - Number of entries not read by the group (Redis 7.0+)
+         */
+        2: (reply) => {
+          return reply.map((group) => {
+            const unwrapped = group;
+            return {
+              name: unwrapped[1],
+              consumers: unwrapped[3],
+              pending: unwrapped[5],
+              "last-delivered-id": unwrapped[7],
+              "entries-read": unwrapped[9],
+              lag: unwrapped[11]
+            };
+          });
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XINFO_STREAM.js
+var require_XINFO_STREAM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XINFO_STREAM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XINFO STREAM command to get detailed information about a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @returns Detailed information about the stream including its length, structure, and entries
+       * @see https://redis.io/commands/xinfo-stream/
+       */
+      parseCommand(parser, key) {
+        parser.push("XINFO", "STREAM");
+        parser.pushKey(key);
+      },
+      transformReply: {
+        // TODO: is there a "type safe" way to do it?
+        2(reply) {
+          const parsedReply = {};
+          for (let i = 0; i < reply.length; i += 2) {
+            switch (reply[i]) {
+              case "first-entry":
+              case "last-entry":
+                parsedReply[reply[i]] = transformEntry(reply[i + 1]);
+                break;
+              default:
+                parsedReply[reply[i]] = reply[i + 1];
+                break;
+            }
+          }
+          return parsedReply;
+        },
+        3(reply) {
+          if (reply instanceof Map) {
+            reply.set("first-entry", transformEntry(reply.get("first-entry")));
+            reply.set("last-entry", transformEntry(reply.get("last-entry")));
+          } else if (reply instanceof Array) {
+            for (let i = 0; i < reply.length; i += 2) {
+              if (reply[i] === "first-entry" || reply[i] === "last-entry") {
+                reply[i + 1] = transformEntry(reply[i + 1]);
+              }
+            }
+          } else {
+            reply["first-entry"] = transformEntry(reply["first-entry"]);
+            reply["last-entry"] = transformEntry(reply["last-entry"]);
+          }
+          return reply;
+        }
+      }
+    };
+    function transformEntry(entry) {
+      if ((0, generic_transformers_1.isNullReply)(entry))
+        return entry;
+      const [id, message] = entry;
+      return {
+        id,
+        message: (0, generic_transformers_1.transformTuplesReply)(message)
+      };
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XLEN.js
+var require_XLEN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XLEN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XLEN command to get the number of entries in a stream
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @returns The number of entries inside the stream
+       * @see https://redis.io/commands/xlen/
+       */
+      parseCommand(parser, key) {
+        parser.push("XLEN");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XPENDING_RANGE.js
+var require_XPENDING_RANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XPENDING_RANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XPENDING command with range parameters to get detailed information about pending messages
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @param start - Start of ID range (use '-' for minimum ID)
+       * @param end - End of ID range (use '+' for maximum ID)
+       * @param count - Maximum number of messages to return
+       * @param options - Additional filtering options
+       * @returns Array of pending message details
+       * @see https://redis.io/commands/xpending/
+       */
+      parseCommand(parser, key, group, start, end, count, options) {
+        parser.push("XPENDING");
+        parser.pushKey(key);
+        parser.push(group);
+        if (options?.IDLE !== void 0) {
+          parser.push("IDLE", options.IDLE.toString());
+        }
+        parser.push(start, end, count.toString());
+        if (options?.consumer) {
+          parser.push(options.consumer);
+        }
+      },
+      /**
+       * Transforms the raw XPENDING RANGE reply into a structured array of message details
+       *
+       * @param reply - Raw reply from Redis
+       * @returns Array of objects containing message ID, consumer, idle time, and delivery count
+       */
+      transformReply(reply) {
+        return reply.map((pending) => {
+          const unwrapped = pending;
+          return {
+            id: unwrapped[0],
+            consumer: unwrapped[1],
+            millisecondsSinceLastDelivery: unwrapped[2],
+            deliveriesCounter: unwrapped[3]
+          };
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XPENDING.js
+var require_XPENDING = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XPENDING.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XPENDING command to inspect pending messages of a consumer group
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param group - Name of the consumer group
+       * @returns Summary of pending messages including total count, ID range, and per-consumer stats
+       * @see https://redis.io/commands/xpending/
+       */
+      parseCommand(parser, key, group) {
+        parser.push("XPENDING");
+        parser.pushKey(key);
+        parser.push(group);
+      },
+      /**
+       * Transforms the raw XPENDING reply into a structured object
+       *
+       * @param reply - Raw reply from Redis
+       * @returns Object containing pending count, ID range, and consumer statistics
+       */
+      transformReply(reply) {
+        const consumers = reply[3];
+        return {
+          pending: reply[0],
+          firstId: reply[1],
+          lastId: reply[2],
+          consumers: consumers === null ? null : consumers.map((consumer) => {
+            const [name, deliveriesCounter] = consumer;
+            return {
+              name,
+              deliveriesCounter: Number(deliveriesCounter)
+            };
+          })
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XRANGE.js
+var require_XRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.xRangeArguments = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    function xRangeArguments(start, end, options) {
+      const args = [start, end];
+      if (options?.COUNT) {
+        args.push("COUNT", options.COUNT.toString());
+      }
+      return args;
+    }
+    exports.xRangeArguments = xRangeArguments;
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XRANGE command to read stream entries in a specific range
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param args - Arguments tuple containing start ID, end ID, and options
+       * @returns Array of messages in the specified range
+       * @see https://redis.io/commands/xrange/
+       */
+      parseCommand(parser, key, ...args) {
+        parser.push("XRANGE");
+        parser.pushKey(key);
+        parser.pushVariadic(xRangeArguments(args[0], args[1], args[2]));
+      },
+      /**
+       * Transforms the raw XRANGE reply into structured message objects
+       *
+       * @param reply - Raw reply from Redis
+       * @param preserve - Preserve options (unused)
+       * @param typeMapping - Type mapping for message fields
+       * @returns Array of structured message objects
+       */
+      transformReply(reply, preserve, typeMapping) {
+        return reply.map(generic_transformers_1.transformStreamMessageReply.bind(void 0, typeMapping));
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XREAD.js
+var require_XREAD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XREAD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.pushXReadStreams = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    function pushXReadStreams(parser, streams) {
+      parser.push("STREAMS");
+      if (Array.isArray(streams)) {
+        for (let i = 0; i < streams.length; i++) {
+          parser.pushKey(streams[i].key);
+        }
+        for (let i = 0; i < streams.length; i++) {
+          parser.push(streams[i].id);
+        }
+      } else {
+        parser.pushKey(streams.key);
+        parser.push(streams.id);
+      }
+    }
+    exports.pushXReadStreams = pushXReadStreams;
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XREAD command to read messages from one or more streams
+       *
+       * @param parser - The command parser
+       * @param streams - Single stream or array of streams to read from
+       * @param options - Additional options for reading streams
+       * @returns Array of stream entries, each containing the stream name and its messages
+       * @see https://redis.io/commands/xread/
+       */
+      parseCommand(parser, streams, options) {
+        parser.push("XREAD");
+        if (options?.COUNT) {
+          parser.push("COUNT", options.COUNT.toString());
+        }
+        if (options?.BLOCK !== void 0) {
+          parser.push("BLOCK", options.BLOCK.toString());
+        }
+        pushXReadStreams(parser, streams);
+      },
+      /**
+       * Transform functions for different RESP versions
+       */
+      transformReply: {
+        2: generic_transformers_1.transformStreamsMessagesReplyResp2,
+        3: void 0
+      },
+      unstableResp3: true
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XREADGROUP.js
+var require_XREADGROUP = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XREADGROUP.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var XREAD_1 = require_XREAD();
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the XREADGROUP command to read messages from streams as a consumer group member
+       *
+       * @param parser - The command parser
+       * @param group - Name of the consumer group
+       * @param consumer - Name of the consumer in the group
+       * @param streams - Single stream or array of streams to read from
+       * @param options - Additional options for reading streams
+       * @returns Array of stream entries, each containing the stream name and its messages
+       * @see https://redis.io/commands/xreadgroup/
+       */
+      parseCommand(parser, group, consumer, streams, options) {
+        parser.push("XREADGROUP", "GROUP", group, consumer);
+        if (options?.COUNT !== void 0) {
+          parser.push("COUNT", options.COUNT.toString());
+        }
+        if (options?.BLOCK !== void 0) {
+          parser.push("BLOCK", options.BLOCK.toString());
+        }
+        if (options?.NOACK) {
+          parser.push("NOACK");
+        }
+        if (options?.CLAIM !== void 0) {
+          parser.push("CLAIM", options.CLAIM.toString());
+        }
+        (0, XREAD_1.pushXReadStreams)(parser, streams);
+      },
+      /**
+       * Transform functions for different RESP versions
+       */
+      transformReply: {
+        2: generic_transformers_1.transformStreamsMessagesReplyResp2,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XREVRANGE.js
+var require_XREVRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XREVRANGE.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var XRANGE_1 = __importStar(require_XRANGE());
+    exports.default = {
+      CACHEABLE: XRANGE_1.default.CACHEABLE,
+      IS_READ_ONLY: XRANGE_1.default.IS_READ_ONLY,
+      /**
+       * Constructs the XREVRANGE command to read stream entries in reverse order
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param args - Arguments tuple containing start ID, end ID, and options
+       * @returns Array of messages in the specified range in reverse order
+       * @see https://redis.io/commands/xrevrange/
+       */
+      parseCommand(parser, key, ...args) {
+        parser.push("XREVRANGE");
+        parser.pushKey(key);
+        parser.pushVariadic((0, XRANGE_1.xRangeArguments)(args[0], args[1], args[2]));
+      },
+      transformReply: XRANGE_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XSETID.js
+var require_XSETID = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XSETID.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      parseCommand(parser, key, lastId, options) {
+        parser.push("XSETID");
+        parser.pushKey(key);
+        parser.push(lastId);
+        if (options?.ENTRIESADDED) {
+          parser.push("ENTRIESADDED", options.ENTRIESADDED.toString());
+        }
+        if (options?.MAXDELETEDID) {
+          parser.push("MAXDELETEDID", options.MAXDELETEDID);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/XTRIM.js
+var require_XTRIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/XTRIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Constructs the XTRIM command to trim a stream by length or minimum ID
+       *
+       * @param parser - The command parser
+       * @param key - The stream key
+       * @param strategy - Trim by maximum length (MAXLEN) or minimum ID (MINID)
+       * @param threshold - Maximum length or minimum ID threshold
+       * @param options - Additional options for trimming
+       * @returns Number of entries removed from the stream
+       * @see https://redis.io/commands/xtrim/
+       */
+      parseCommand(parser, key, strategy, threshold, options) {
+        parser.push("XTRIM");
+        parser.pushKey(key);
+        parser.push(strategy);
+        if (options?.strategyModifier) {
+          parser.push(options.strategyModifier);
+        }
+        parser.push(threshold.toString());
+        if (options?.LIMIT) {
+          parser.push("LIMIT", options.LIMIT.toString());
+        }
+        if (options?.policy) {
+          parser.push(options.policy);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZADD.js
+var require_ZADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.pushMembers = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Constructs the ZADD command to add one or more members to a sorted set
+       *
+       * @param parser - The command parser
+       * @param key - The sorted set key
+       * @param members - One or more members to add with their scores
+       * @param options - Additional options for adding members
+       * @returns Number of new members added (or changed members if CH is set)
+       * @see https://redis.io/commands/zadd/
+       */
+      parseCommand(parser, key, members, options) {
+        parser.push("ZADD");
+        parser.pushKey(key);
+        if (options?.condition) {
+          parser.push(options.condition);
+        } else if (options?.NX) {
+          parser.push("NX");
+        } else if (options?.XX) {
+          parser.push("XX");
+        }
+        if (options?.comparison) {
+          parser.push(options.comparison);
+        } else if (options?.LT) {
+          parser.push("LT");
+        } else if (options?.GT) {
+          parser.push("GT");
+        }
+        if (options?.CH) {
+          parser.push("CH");
+        }
+        pushMembers(parser, members);
+      },
+      transformReply: generic_transformers_1.transformDoubleReply
+    };
+    function pushMembers(parser, members) {
+      if (Array.isArray(members)) {
+        for (const member of members) {
+          pushMember(parser, member);
+        }
+      } else {
+        pushMember(parser, members);
+      }
+    }
+    exports.pushMembers = pushMembers;
+    function pushMember(parser, member) {
+      parser.push((0, generic_transformers_1.transformDoubleArgument)(member.score), member.value);
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZADD_INCR.js
+var require_ZADD_INCR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZADD_INCR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZADD_1 = require_ZADD();
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Constructs the ZADD command with INCR option to increment the score of a member
+       *
+       * @param parser - The command parser
+       * @param key - The sorted set key
+       * @param members - Member(s) whose score to increment
+       * @param options - Additional options for the increment operation
+       * @returns The new score of the member after increment (null if member does not exist with XX option)
+       * @see https://redis.io/commands/zadd/
+       */
+      parseCommand(parser, key, members, options) {
+        parser.push("ZADD");
+        parser.pushKey(key);
+        if (options?.condition) {
+          parser.push(options.condition);
+        }
+        if (options?.comparison) {
+          parser.push(options.comparison);
+        }
+        if (options?.CH) {
+          parser.push("CH");
+        }
+        parser.push("INCR");
+        (0, ZADD_1.pushMembers)(parser, members);
+      },
+      transformReply: generic_transformers_1.transformNullableDoubleReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZCARD.js
+var require_ZCARD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZCARD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the ZCARD command to get the cardinality (number of members) of a sorted set
+       *
+       * @param parser - The command parser
+       * @param key - The sorted set key
+       * @returns Number of members in the sorted set
+       * @see https://redis.io/commands/zcard/
+       */
+      parseCommand(parser, key) {
+        parser.push("ZCARD");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZCOUNT.js
+var require_ZCOUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZCOUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the number of elements in the sorted set with a score between min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum score to count from (inclusive).
+       * @param max - Maximum score to count to (inclusive).
+       */
+      parseCommand(parser, key, min, max) {
+        parser.push("ZCOUNT");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZDIFF.js
+var require_ZDIFF = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZDIFF.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the difference between the first sorted set and all the successive sorted sets.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets.
+       */
+      parseCommand(parser, keys) {
+        parser.push("ZDIFF");
+        parser.pushKeysLength(keys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZDIFF_WITHSCORES.js
+var require_ZDIFF_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZDIFF_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZDIFF_1 = __importDefault(require_ZDIFF());
+    exports.default = {
+      IS_READ_ONLY: ZDIFF_1.default.IS_READ_ONLY,
+      /**
+       * Returns the difference between the first sorted set and all successive sorted sets with their scores.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets.
+       */
+      parseCommand(parser, keys) {
+        ZDIFF_1.default.parseCommand(parser, keys);
+        parser.push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZDIFFSTORE.js
+var require_ZDIFFSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZDIFFSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Computes the difference between the first and all successive sorted sets and stores it in a new key.
+       * @param parser - The Redis command parser.
+       * @param destination - Destination key where the result will be stored.
+       * @param inputKeys - Keys of the sorted sets to find the difference between.
+       */
+      parseCommand(parser, destination, inputKeys) {
+        parser.push("ZDIFFSTORE");
+        parser.pushKey(destination);
+        parser.pushKeysLength(inputKeys);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZINCRBY.js
+var require_ZINCRBY = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZINCRBY.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Increments the score of a member in a sorted set by the specified increment.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param increment - Value to increment the score by.
+       * @param member - Member whose score should be incremented.
+       */
+      parseCommand(parser, key, increment, member) {
+        parser.push("ZINCRBY");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformDoubleArgument)(increment), member);
+      },
+      transformReply: generic_transformers_1.transformDoubleReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZINTER.js
+var require_ZINTER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZINTER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseZInterArguments = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    function parseZInterArguments(parser, keys, options) {
+      (0, generic_transformers_1.parseZKeysArguments)(parser, keys);
+      if (options?.AGGREGATE) {
+        parser.push("AGGREGATE", options.AGGREGATE);
+      }
+    }
+    exports.parseZInterArguments = parseZInterArguments;
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Intersects multiple sorted sets and returns the result as a new sorted set.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets to intersect.
+       * @param options - Optional parameters for the intersection operation.
+       */
+      parseCommand(parser, keys, options) {
+        parser.push("ZINTER");
+        parseZInterArguments(parser, keys, options);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZINTER_WITHSCORES.js
+var require_ZINTER_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZINTER_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZINTER_1 = __importDefault(require_ZINTER());
+    exports.default = {
+      IS_READ_ONLY: ZINTER_1.default.IS_READ_ONLY,
+      /**
+       * Intersects multiple sorted sets and returns the result with scores.
+       * @param args - Same parameters as ZINTER command.
+       */
+      parseCommand(...args) {
+        ZINTER_1.default.parseCommand(...args);
+        args[0].push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZINTERCARD.js
+var require_ZINTERCARD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZINTERCARD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the cardinality of the intersection of multiple sorted sets.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets to intersect.
+       * @param options - Limit option or options object with limit.
+       */
+      parseCommand(parser, keys, options) {
+        parser.push("ZINTERCARD");
+        parser.pushKeysLength(keys);
+        if (typeof options === "number") {
+          parser.push("LIMIT", options.toString());
+        } else if (options?.LIMIT) {
+          parser.push("LIMIT", options.LIMIT.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZINTERSTORE.js
+var require_ZINTERSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZINTERSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZINTER_1 = require_ZINTER();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Stores the result of intersection of multiple sorted sets in a new sorted set.
+       * @param parser - The Redis command parser.
+       * @param destination - Destination key where the result will be stored.
+       * @param keys - Keys of the sorted sets to intersect.
+       * @param options - Optional parameters for the intersection operation.
+       */
+      parseCommand(parser, destination, keys, options) {
+        parser.push("ZINTERSTORE");
+        parser.pushKey(destination);
+        (0, ZINTER_1.parseZInterArguments)(parser, keys, options);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZLEXCOUNT.js
+var require_ZLEXCOUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZLEXCOUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the number of elements in the sorted set between the lexicographical range specified by min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum lexicographical value (inclusive).
+       * @param max - Maximum lexicographical value (inclusive).
+       */
+      parseCommand(parser, key, min, max) {
+        parser.push("ZLEXCOUNT");
+        parser.pushKey(key);
+        parser.push(min);
+        parser.push(max);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZMSCORE.js
+var require_ZMSCORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZMSCORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the scores associated with the specified members in the sorted set stored at key.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param member - One or more members to get scores for.
+       */
+      parseCommand(parser, key, member) {
+        parser.push("ZMSCORE");
+        parser.pushKey(key);
+        parser.pushVariadic(member);
+      },
+      transformReply: {
+        2: (reply, preserve, typeMapping) => {
+          return reply.map((0, generic_transformers_1.createTransformNullableDoubleReplyResp2Func)(preserve, typeMapping));
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZPOPMAX_COUNT.js
+var require_ZPOPMAX_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZPOPMAX_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns up to count members with the highest scores in the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param count - Number of members to pop.
+       */
+      parseCommand(parser, key, count) {
+        parser.push("ZPOPMAX");
+        parser.pushKey(key);
+        parser.push(count.toString());
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZPOPMAX.js
+var require_ZPOPMAX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZPOPMAX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns the member with the highest score in the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       */
+      parseCommand(parser, key) {
+        parser.push("ZPOPMAX");
+        parser.pushKey(key);
+      },
+      transformReply: {
+        2: (reply, preserve, typeMapping) => {
+          if (reply.length === 0)
+            return null;
+          return {
+            value: reply[0],
+            score: generic_transformers_1.transformDoubleReply[2](reply[1], preserve, typeMapping)
+          };
+        },
+        3: (reply) => {
+          if (reply.length === 0)
+            return null;
+          return {
+            value: reply[0],
+            score: reply[1]
+          };
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js
+var require_ZPOPMIN_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns up to count members with the lowest scores in the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param count - Number of members to pop.
+       */
+      parseCommand(parser, key, count) {
+        parser.push("ZPOPMIN");
+        parser.pushKey(key);
+        parser.push(count.toString());
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZPOPMIN.js
+var require_ZPOPMIN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZPOPMIN.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZPOPMAX_1 = __importDefault(require_ZPOPMAX());
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes and returns the member with the lowest score in the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       */
+      parseCommand(parser, key) {
+        parser.push("ZPOPMIN");
+        parser.pushKey(key);
+      },
+      transformReply: ZPOPMAX_1.default.transformReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER.js
+var require_ZRANDMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns a random member from a sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       */
+      parseCommand(parser, key) {
+        parser.push("ZRANDMEMBER");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER_COUNT.js
+var require_ZRANDMEMBER_COUNT = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER_COUNT.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZRANDMEMBER_1 = __importDefault(require_ZRANDMEMBER());
+    exports.default = {
+      IS_READ_ONLY: ZRANDMEMBER_1.default.IS_READ_ONLY,
+      /**
+       * Returns one or more random members from a sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param count - Number of members to return.
+       */
+      parseCommand(parser, key, count) {
+        ZRANDMEMBER_1.default.parseCommand(parser, key);
+        parser.push(count.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER_COUNT_WITHSCORES.js
+var require_ZRANDMEMBER_COUNT_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANDMEMBER_COUNT_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZRANDMEMBER_COUNT_1 = __importDefault(require_ZRANDMEMBER_COUNT());
+    exports.default = {
+      IS_READ_ONLY: ZRANDMEMBER_COUNT_1.default.IS_READ_ONLY,
+      /**
+       * Returns one or more random members with their scores from a sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param count - Number of members to return.
+       */
+      parseCommand(parser, key, count) {
+        ZRANDMEMBER_COUNT_1.default.parseCommand(parser, key, count);
+        parser.push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGE.js
+var require_ZRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.zRangeArgument = void 0;
+    var generic_transformers_1 = require_generic_transformers();
+    function zRangeArgument(min, max, options) {
+      const args = [
+        (0, generic_transformers_1.transformStringDoubleArgument)(min),
+        (0, generic_transformers_1.transformStringDoubleArgument)(max)
+      ];
+      switch (options?.BY) {
+        case "SCORE":
+          args.push("BYSCORE");
+          break;
+        case "LEX":
+          args.push("BYLEX");
+          break;
+      }
+      if (options?.REV) {
+        args.push("REV");
+      }
+      if (options?.LIMIT) {
+        args.push("LIMIT", options.LIMIT.offset.toString(), options.LIMIT.count.toString());
+      }
+      return args;
+    }
+    exports.zRangeArgument = zRangeArgument;
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the specified range of elements in the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum index, score or lexicographical value.
+       * @param max - Maximum index, score or lexicographical value.
+       * @param options - Optional parameters for range retrieval (BY, REV, LIMIT).
+       */
+      parseCommand(parser, key, min, max, options) {
+        parser.push("ZRANGE");
+        parser.pushKey(key);
+        parser.pushVariadic(zRangeArgument(min, max, options));
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGE_WITHSCORES.js
+var require_ZRANGE_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGE_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZRANGE_1 = __importDefault(require_ZRANGE());
+    exports.default = {
+      CACHEABLE: ZRANGE_1.default.CACHEABLE,
+      IS_READ_ONLY: ZRANGE_1.default.IS_READ_ONLY,
+      /**
+       * Returns the specified range of elements in the sorted set with their scores.
+       * @param args - Same parameters as the ZRANGE command.
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        ZRANGE_1.default.parseCommand(...args);
+        parser.push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGEBYLEX.js
+var require_ZRANGEBYLEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGEBYLEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns all the elements in the sorted set at key with a lexicographical value between min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum lexicographical value.
+       * @param max - Maximum lexicographical value.
+       * @param options - Optional parameters including LIMIT.
+       */
+      parseCommand(parser, key, min, max, options) {
+        parser.push("ZRANGEBYLEX");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+        if (options?.LIMIT) {
+          parser.push("LIMIT", options.LIMIT.offset.toString(), options.LIMIT.count.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGEBYSCORE.js
+var require_ZRANGEBYSCORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGEBYSCORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns all the elements in the sorted set with a score between min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum score.
+       * @param max - Maximum score.
+       * @param options - Optional parameters including LIMIT.
+       */
+      parseCommand(parser, key, min, max, options) {
+        parser.push("ZRANGEBYSCORE");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+        if (options?.LIMIT) {
+          parser.push("LIMIT", options.LIMIT.offset.toString(), options.LIMIT.count.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGEBYSCORE_WITHSCORES.js
+var require_ZRANGEBYSCORE_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGEBYSCORE_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZRANGEBYSCORE_1 = __importDefault(require_ZRANGEBYSCORE());
+    exports.default = {
+      CACHEABLE: ZRANGEBYSCORE_1.default.CACHEABLE,
+      IS_READ_ONLY: ZRANGEBYSCORE_1.default.IS_READ_ONLY,
+      /**
+       * Returns all the elements in the sorted set with a score between min and max, with their scores.
+       * @param args - Same parameters as the ZRANGEBYSCORE command.
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        ZRANGEBYSCORE_1.default.parseCommand(...args);
+        parser.push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANGESTORE.js
+var require_ZRANGESTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANGESTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Stores the result of a range operation on a sorted set into a new sorted set.
+       * @param parser - The Redis command parser.
+       * @param destination - Destination key where the result will be stored.
+       * @param source - Key of the source sorted set.
+       * @param min - Minimum index, score or lexicographical value.
+       * @param max - Maximum index, score or lexicographical value.
+       * @param options - Optional parameters for the range operation (BY, REV, LIMIT).
+       */
+      parseCommand(parser, destination, source, min, max, options) {
+        parser.push("ZRANGESTORE");
+        parser.pushKey(destination);
+        parser.pushKey(source);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+        switch (options?.BY) {
+          case "SCORE":
+            parser.push("BYSCORE");
+            break;
+          case "LEX":
+            parser.push("BYLEX");
+            break;
+        }
+        if (options?.REV) {
+          parser.push("REV");
+        }
+        if (options?.LIMIT) {
+          parser.push("LIMIT", options.LIMIT.offset.toString(), options.LIMIT.count.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYSCORE.js
+var require_ZREMRANGEBYSCORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYSCORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes all elements in the sorted set with scores between min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum score.
+       * @param max - Maximum score.
+       */
+      parseCommand(parser, key, min, max) {
+        parser.push("ZREMRANGEBYSCORE");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANK.js
+var require_ZRANK = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANK.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the rank of a member in the sorted set, with scores ordered from low to high.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param member - Member to get the rank for.
+       */
+      parseCommand(parser, key, member) {
+        parser.push("ZRANK");
+        parser.pushKey(key);
+        parser.push(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZRANK_WITHSCORE.js
+var require_ZRANK_WITHSCORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZRANK_WITHSCORE.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ZRANK_1 = __importDefault(require_ZRANK());
+    exports.default = {
+      CACHEABLE: ZRANK_1.default.CACHEABLE,
+      IS_READ_ONLY: ZRANK_1.default.IS_READ_ONLY,
+      /**
+       * Returns the rank of a member in the sorted set with its score.
+       * @param args - Same parameters as the ZRANK command.
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        ZRANK_1.default.parseCommand(...args);
+        parser.push("WITHSCORE");
+      },
+      transformReply: {
+        2: (reply) => {
+          if (reply === null)
+            return null;
+          return {
+            rank: reply[0],
+            score: Number(reply[1])
+          };
+        },
+        3: (reply) => {
+          if (reply === null)
+            return null;
+          return {
+            rank: reply[0],
+            score: reply[1]
+          };
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZREM.js
+var require_ZREM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZREM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes the specified members from the sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param member - One or more members to remove.
+       */
+      parseCommand(parser, key, member) {
+        parser.push("ZREM");
+        parser.pushKey(key);
+        parser.pushVariadic(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYLEX.js
+var require_ZREMRANGEBYLEX = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYLEX.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes all elements in the sorted set with lexicographical values between min and max.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param min - Minimum lexicographical value.
+       * @param max - Maximum lexicographical value.
+       */
+      parseCommand(parser, key, min, max) {
+        parser.push("ZREMRANGEBYLEX");
+        parser.pushKey(key);
+        parser.push((0, generic_transformers_1.transformStringDoubleArgument)(min), (0, generic_transformers_1.transformStringDoubleArgument)(max));
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYRANK.js
+var require_ZREMRANGEBYRANK = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZREMRANGEBYRANK.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Removes all elements in the sorted set with rank between start and stop.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param start - Minimum rank (starting from 0).
+       * @param stop - Maximum rank.
+       */
+      parseCommand(parser, key, start, stop) {
+        parser.push("ZREMRANGEBYRANK");
+        parser.pushKey(key);
+        parser.push(start.toString(), stop.toString());
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZREVRANK.js
+var require_ZREVRANK = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZREVRANK.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the rank of a member in the sorted set, with scores ordered from high to low.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param member - Member to get the rank for.
+       */
+      parseCommand(parser, key, member) {
+        parser.push("ZREVRANK");
+        parser.pushKey(key);
+        parser.push(member);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZSCAN.js
+var require_ZSCAN = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZSCAN.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SCAN_1 = require_SCAN();
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Incrementally iterates over a sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param cursor - Cursor position to start the scan from.
+       * @param options - Optional scan parameters (COUNT, MATCH, TYPE).
+       */
+      parseCommand(parser, key, cursor, options) {
+        parser.push("ZSCAN");
+        parser.pushKey(key);
+        (0, SCAN_1.parseScanArguments)(parser, cursor, options);
+      },
+      transformReply([cursor, rawMembers]) {
+        return {
+          cursor,
+          members: generic_transformers_1.transformSortedSetReply[2](rawMembers)
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZSCORE.js
+var require_ZSCORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZSCORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      CACHEABLE: true,
+      IS_READ_ONLY: true,
+      /**
+       * Returns the score of a member in a sorted set.
+       * @param parser - The Redis command parser.
+       * @param key - Key of the sorted set.
+       * @param member - Member to get the score for.
+       */
+      parseCommand(parser, key, member) {
+        parser.push("ZSCORE");
+        parser.pushKey(key);
+        parser.push(member);
+      },
+      transformReply: generic_transformers_1.transformNullableDoubleReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZUNION.js
+var require_ZUNION = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZUNION.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns the union of multiple sorted sets.
+       * @param parser - The Redis command parser.
+       * @param keys - Keys of the sorted sets to combine.
+       * @param options - Optional parameters for the union operation.
+       */
+      parseCommand(parser, keys, options) {
+        parser.push("ZUNION");
+        (0, generic_transformers_1.parseZKeysArguments)(parser, keys);
+        if (options?.AGGREGATE) {
+          parser.push("AGGREGATE", options.AGGREGATE);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZUNION_WITHSCORES.js
+var require_ZUNION_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZUNION_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var ZUNION_1 = __importDefault(require_ZUNION());
+    exports.default = {
+      IS_READ_ONLY: ZUNION_1.default.IS_READ_ONLY,
+      /**
+       * Returns the union of multiple sorted sets with their scores.
+       * @param args - Same parameters as the ZUNION command.
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        ZUNION_1.default.parseCommand(...args);
+        parser.push("WITHSCORES");
+      },
+      transformReply: generic_transformers_1.transformSortedSetReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/ZUNIONSTORE.js
+var require_ZUNIONSTORE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/ZUNIONSTORE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: false,
+      /**
+       * Stores the union of multiple sorted sets in a new sorted set.
+       * @param parser - The Redis command parser.
+       * @param destination - Destination key where the result will be stored.
+       * @param keys - Keys of the sorted sets to combine.
+       * @param options - Optional parameters for the union operation.
+       */
+      parseCommand(parser, destination, keys, options) {
+        parser.push("ZUNIONSTORE");
+        parser.pushKey(destination);
+        (0, generic_transformers_1.parseZKeysArguments)(parser, keys);
+        if (options?.AGGREGATE) {
+          parser.push("AGGREGATE", options.AGGREGATE);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VADD.js
+var require_VADD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VADD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Add a new element into the vector set specified by key
+       *
+       * @param parser - The command parser
+       * @param key - The name of the key that will hold the vector set data
+       * @param vector - The vector data as array of numbers
+       * @param element - The name of the element being added to the vector set
+       * @param options - Optional parameters for vector addition
+       * @see https://redis.io/commands/vadd/
+       */
+      parseCommand(parser, key, vector, element, options) {
+        parser.push("VADD");
+        parser.pushKey(key);
+        if (options?.REDUCE !== void 0) {
+          parser.push("REDUCE", options.REDUCE.toString());
+        }
+        parser.push("VALUES", vector.length.toString());
+        for (const value of vector) {
+          parser.push((0, generic_transformers_1.transformDoubleArgument)(value));
+        }
+        parser.push(element);
+        if (options?.CAS) {
+          parser.push("CAS");
+        }
+        options?.QUANT && parser.push(options.QUANT);
+        if (options?.EF !== void 0) {
+          parser.push("EF", options.EF.toString());
+        }
+        if (options?.SETATTR) {
+          parser.push("SETATTR", JSON.stringify(options.SETATTR));
+        }
+        if (options?.M !== void 0) {
+          parser.push("M", options.M.toString());
+        }
+      },
+      transformReply: generic_transformers_1.transformBooleanReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VCARD.js
+var require_VCARD = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VCARD.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the number of elements in a vector set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @see https://redis.io/commands/vcard/
+       */
+      parseCommand(parser, key) {
+        parser.push("VCARD");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VDIM.js
+var require_VDIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VDIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the dimension of the vectors in a vector set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @see https://redis.io/commands/vdim/
+       */
+      parseCommand(parser, key) {
+        parser.push("VDIM");
+        parser.pushKey(key);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VEMB.js
+var require_VEMB = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VEMB.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the approximate vector associated with a vector set element
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to retrieve the vector for
+       * @see https://redis.io/commands/vemb/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("VEMB");
+        parser.pushKey(key);
+        parser.push(element);
+      },
+      transformReply: generic_transformers_1.transformDoubleArrayReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VEMB_RAW.js
+var require_VEMB_RAW = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VEMB_RAW.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var VEMB_1 = __importDefault(require_VEMB());
+    var transformRawVembReply = {
+      2: (reply) => {
+        return {
+          quantization: reply[0],
+          raw: reply[1],
+          l2Norm: generic_transformers_1.transformDoubleReply[2](reply[2]),
+          ...reply[3] !== void 0 && { quantizationRange: generic_transformers_1.transformDoubleReply[2](reply[3]) }
+        };
+      },
+      3: (reply) => {
+        return {
+          quantization: reply[0],
+          raw: reply[1],
+          l2Norm: reply[2],
+          quantizationRange: reply[3]
+        };
+      }
+    };
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the RAW approximate vector associated with a vector set element
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to retrieve the vector for
+       * @see https://redis.io/commands/vemb/
+       */
+      parseCommand(parser, key, element) {
+        VEMB_1.default.parseCommand(parser, key, element);
+        parser.push("RAW");
+      },
+      transformReply: transformRawVembReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VGETATTR.js
+var require_VGETATTR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VGETATTR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the attributes of a vector set element
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to retrieve attributes for
+       * @see https://redis.io/commands/vgetattr/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("VGETATTR");
+        parser.pushKey(key);
+        parser.push(element);
+      },
+      transformReply: generic_transformers_1.transformRedisJsonNullReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VINFO.js
+var require_VINFO = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VINFO.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve metadata and internal details about a vector set, including size, dimensions, quantization type, and graph structure
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @see https://redis.io/commands/vinfo/
+       */
+      parseCommand(parser, key) {
+        parser.push("VINFO");
+        parser.pushKey(key);
+      },
+      transformReply: {
+        2: (reply) => {
+          const ret = /* @__PURE__ */ Object.create(null);
+          for (let i = 0; i < reply.length; i += 2) {
+            ret[reply[i].toString()] = reply[i + 1];
+          }
+          return ret;
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VLINKS.js
+var require_VLINKS = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VLINKS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve the neighbors of a specified element in a vector set; the connections for each layer of the HNSW graph
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to retrieve neighbors for
+       * @see https://redis.io/commands/vlinks/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("VLINKS");
+        parser.pushKey(key);
+        parser.push(element);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VLINKS_WITHSCORES.js
+var require_VLINKS_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VLINKS_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var VLINKS_1 = __importDefault(require_VLINKS());
+    function transformVLinksWithScoresReply(reply) {
+      const layers = [];
+      for (const layer of reply) {
+        const obj = /* @__PURE__ */ Object.create(null);
+        for (let i = 0; i < layer.length; i += 2) {
+          const element = layer[i];
+          const score = generic_transformers_1.transformDoubleReply[2](layer[i + 1]);
+          obj[element.toString()] = score;
+        }
+        layers.push(obj);
+      }
+      return layers;
+    }
+    exports.default = {
+      IS_READ_ONLY: VLINKS_1.default.IS_READ_ONLY,
+      /**
+       * Get the connections for each layer of the HNSW graph with similarity scores
+       * @param args - Same parameters as the VLINKS command
+       * @see https://redis.io/commands/vlinks/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        VLINKS_1.default.parseCommand(...args);
+        parser.push("WITHSCORES");
+      },
+      transformReply: {
+        2: transformVLinksWithScoresReply,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VRANDMEMBER.js
+var require_VRANDMEMBER = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VRANDMEMBER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve random elements of a vector set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param count - Optional number of elements to return
+       * @see https://redis.io/commands/vrandmember/
+       */
+      parseCommand(parser, key, count) {
+        parser.push("VRANDMEMBER");
+        parser.pushKey(key);
+        if (count !== void 0) {
+          parser.push(count.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VRANGE.js
+var require_VRANGE = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VRANGE.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Returns elements in a lexicographical range from a vector set.
+       * Provides a stateless iterator for elements inside a vector set.
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param start - The starting point of the lexicographical range.
+       *                Can be a string prefixed with `[` for inclusive (e.g., `[Redis`),
+       *                `(` for exclusive (e.g., `(a7`), or `-` for the minimum element.
+       * @param end - The ending point of the lexicographical range.
+       *              Can be a string prefixed with `[` for inclusive,
+       *              `(` for exclusive, or `+` for the maximum element.
+       * @param count - Optional maximum number of elements to return.
+       *                If negative, returns all elements in the specified range.
+       * @see https://redis.io/commands/vrange/
+       */
+      parseCommand(parser, key, start, end, count) {
+        parser.push("VRANGE");
+        parser.pushKey(key);
+        parser.push(start, end);
+        if (count !== void 0) {
+          parser.push(count.toString());
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VREM.js
+var require_VREM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VREM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Remove an element from a vector set
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to remove from the vector set
+       * @see https://redis.io/commands/vrem/
+       */
+      parseCommand(parser, key, element) {
+        parser.push("VREM");
+        parser.pushKey(key);
+        parser.push(element);
+      },
+      transformReply: generic_transformers_1.transformBooleanReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VSETATTR.js
+var require_VSETATTR = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VSETATTR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Set or replace attributes on a vector set element
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param element - The name of the element to set attributes for
+       * @param attributes - The attributes to set (as JSON string or object)
+       * @see https://redis.io/commands/vsetattr/
+       */
+      parseCommand(parser, key, element, attributes) {
+        parser.push("VSETATTR");
+        parser.pushKey(key);
+        parser.push(element);
+        if (typeof attributes === "object" && attributes !== null) {
+          parser.push(JSON.stringify(attributes));
+        } else {
+          parser.push(attributes);
+        }
+      },
+      transformReply: generic_transformers_1.transformBooleanReply
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VSIM.js
+var require_VSIM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VSIM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      IS_READ_ONLY: true,
+      /**
+       * Retrieve elements similar to a given vector or element with optional filtering
+       *
+       * @param parser - The command parser
+       * @param key - The key of the vector set
+       * @param query - The query vector (array of numbers) or element name (string)
+       * @param options - Optional parameters for similarity search
+       * @see https://redis.io/commands/vsim/
+       */
+      parseCommand(parser, key, query, options) {
+        parser.push("VSIM");
+        parser.pushKey(key);
+        if (Array.isArray(query)) {
+          parser.push("VALUES", query.length.toString());
+          for (const value of query) {
+            parser.push((0, generic_transformers_1.transformDoubleArgument)(value));
+          }
+        } else {
+          parser.push("ELE", query);
+        }
+        if (options?.COUNT !== void 0) {
+          parser.push("COUNT", options.COUNT.toString());
+        }
+        if (options?.EPSILON !== void 0) {
+          parser.push("EPSILON", options.EPSILON.toString());
+        }
+        if (options?.EF !== void 0) {
+          parser.push("EF", options.EF.toString());
+        }
+        if (options?.FILTER) {
+          parser.push("FILTER", options.FILTER);
+        }
+        if (options?.["FILTER-EF"] !== void 0) {
+          parser.push("FILTER-EF", options["FILTER-EF"].toString());
+        }
+        if (options?.TRUTH) {
+          parser.push("TRUTH");
+        }
+        if (options?.NOTHREAD) {
+          parser.push("NOTHREAD");
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/VSIM_WITHSCORES.js
+var require_VSIM_WITHSCORES = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/VSIM_WITHSCORES.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var VSIM_1 = __importDefault(require_VSIM());
+    exports.default = {
+      IS_READ_ONLY: VSIM_1.default.IS_READ_ONLY,
+      /**
+       * Retrieve elements similar to a given vector or element with similarity scores
+       * @param args - Same parameters as the VSIM command
+       * @see https://redis.io/commands/vsim/
+       */
+      parseCommand(...args) {
+        const parser = args[0];
+        VSIM_1.default.parseCommand(...args);
+        parser.push("WITHSCORES");
+      },
+      transformReply: {
+        2: (reply) => {
+          const inferred = reply;
+          const members = {};
+          for (let i = 0; i < inferred.length; i += 2) {
+            members[inferred[i].toString()] = generic_transformers_1.transformDoubleReply[2](inferred[i + 1]);
+          }
+          return members;
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/LATENCY_HISTOGRAM.js
+var require_LATENCY_HISTOGRAM = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/LATENCY_HISTOGRAM.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    var id = (n) => n;
+    exports.default = {
+      CACHEABLE: false,
+      IS_READ_ONLY: true,
+      /**
+       * Constructs the LATENCY HISTOGRAM command
+       *
+       * @param parser - The command parser
+       * @param commands - The list of redis commands to get histogram for
+       * @see https://redis.io/docs/latest/commands/latency-histogram/
+       */
+      parseCommand(parser, ...commands) {
+        const args = ["LATENCY", "HISTOGRAM"];
+        if (commands.length !== 0) {
+          args.push(...commands);
+        }
+        parser.push(...args);
+      },
+      transformReply: {
+        2: (reply) => {
+          const result = {};
+          if (reply.length === 0)
+            return result;
+          for (let i = 1; i < reply.length; i += 2) {
+            const histogram = reply[i];
+            result[reply[i - 1]] = {
+              calls: histogram[1],
+              histogram_usec: (0, generic_transformers_1.transformTuplesToMap)(histogram[3], id)
+            };
+          }
+          return result;
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commands/index.js
+var require_commands = __commonJS({
+  "node_modules/@redis/client/dist/lib/commands/index.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.NON_STICKY_COMMANDS = exports.REDIS_FLUSH_MODES = exports.COMMAND_LIST_FILTER_BY = exports.CLUSTER_SLOT_STATES = exports.FAILOVER_MODES = exports.CLIENT_KILL_FILTERS = void 0;
+    var ACL_CAT_1 = __importDefault(require_ACL_CAT());
+    var ACL_DELUSER_1 = __importDefault(require_ACL_DELUSER());
+    var ACL_DRYRUN_1 = __importDefault(require_ACL_DRYRUN());
+    var ACL_GENPASS_1 = __importDefault(require_ACL_GENPASS());
+    var ACL_GETUSER_1 = __importDefault(require_ACL_GETUSER());
+    var ACL_LIST_1 = __importDefault(require_ACL_LIST());
+    var ACL_LOAD_1 = __importDefault(require_ACL_LOAD());
+    var ACL_LOG_RESET_1 = __importDefault(require_ACL_LOG_RESET());
+    var ACL_LOG_1 = __importDefault(require_ACL_LOG());
+    var ACL_SAVE_1 = __importDefault(require_ACL_SAVE());
+    var ACL_SETUSER_1 = __importDefault(require_ACL_SETUSER());
+    var ACL_USERS_1 = __importDefault(require_ACL_USERS());
+    var ACL_WHOAMI_1 = __importDefault(require_ACL_WHOAMI());
+    var APPEND_1 = __importDefault(require_APPEND());
+    var ASKING_1 = __importDefault(require_ASKING());
+    var AUTH_1 = __importDefault(require_AUTH());
+    var BGREWRITEAOF_1 = __importDefault(require_BGREWRITEAOF());
+    var BGSAVE_1 = __importDefault(require_BGSAVE());
+    var BITCOUNT_1 = __importDefault(require_BITCOUNT());
+    var BITFIELD_RO_1 = __importDefault(require_BITFIELD_RO());
+    var BITFIELD_1 = __importDefault(require_BITFIELD());
+    var BITOP_1 = __importDefault(require_BITOP());
+    var BITPOS_1 = __importDefault(require_BITPOS());
+    var BLMOVE_1 = __importDefault(require_BLMOVE());
+    var BLMPOP_1 = __importDefault(require_BLMPOP());
+    var BLPOP_1 = __importDefault(require_BLPOP());
+    var BRPOP_1 = __importDefault(require_BRPOP());
+    var BRPOPLPUSH_1 = __importDefault(require_BRPOPLPUSH());
+    var BZMPOP_1 = __importDefault(require_BZMPOP());
+    var BZPOPMAX_1 = __importDefault(require_BZPOPMAX());
+    var BZPOPMIN_1 = __importDefault(require_BZPOPMIN());
+    var CLIENT_CACHING_1 = __importDefault(require_CLIENT_CACHING());
+    var CLIENT_GETNAME_1 = __importDefault(require_CLIENT_GETNAME());
+    var CLIENT_GETREDIR_1 = __importDefault(require_CLIENT_GETREDIR());
+    var CLIENT_ID_1 = __importDefault(require_CLIENT_ID());
+    var CLIENT_INFO_1 = __importDefault(require_CLIENT_INFO());
+    var CLIENT_KILL_1 = __importStar(require_CLIENT_KILL());
+    Object.defineProperty(exports, "CLIENT_KILL_FILTERS", { enumerable: true, get: function() {
+      return CLIENT_KILL_1.CLIENT_KILL_FILTERS;
+    } });
+    var CLIENT_LIST_1 = __importDefault(require_CLIENT_LIST());
+    var CLIENT_NO_EVICT_1 = __importDefault(require_CLIENT_NO_EVICT());
+    var CLIENT_NO_TOUCH_1 = __importDefault(require_CLIENT_NO_TOUCH());
+    var CLIENT_PAUSE_1 = __importDefault(require_CLIENT_PAUSE());
+    var CLIENT_SETNAME_1 = __importDefault(require_CLIENT_SETNAME());
+    var CLIENT_TRACKING_1 = __importDefault(require_CLIENT_TRACKING());
+    var CLIENT_TRACKINGINFO_1 = __importDefault(require_CLIENT_TRACKINGINFO());
+    var CLIENT_UNPAUSE_1 = __importDefault(require_CLIENT_UNPAUSE());
+    var CLUSTER_ADDSLOTS_1 = __importDefault(require_CLUSTER_ADDSLOTS());
+    var CLUSTER_ADDSLOTSRANGE_1 = __importDefault(require_CLUSTER_ADDSLOTSRANGE());
+    var CLUSTER_BUMPEPOCH_1 = __importDefault(require_CLUSTER_BUMPEPOCH());
+    var CLUSTER_COUNT_FAILURE_REPORTS_1 = __importDefault(require_CLUSTER_COUNT_FAILURE_REPORTS());
+    var CLUSTER_COUNTKEYSINSLOT_1 = __importDefault(require_CLUSTER_COUNTKEYSINSLOT());
+    var CLUSTER_DELSLOTS_1 = __importDefault(require_CLUSTER_DELSLOTS());
+    var CLUSTER_DELSLOTSRANGE_1 = __importDefault(require_CLUSTER_DELSLOTSRANGE());
+    var CLUSTER_FAILOVER_1 = __importStar(require_CLUSTER_FAILOVER());
+    Object.defineProperty(exports, "FAILOVER_MODES", { enumerable: true, get: function() {
+      return CLUSTER_FAILOVER_1.FAILOVER_MODES;
+    } });
+    var CLUSTER_FLUSHSLOTS_1 = __importDefault(require_CLUSTER_FLUSHSLOTS());
+    var CLUSTER_FORGET_1 = __importDefault(require_CLUSTER_FORGET());
+    var CLUSTER_GETKEYSINSLOT_1 = __importDefault(require_CLUSTER_GETKEYSINSLOT());
+    var CLUSTER_INFO_1 = __importDefault(require_CLUSTER_INFO());
+    var CLUSTER_KEYSLOT_1 = __importDefault(require_CLUSTER_KEYSLOT());
+    var CLUSTER_LINKS_1 = __importDefault(require_CLUSTER_LINKS());
+    var CLUSTER_MEET_1 = __importDefault(require_CLUSTER_MEET());
+    var CLUSTER_MYID_1 = __importDefault(require_CLUSTER_MYID());
+    var CLUSTER_MYSHARDID_1 = __importDefault(require_CLUSTER_MYSHARDID());
+    var CLUSTER_NODES_1 = __importDefault(require_CLUSTER_NODES());
+    var CLUSTER_REPLICAS_1 = __importDefault(require_CLUSTER_REPLICAS());
+    var CLUSTER_REPLICATE_1 = __importDefault(require_CLUSTER_REPLICATE());
+    var CLUSTER_RESET_1 = __importDefault(require_CLUSTER_RESET());
+    var CLUSTER_SAVECONFIG_1 = __importDefault(require_CLUSTER_SAVECONFIG());
+    var CLUSTER_SET_CONFIG_EPOCH_1 = __importDefault(require_CLUSTER_SET_CONFIG_EPOCH());
+    var CLUSTER_SETSLOT_1 = __importStar(require_CLUSTER_SETSLOT());
+    Object.defineProperty(exports, "CLUSTER_SLOT_STATES", { enumerable: true, get: function() {
+      return CLUSTER_SETSLOT_1.CLUSTER_SLOT_STATES;
+    } });
+    var CLUSTER_SLOTS_1 = __importDefault(require_CLUSTER_SLOTS());
+    var COMMAND_COUNT_1 = __importDefault(require_COMMAND_COUNT());
+    var COMMAND_GETKEYS_1 = __importDefault(require_COMMAND_GETKEYS());
+    var COMMAND_GETKEYSANDFLAGS_1 = __importDefault(require_COMMAND_GETKEYSANDFLAGS());
+    var COMMAND_INFO_1 = __importDefault(require_COMMAND_INFO());
+    var COMMAND_LIST_1 = __importStar(require_COMMAND_LIST());
+    Object.defineProperty(exports, "COMMAND_LIST_FILTER_BY", { enumerable: true, get: function() {
+      return COMMAND_LIST_1.COMMAND_LIST_FILTER_BY;
+    } });
+    var COMMAND_1 = __importDefault(require_COMMAND());
+    var CONFIG_GET_1 = __importDefault(require_CONFIG_GET());
+    var CONFIG_RESETSTAT_1 = __importDefault(require_CONFIG_RESETSTAT());
+    var CONFIG_REWRITE_1 = __importDefault(require_CONFIG_REWRITE());
+    var CONFIG_SET_1 = __importDefault(require_CONFIG_SET());
+    var COPY_1 = __importDefault(require_COPY());
+    var DBSIZE_1 = __importDefault(require_DBSIZE());
+    var DECR_1 = __importDefault(require_DECR());
+    var DECRBY_1 = __importDefault(require_DECRBY());
+    var DEL_1 = __importDefault(require_DEL());
+    var DELEX_1 = __importDefault(require_DELEX());
+    var DIGEST_1 = __importDefault(require_DIGEST());
+    var DUMP_1 = __importDefault(require_DUMP());
+    var ECHO_1 = __importDefault(require_ECHO());
+    var EVAL_RO_1 = __importDefault(require_EVAL_RO());
+    var EVAL_1 = __importDefault(require_EVAL());
+    var EVALSHA_RO_1 = __importDefault(require_EVALSHA_RO());
+    var EVALSHA_1 = __importDefault(require_EVALSHA());
+    var GEOADD_1 = __importDefault(require_GEOADD());
+    var GEODIST_1 = __importDefault(require_GEODIST());
+    var GEOHASH_1 = __importDefault(require_GEOHASH());
+    var GEOPOS_1 = __importDefault(require_GEOPOS());
+    var GEORADIUS_RO_WITH_1 = __importDefault(require_GEORADIUS_RO_WITH());
+    var GEORADIUS_RO_1 = __importDefault(require_GEORADIUS_RO());
+    var GEORADIUS_STORE_1 = __importDefault(require_GEORADIUS_STORE());
+    var GEORADIUS_WITH_1 = __importDefault(require_GEORADIUS_WITH());
+    var GEORADIUS_1 = __importDefault(require_GEORADIUS());
+    var GEORADIUSBYMEMBER_RO_WITH_1 = __importDefault(require_GEORADIUSBYMEMBER_RO_WITH());
+    var GEORADIUSBYMEMBER_RO_1 = __importDefault(require_GEORADIUSBYMEMBER_RO());
+    var GEORADIUSBYMEMBER_STORE_1 = __importDefault(require_GEORADIUSBYMEMBER_STORE());
+    var GEORADIUSBYMEMBER_WITH_1 = __importDefault(require_GEORADIUSBYMEMBER_WITH());
+    var GEORADIUSBYMEMBER_1 = __importDefault(require_GEORADIUSBYMEMBER());
+    var GEOSEARCH_WITH_1 = __importDefault(require_GEOSEARCH_WITH());
+    var GEOSEARCH_1 = __importDefault(require_GEOSEARCH());
+    var GEOSEARCHSTORE_1 = __importDefault(require_GEOSEARCHSTORE());
+    var GET_1 = __importDefault(require_GET());
+    var GETBIT_1 = __importDefault(require_GETBIT());
+    var GETDEL_1 = __importDefault(require_GETDEL());
+    var GETEX_1 = __importDefault(require_GETEX());
+    var GETRANGE_1 = __importDefault(require_GETRANGE());
+    var GETSET_1 = __importDefault(require_GETSET());
+    var EXISTS_1 = __importDefault(require_EXISTS());
+    var EXPIRE_1 = __importDefault(require_EXPIRE());
+    var EXPIREAT_1 = __importDefault(require_EXPIREAT());
+    var EXPIRETIME_1 = __importDefault(require_EXPIRETIME());
+    var FLUSHALL_1 = __importStar(require_FLUSHALL());
+    Object.defineProperty(exports, "REDIS_FLUSH_MODES", { enumerable: true, get: function() {
+      return FLUSHALL_1.REDIS_FLUSH_MODES;
+    } });
+    var FLUSHDB_1 = __importDefault(require_FLUSHDB());
+    var FCALL_1 = __importDefault(require_FCALL());
+    var FCALL_RO_1 = __importDefault(require_FCALL_RO());
+    var FUNCTION_DELETE_1 = __importDefault(require_FUNCTION_DELETE());
+    var FUNCTION_DUMP_1 = __importDefault(require_FUNCTION_DUMP());
+    var FUNCTION_FLUSH_1 = __importDefault(require_FUNCTION_FLUSH());
+    var FUNCTION_KILL_1 = __importDefault(require_FUNCTION_KILL());
+    var FUNCTION_LIST_WITHCODE_1 = __importDefault(require_FUNCTION_LIST_WITHCODE());
+    var FUNCTION_LIST_1 = __importDefault(require_FUNCTION_LIST());
+    var FUNCTION_LOAD_1 = __importDefault(require_FUNCTION_LOAD());
+    var FUNCTION_RESTORE_1 = __importDefault(require_FUNCTION_RESTORE());
+    var FUNCTION_STATS_1 = __importDefault(require_FUNCTION_STATS());
+    var HDEL_1 = __importDefault(require_HDEL());
+    var HELLO_1 = __importDefault(require_HELLO());
+    var HEXISTS_1 = __importDefault(require_HEXISTS());
+    var HEXPIRE_1 = __importDefault(require_HEXPIRE());
+    var HEXPIREAT_1 = __importDefault(require_HEXPIREAT());
+    var HEXPIRETIME_1 = __importDefault(require_HEXPIRETIME());
+    var HGET_1 = __importDefault(require_HGET());
+    var HGETALL_1 = __importDefault(require_HGETALL());
+    var HGETDEL_1 = __importDefault(require_HGETDEL());
+    var HGETEX_1 = __importDefault(require_HGETEX());
+    var HINCRBY_1 = __importDefault(require_HINCRBY());
+    var HINCRBYFLOAT_1 = __importDefault(require_HINCRBYFLOAT());
+    var HKEYS_1 = __importDefault(require_HKEYS());
+    var HLEN_1 = __importDefault(require_HLEN());
+    var HMGET_1 = __importDefault(require_HMGET());
+    var HPERSIST_1 = __importDefault(require_HPERSIST());
+    var HPEXPIRE_1 = __importDefault(require_HPEXPIRE());
+    var HPEXPIREAT_1 = __importDefault(require_HPEXPIREAT());
+    var HPEXPIRETIME_1 = __importDefault(require_HPEXPIRETIME());
+    var HPTTL_1 = __importDefault(require_HPTTL());
+    var HRANDFIELD_COUNT_WITHVALUES_1 = __importDefault(require_HRANDFIELD_COUNT_WITHVALUES());
+    var HRANDFIELD_COUNT_1 = __importDefault(require_HRANDFIELD_COUNT());
+    var HRANDFIELD_1 = __importDefault(require_HRANDFIELD());
+    var HSCAN_1 = __importDefault(require_HSCAN());
+    var HSCAN_NOVALUES_1 = __importDefault(require_HSCAN_NOVALUES());
+    var HSET_1 = __importDefault(require_HSET());
+    var HSETEX_1 = __importDefault(require_HSETEX());
+    var HSETNX_1 = __importDefault(require_HSETNX());
+    var HSTRLEN_1 = __importDefault(require_HSTRLEN());
+    var HTTL_1 = __importDefault(require_HTTL());
+    var HVALS_1 = __importDefault(require_HVALS());
+    var HOTKEYS_GET_1 = __importDefault(require_HOTKEYS_GET());
+    var HOTKEYS_RESET_1 = __importDefault(require_HOTKEYS_RESET());
+    var HOTKEYS_START_1 = __importDefault(require_HOTKEYS_START());
+    var HOTKEYS_STOP_1 = __importDefault(require_HOTKEYS_STOP());
+    var INCR_1 = __importDefault(require_INCR());
+    var INCRBY_1 = __importDefault(require_INCRBY());
+    var INCRBYFLOAT_1 = __importDefault(require_INCRBYFLOAT());
+    var INFO_1 = __importDefault(require_INFO());
+    var KEYS_1 = __importDefault(require_KEYS());
+    var LASTSAVE_1 = __importDefault(require_LASTSAVE());
+    var LATENCY_DOCTOR_1 = __importDefault(require_LATENCY_DOCTOR());
+    var LATENCY_GRAPH_1 = __importDefault(require_LATENCY_GRAPH());
+    var LATENCY_HISTORY_1 = __importDefault(require_LATENCY_HISTORY());
+    var LATENCY_LATEST_1 = __importDefault(require_LATENCY_LATEST());
+    var LATENCY_RESET_1 = __importDefault(require_LATENCY_RESET());
+    var LCS_IDX_WITHMATCHLEN_1 = __importDefault(require_LCS_IDX_WITHMATCHLEN());
+    var LCS_IDX_1 = __importDefault(require_LCS_IDX());
+    var LCS_LEN_1 = __importDefault(require_LCS_LEN());
+    var LCS_1 = __importDefault(require_LCS());
+    var LINDEX_1 = __importDefault(require_LINDEX());
+    var LINSERT_1 = __importDefault(require_LINSERT());
+    var LLEN_1 = __importDefault(require_LLEN());
+    var LMOVE_1 = __importDefault(require_LMOVE());
+    var LMPOP_1 = __importDefault(require_LMPOP());
+    var LOLWUT_1 = __importDefault(require_LOLWUT());
+    var LPOP_COUNT_1 = __importDefault(require_LPOP_COUNT());
+    var LPOP_1 = __importDefault(require_LPOP());
+    var LPOS_COUNT_1 = __importDefault(require_LPOS_COUNT());
+    var LPOS_1 = __importDefault(require_LPOS());
+    var LPUSH_1 = __importDefault(require_LPUSH());
+    var LPUSHX_1 = __importDefault(require_LPUSHX());
+    var LRANGE_1 = __importDefault(require_LRANGE());
+    var LREM_1 = __importDefault(require_LREM());
+    var LSET_1 = __importDefault(require_LSET());
+    var LTRIM_1 = __importDefault(require_LTRIM());
+    var MEMORY_DOCTOR_1 = __importDefault(require_MEMORY_DOCTOR());
+    var MEMORY_MALLOC_STATS_1 = __importDefault(require_MEMORY_MALLOC_STATS());
+    var MEMORY_PURGE_1 = __importDefault(require_MEMORY_PURGE());
+    var MEMORY_STATS_1 = __importDefault(require_MEMORY_STATS());
+    var MEMORY_USAGE_1 = __importDefault(require_MEMORY_USAGE());
+    var MGET_1 = __importDefault(require_MGET());
+    var MIGRATE_1 = __importDefault(require_MIGRATE());
+    var MODULE_LIST_1 = __importDefault(require_MODULE_LIST());
+    var MODULE_LOAD_1 = __importDefault(require_MODULE_LOAD());
+    var MODULE_UNLOAD_1 = __importDefault(require_MODULE_UNLOAD());
+    var MOVE_1 = __importDefault(require_MOVE());
+    var MSET_1 = __importDefault(require_MSET());
+    var MSETEX_1 = __importDefault(require_MSETEX());
+    var MSETNX_1 = __importDefault(require_MSETNX());
+    var OBJECT_ENCODING_1 = __importDefault(require_OBJECT_ENCODING());
+    var OBJECT_FREQ_1 = __importDefault(require_OBJECT_FREQ());
+    var OBJECT_IDLETIME_1 = __importDefault(require_OBJECT_IDLETIME());
+    var OBJECT_REFCOUNT_1 = __importDefault(require_OBJECT_REFCOUNT());
+    var PERSIST_1 = __importDefault(require_PERSIST());
+    var PEXPIRE_1 = __importDefault(require_PEXPIRE());
+    var PEXPIREAT_1 = __importDefault(require_PEXPIREAT());
+    var PEXPIRETIME_1 = __importDefault(require_PEXPIRETIME());
+    var PFADD_1 = __importDefault(require_PFADD());
+    var PFCOUNT_1 = __importDefault(require_PFCOUNT());
+    var PFMERGE_1 = __importDefault(require_PFMERGE());
+    var PING_1 = __importDefault(require_PING());
+    var PSETEX_1 = __importDefault(require_PSETEX());
+    var PTTL_1 = __importDefault(require_PTTL());
+    var PUBLISH_1 = __importDefault(require_PUBLISH());
+    var PUBSUB_CHANNELS_1 = __importDefault(require_PUBSUB_CHANNELS());
+    var PUBSUB_NUMPAT_1 = __importDefault(require_PUBSUB_NUMPAT());
+    var PUBSUB_NUMSUB_1 = __importDefault(require_PUBSUB_NUMSUB());
+    var PUBSUB_SHARDNUMSUB_1 = __importDefault(require_PUBSUB_SHARDNUMSUB());
+    var PUBSUB_SHARDCHANNELS_1 = __importDefault(require_PUBSUB_SHARDCHANNELS());
+    var RANDOMKEY_1 = __importDefault(require_RANDOMKEY());
+    var READONLY_1 = __importDefault(require_READONLY());
+    var RENAME_1 = __importDefault(require_RENAME());
+    var RENAMENX_1 = __importDefault(require_RENAMENX());
+    var REPLICAOF_1 = __importDefault(require_REPLICAOF());
+    var RESTORE_ASKING_1 = __importDefault(require_RESTORE_ASKING());
+    var RESTORE_1 = __importDefault(require_RESTORE());
+    var ROLE_1 = __importDefault(require_ROLE());
+    var RPOP_COUNT_1 = __importDefault(require_RPOP_COUNT());
+    var RPOP_1 = __importDefault(require_RPOP());
+    var RPOPLPUSH_1 = __importDefault(require_RPOPLPUSH());
+    var RPUSH_1 = __importDefault(require_RPUSH());
+    var RPUSHX_1 = __importDefault(require_RPUSHX());
+    var SADD_1 = __importDefault(require_SADD());
+    var SCAN_1 = __importDefault(require_SCAN());
+    var SCARD_1 = __importDefault(require_SCARD());
+    var SCRIPT_DEBUG_1 = __importDefault(require_SCRIPT_DEBUG());
+    var SCRIPT_EXISTS_1 = __importDefault(require_SCRIPT_EXISTS());
+    var SCRIPT_FLUSH_1 = __importDefault(require_SCRIPT_FLUSH());
+    var SCRIPT_KILL_1 = __importDefault(require_SCRIPT_KILL());
+    var SCRIPT_LOAD_1 = __importDefault(require_SCRIPT_LOAD());
+    var SDIFF_1 = __importDefault(require_SDIFF());
+    var SDIFFSTORE_1 = __importDefault(require_SDIFFSTORE());
+    var SET_1 = __importDefault(require_SET());
+    var SETBIT_1 = __importDefault(require_SETBIT());
+    var SETEX_1 = __importDefault(require_SETEX());
+    var SETNX_1 = __importDefault(require_SETNX());
+    var SETRANGE_1 = __importDefault(require_SETRANGE());
+    var SINTER_1 = __importDefault(require_SINTER());
+    var SINTERCARD_1 = __importDefault(require_SINTERCARD());
+    var SINTERSTORE_1 = __importDefault(require_SINTERSTORE());
+    var SISMEMBER_1 = __importDefault(require_SISMEMBER());
+    var SMEMBERS_1 = __importDefault(require_SMEMBERS());
+    var SMISMEMBER_1 = __importDefault(require_SMISMEMBER());
+    var SMOVE_1 = __importDefault(require_SMOVE());
+    var SORT_RO_1 = __importDefault(require_SORT_RO());
+    var SORT_STORE_1 = __importDefault(require_SORT_STORE());
+    var SORT_1 = __importDefault(require_SORT());
+    var SPOP_COUNT_1 = __importDefault(require_SPOP_COUNT());
+    var SPOP_1 = __importDefault(require_SPOP());
+    var SPUBLISH_1 = __importDefault(require_SPUBLISH());
+    var SRANDMEMBER_COUNT_1 = __importDefault(require_SRANDMEMBER_COUNT());
+    var SRANDMEMBER_1 = __importDefault(require_SRANDMEMBER());
+    var SREM_1 = __importDefault(require_SREM());
+    var SSCAN_1 = __importDefault(require_SSCAN());
+    var STRLEN_1 = __importDefault(require_STRLEN());
+    var SUNION_1 = __importDefault(require_SUNION());
+    var SUNIONSTORE_1 = __importDefault(require_SUNIONSTORE());
+    var SWAPDB_1 = __importDefault(require_SWAPDB());
+    var TIME_1 = __importDefault(require_TIME());
+    var TOUCH_1 = __importDefault(require_TOUCH());
+    var TTL_1 = __importDefault(require_TTL());
+    var TYPE_1 = __importDefault(require_TYPE());
+    var UNLINK_1 = __importDefault(require_UNLINK());
+    var WAIT_1 = __importDefault(require_WAIT());
+    var XACK_1 = __importDefault(require_XACK());
+    var XACKDEL_1 = __importDefault(require_XACKDEL());
+    var XADD_NOMKSTREAM_1 = __importDefault(require_XADD_NOMKSTREAM());
+    var XADD_1 = __importDefault(require_XADD());
+    var XAUTOCLAIM_JUSTID_1 = __importDefault(require_XAUTOCLAIM_JUSTID());
+    var XAUTOCLAIM_1 = __importDefault(require_XAUTOCLAIM());
+    var XCLAIM_JUSTID_1 = __importDefault(require_XCLAIM_JUSTID());
+    var XCLAIM_1 = __importDefault(require_XCLAIM());
+    var XCFGSET_1 = __importDefault(require_XCFGSET());
+    var XDEL_1 = __importDefault(require_XDEL());
+    var XDELEX_1 = __importDefault(require_XDELEX());
+    var XGROUP_CREATE_1 = __importDefault(require_XGROUP_CREATE());
+    var XGROUP_CREATECONSUMER_1 = __importDefault(require_XGROUP_CREATECONSUMER());
+    var XGROUP_DELCONSUMER_1 = __importDefault(require_XGROUP_DELCONSUMER());
+    var XGROUP_DESTROY_1 = __importDefault(require_XGROUP_DESTROY());
+    var XGROUP_SETID_1 = __importDefault(require_XGROUP_SETID());
+    var XINFO_CONSUMERS_1 = __importDefault(require_XINFO_CONSUMERS());
+    var XINFO_GROUPS_1 = __importDefault(require_XINFO_GROUPS());
+    var XINFO_STREAM_1 = __importDefault(require_XINFO_STREAM());
+    var XLEN_1 = __importDefault(require_XLEN());
+    var XPENDING_RANGE_1 = __importDefault(require_XPENDING_RANGE());
+    var XPENDING_1 = __importDefault(require_XPENDING());
+    var XRANGE_1 = __importDefault(require_XRANGE());
+    var XREAD_1 = __importDefault(require_XREAD());
+    var XREADGROUP_1 = __importDefault(require_XREADGROUP());
+    var XREVRANGE_1 = __importDefault(require_XREVRANGE());
+    var XSETID_1 = __importDefault(require_XSETID());
+    var XTRIM_1 = __importDefault(require_XTRIM());
+    var ZADD_INCR_1 = __importDefault(require_ZADD_INCR());
+    var ZADD_1 = __importDefault(require_ZADD());
+    var ZCARD_1 = __importDefault(require_ZCARD());
+    var ZCOUNT_1 = __importDefault(require_ZCOUNT());
+    var ZDIFF_WITHSCORES_1 = __importDefault(require_ZDIFF_WITHSCORES());
+    var ZDIFF_1 = __importDefault(require_ZDIFF());
+    var ZDIFFSTORE_1 = __importDefault(require_ZDIFFSTORE());
+    var ZINCRBY_1 = __importDefault(require_ZINCRBY());
+    var ZINTER_WITHSCORES_1 = __importDefault(require_ZINTER_WITHSCORES());
+    var ZINTER_1 = __importDefault(require_ZINTER());
+    var ZINTERCARD_1 = __importDefault(require_ZINTERCARD());
+    var ZINTERSTORE_1 = __importDefault(require_ZINTERSTORE());
+    var ZLEXCOUNT_1 = __importDefault(require_ZLEXCOUNT());
+    var ZMPOP_1 = __importDefault(require_ZMPOP());
+    var ZMSCORE_1 = __importDefault(require_ZMSCORE());
+    var ZPOPMAX_COUNT_1 = __importDefault(require_ZPOPMAX_COUNT());
+    var ZPOPMAX_1 = __importDefault(require_ZPOPMAX());
+    var ZPOPMIN_COUNT_1 = __importDefault(require_ZPOPMIN_COUNT());
+    var ZPOPMIN_1 = __importDefault(require_ZPOPMIN());
+    var ZRANDMEMBER_COUNT_WITHSCORES_1 = __importDefault(require_ZRANDMEMBER_COUNT_WITHSCORES());
+    var ZRANDMEMBER_COUNT_1 = __importDefault(require_ZRANDMEMBER_COUNT());
+    var ZRANDMEMBER_1 = __importDefault(require_ZRANDMEMBER());
+    var ZRANGE_WITHSCORES_1 = __importDefault(require_ZRANGE_WITHSCORES());
+    var ZRANGE_1 = __importDefault(require_ZRANGE());
+    var ZRANGEBYLEX_1 = __importDefault(require_ZRANGEBYLEX());
+    var ZRANGEBYSCORE_WITHSCORES_1 = __importDefault(require_ZRANGEBYSCORE_WITHSCORES());
+    var ZRANGEBYSCORE_1 = __importDefault(require_ZRANGEBYSCORE());
+    var ZRANGESTORE_1 = __importDefault(require_ZRANGESTORE());
+    var ZREMRANGEBYSCORE_1 = __importDefault(require_ZREMRANGEBYSCORE());
+    var ZRANK_WITHSCORE_1 = __importDefault(require_ZRANK_WITHSCORE());
+    var ZRANK_1 = __importDefault(require_ZRANK());
+    var ZREM_1 = __importDefault(require_ZREM());
+    var ZREMRANGEBYLEX_1 = __importDefault(require_ZREMRANGEBYLEX());
+    var ZREMRANGEBYRANK_1 = __importDefault(require_ZREMRANGEBYRANK());
+    var ZREVRANK_1 = __importDefault(require_ZREVRANK());
+    var ZSCAN_1 = __importDefault(require_ZSCAN());
+    var ZSCORE_1 = __importDefault(require_ZSCORE());
+    var ZUNION_WITHSCORES_1 = __importDefault(require_ZUNION_WITHSCORES());
+    var ZUNION_1 = __importDefault(require_ZUNION());
+    var ZUNIONSTORE_1 = __importDefault(require_ZUNIONSTORE());
+    var VADD_1 = __importDefault(require_VADD());
+    var VCARD_1 = __importDefault(require_VCARD());
+    var VDIM_1 = __importDefault(require_VDIM());
+    var VEMB_1 = __importDefault(require_VEMB());
+    var VEMB_RAW_1 = __importDefault(require_VEMB_RAW());
+    var VGETATTR_1 = __importDefault(require_VGETATTR());
+    var VINFO_1 = __importDefault(require_VINFO());
+    var VLINKS_1 = __importDefault(require_VLINKS());
+    var VLINKS_WITHSCORES_1 = __importDefault(require_VLINKS_WITHSCORES());
+    var VRANDMEMBER_1 = __importDefault(require_VRANDMEMBER());
+    var VRANGE_1 = __importDefault(require_VRANGE());
+    var VREM_1 = __importDefault(require_VREM());
+    var VSETATTR_1 = __importDefault(require_VSETATTR());
+    var VSIM_1 = __importDefault(require_VSIM());
+    var VSIM_WITHSCORES_1 = __importDefault(require_VSIM_WITHSCORES());
+    var LATENCY_HISTOGRAM_1 = __importDefault(require_LATENCY_HISTOGRAM());
+    exports.default = {
+      ACL_CAT: ACL_CAT_1.default,
+      aclCat: ACL_CAT_1.default,
+      ACL_DELUSER: ACL_DELUSER_1.default,
+      aclDelUser: ACL_DELUSER_1.default,
+      ACL_DRYRUN: ACL_DRYRUN_1.default,
+      aclDryRun: ACL_DRYRUN_1.default,
+      ACL_GENPASS: ACL_GENPASS_1.default,
+      aclGenPass: ACL_GENPASS_1.default,
+      ACL_GETUSER: ACL_GETUSER_1.default,
+      aclGetUser: ACL_GETUSER_1.default,
+      ACL_LIST: ACL_LIST_1.default,
+      aclList: ACL_LIST_1.default,
+      ACL_LOAD: ACL_LOAD_1.default,
+      aclLoad: ACL_LOAD_1.default,
+      ACL_LOG_RESET: ACL_LOG_RESET_1.default,
+      aclLogReset: ACL_LOG_RESET_1.default,
+      ACL_LOG: ACL_LOG_1.default,
+      aclLog: ACL_LOG_1.default,
+      ACL_SAVE: ACL_SAVE_1.default,
+      aclSave: ACL_SAVE_1.default,
+      ACL_SETUSER: ACL_SETUSER_1.default,
+      aclSetUser: ACL_SETUSER_1.default,
+      ACL_USERS: ACL_USERS_1.default,
+      aclUsers: ACL_USERS_1.default,
+      ACL_WHOAMI: ACL_WHOAMI_1.default,
+      aclWhoAmI: ACL_WHOAMI_1.default,
+      APPEND: APPEND_1.default,
+      append: APPEND_1.default,
+      ASKING: ASKING_1.default,
+      asking: ASKING_1.default,
+      AUTH: AUTH_1.default,
+      auth: AUTH_1.default,
+      BGREWRITEAOF: BGREWRITEAOF_1.default,
+      bgRewriteAof: BGREWRITEAOF_1.default,
+      BGSAVE: BGSAVE_1.default,
+      bgSave: BGSAVE_1.default,
+      BITCOUNT: BITCOUNT_1.default,
+      bitCount: BITCOUNT_1.default,
+      BITFIELD_RO: BITFIELD_RO_1.default,
+      bitFieldRo: BITFIELD_RO_1.default,
+      BITFIELD: BITFIELD_1.default,
+      bitField: BITFIELD_1.default,
+      BITOP: BITOP_1.default,
+      bitOp: BITOP_1.default,
+      BITPOS: BITPOS_1.default,
+      bitPos: BITPOS_1.default,
+      BLMOVE: BLMOVE_1.default,
+      blMove: BLMOVE_1.default,
+      BLMPOP: BLMPOP_1.default,
+      blmPop: BLMPOP_1.default,
+      BLPOP: BLPOP_1.default,
+      blPop: BLPOP_1.default,
+      BRPOP: BRPOP_1.default,
+      brPop: BRPOP_1.default,
+      BRPOPLPUSH: BRPOPLPUSH_1.default,
+      brPopLPush: BRPOPLPUSH_1.default,
+      BZMPOP: BZMPOP_1.default,
+      bzmPop: BZMPOP_1.default,
+      BZPOPMAX: BZPOPMAX_1.default,
+      bzPopMax: BZPOPMAX_1.default,
+      BZPOPMIN: BZPOPMIN_1.default,
+      bzPopMin: BZPOPMIN_1.default,
+      CLIENT_CACHING: CLIENT_CACHING_1.default,
+      clientCaching: CLIENT_CACHING_1.default,
+      CLIENT_GETNAME: CLIENT_GETNAME_1.default,
+      clientGetName: CLIENT_GETNAME_1.default,
+      CLIENT_GETREDIR: CLIENT_GETREDIR_1.default,
+      clientGetRedir: CLIENT_GETREDIR_1.default,
+      CLIENT_ID: CLIENT_ID_1.default,
+      clientId: CLIENT_ID_1.default,
+      CLIENT_INFO: CLIENT_INFO_1.default,
+      clientInfo: CLIENT_INFO_1.default,
+      CLIENT_KILL: CLIENT_KILL_1.default,
+      clientKill: CLIENT_KILL_1.default,
+      CLIENT_LIST: CLIENT_LIST_1.default,
+      clientList: CLIENT_LIST_1.default,
+      "CLIENT_NO-EVICT": CLIENT_NO_EVICT_1.default,
+      clientNoEvict: CLIENT_NO_EVICT_1.default,
+      "CLIENT_NO-TOUCH": CLIENT_NO_TOUCH_1.default,
+      clientNoTouch: CLIENT_NO_TOUCH_1.default,
+      CLIENT_PAUSE: CLIENT_PAUSE_1.default,
+      clientPause: CLIENT_PAUSE_1.default,
+      CLIENT_SETNAME: CLIENT_SETNAME_1.default,
+      clientSetName: CLIENT_SETNAME_1.default,
+      CLIENT_TRACKING: CLIENT_TRACKING_1.default,
+      clientTracking: CLIENT_TRACKING_1.default,
+      CLIENT_TRACKINGINFO: CLIENT_TRACKINGINFO_1.default,
+      clientTrackingInfo: CLIENT_TRACKINGINFO_1.default,
+      CLIENT_UNPAUSE: CLIENT_UNPAUSE_1.default,
+      clientUnpause: CLIENT_UNPAUSE_1.default,
+      CLUSTER_ADDSLOTS: CLUSTER_ADDSLOTS_1.default,
+      clusterAddSlots: CLUSTER_ADDSLOTS_1.default,
+      CLUSTER_ADDSLOTSRANGE: CLUSTER_ADDSLOTSRANGE_1.default,
+      clusterAddSlotsRange: CLUSTER_ADDSLOTSRANGE_1.default,
+      CLUSTER_BUMPEPOCH: CLUSTER_BUMPEPOCH_1.default,
+      clusterBumpEpoch: CLUSTER_BUMPEPOCH_1.default,
+      "CLUSTER_COUNT-FAILURE-REPORTS": CLUSTER_COUNT_FAILURE_REPORTS_1.default,
+      clusterCountFailureReports: CLUSTER_COUNT_FAILURE_REPORTS_1.default,
+      CLUSTER_COUNTKEYSINSLOT: CLUSTER_COUNTKEYSINSLOT_1.default,
+      clusterCountKeysInSlot: CLUSTER_COUNTKEYSINSLOT_1.default,
+      CLUSTER_DELSLOTS: CLUSTER_DELSLOTS_1.default,
+      clusterDelSlots: CLUSTER_DELSLOTS_1.default,
+      CLUSTER_DELSLOTSRANGE: CLUSTER_DELSLOTSRANGE_1.default,
+      clusterDelSlotsRange: CLUSTER_DELSLOTSRANGE_1.default,
+      CLUSTER_FAILOVER: CLUSTER_FAILOVER_1.default,
+      clusterFailover: CLUSTER_FAILOVER_1.default,
+      CLUSTER_FLUSHSLOTS: CLUSTER_FLUSHSLOTS_1.default,
+      clusterFlushSlots: CLUSTER_FLUSHSLOTS_1.default,
+      CLUSTER_FORGET: CLUSTER_FORGET_1.default,
+      clusterForget: CLUSTER_FORGET_1.default,
+      CLUSTER_GETKEYSINSLOT: CLUSTER_GETKEYSINSLOT_1.default,
+      clusterGetKeysInSlot: CLUSTER_GETKEYSINSLOT_1.default,
+      CLUSTER_INFO: CLUSTER_INFO_1.default,
+      clusterInfo: CLUSTER_INFO_1.default,
+      CLUSTER_KEYSLOT: CLUSTER_KEYSLOT_1.default,
+      clusterKeySlot: CLUSTER_KEYSLOT_1.default,
+      CLUSTER_LINKS: CLUSTER_LINKS_1.default,
+      clusterLinks: CLUSTER_LINKS_1.default,
+      CLUSTER_MEET: CLUSTER_MEET_1.default,
+      clusterMeet: CLUSTER_MEET_1.default,
+      CLUSTER_MYID: CLUSTER_MYID_1.default,
+      clusterMyId: CLUSTER_MYID_1.default,
+      CLUSTER_MYSHARDID: CLUSTER_MYSHARDID_1.default,
+      clusterMyShardId: CLUSTER_MYSHARDID_1.default,
+      CLUSTER_NODES: CLUSTER_NODES_1.default,
+      clusterNodes: CLUSTER_NODES_1.default,
+      CLUSTER_REPLICAS: CLUSTER_REPLICAS_1.default,
+      clusterReplicas: CLUSTER_REPLICAS_1.default,
+      CLUSTER_REPLICATE: CLUSTER_REPLICATE_1.default,
+      clusterReplicate: CLUSTER_REPLICATE_1.default,
+      CLUSTER_RESET: CLUSTER_RESET_1.default,
+      clusterReset: CLUSTER_RESET_1.default,
+      CLUSTER_SAVECONFIG: CLUSTER_SAVECONFIG_1.default,
+      clusterSaveConfig: CLUSTER_SAVECONFIG_1.default,
+      "CLUSTER_SET-CONFIG-EPOCH": CLUSTER_SET_CONFIG_EPOCH_1.default,
+      clusterSetConfigEpoch: CLUSTER_SET_CONFIG_EPOCH_1.default,
+      CLUSTER_SETSLOT: CLUSTER_SETSLOT_1.default,
+      clusterSetSlot: CLUSTER_SETSLOT_1.default,
+      CLUSTER_SLOTS: CLUSTER_SLOTS_1.default,
+      clusterSlots: CLUSTER_SLOTS_1.default,
+      COMMAND_COUNT: COMMAND_COUNT_1.default,
+      commandCount: COMMAND_COUNT_1.default,
+      COMMAND_GETKEYS: COMMAND_GETKEYS_1.default,
+      commandGetKeys: COMMAND_GETKEYS_1.default,
+      COMMAND_GETKEYSANDFLAGS: COMMAND_GETKEYSANDFLAGS_1.default,
+      commandGetKeysAndFlags: COMMAND_GETKEYSANDFLAGS_1.default,
+      COMMAND_INFO: COMMAND_INFO_1.default,
+      commandInfo: COMMAND_INFO_1.default,
+      COMMAND_LIST: COMMAND_LIST_1.default,
+      commandList: COMMAND_LIST_1.default,
+      COMMAND: COMMAND_1.default,
+      command: COMMAND_1.default,
+      CONFIG_GET: CONFIG_GET_1.default,
+      configGet: CONFIG_GET_1.default,
+      CONFIG_RESETASTAT: CONFIG_RESETSTAT_1.default,
+      configResetStat: CONFIG_RESETSTAT_1.default,
+      CONFIG_REWRITE: CONFIG_REWRITE_1.default,
+      configRewrite: CONFIG_REWRITE_1.default,
+      CONFIG_SET: CONFIG_SET_1.default,
+      configSet: CONFIG_SET_1.default,
+      COPY: COPY_1.default,
+      copy: COPY_1.default,
+      DBSIZE: DBSIZE_1.default,
+      dbSize: DBSIZE_1.default,
+      DECR: DECR_1.default,
+      decr: DECR_1.default,
+      DECRBY: DECRBY_1.default,
+      decrBy: DECRBY_1.default,
+      DEL: DEL_1.default,
+      del: DEL_1.default,
+      DELEX: DELEX_1.default,
+      delEx: DELEX_1.default,
+      DIGEST: DIGEST_1.default,
+      digest: DIGEST_1.default,
+      DUMP: DUMP_1.default,
+      dump: DUMP_1.default,
+      ECHO: ECHO_1.default,
+      echo: ECHO_1.default,
+      EVAL_RO: EVAL_RO_1.default,
+      evalRo: EVAL_RO_1.default,
+      EVAL: EVAL_1.default,
+      eval: EVAL_1.default,
+      EVALSHA_RO: EVALSHA_RO_1.default,
+      evalShaRo: EVALSHA_RO_1.default,
+      EVALSHA: EVALSHA_1.default,
+      evalSha: EVALSHA_1.default,
+      EXISTS: EXISTS_1.default,
+      exists: EXISTS_1.default,
+      EXPIRE: EXPIRE_1.default,
+      expire: EXPIRE_1.default,
+      EXPIREAT: EXPIREAT_1.default,
+      expireAt: EXPIREAT_1.default,
+      EXPIRETIME: EXPIRETIME_1.default,
+      expireTime: EXPIRETIME_1.default,
+      FLUSHALL: FLUSHALL_1.default,
+      flushAll: FLUSHALL_1.default,
+      FLUSHDB: FLUSHDB_1.default,
+      flushDb: FLUSHDB_1.default,
+      FCALL: FCALL_1.default,
+      fCall: FCALL_1.default,
+      FCALL_RO: FCALL_RO_1.default,
+      fCallRo: FCALL_RO_1.default,
+      FUNCTION_DELETE: FUNCTION_DELETE_1.default,
+      functionDelete: FUNCTION_DELETE_1.default,
+      FUNCTION_DUMP: FUNCTION_DUMP_1.default,
+      functionDump: FUNCTION_DUMP_1.default,
+      FUNCTION_FLUSH: FUNCTION_FLUSH_1.default,
+      functionFlush: FUNCTION_FLUSH_1.default,
+      FUNCTION_KILL: FUNCTION_KILL_1.default,
+      functionKill: FUNCTION_KILL_1.default,
+      FUNCTION_LIST_WITHCODE: FUNCTION_LIST_WITHCODE_1.default,
+      functionListWithCode: FUNCTION_LIST_WITHCODE_1.default,
+      FUNCTION_LIST: FUNCTION_LIST_1.default,
+      functionList: FUNCTION_LIST_1.default,
+      FUNCTION_LOAD: FUNCTION_LOAD_1.default,
+      functionLoad: FUNCTION_LOAD_1.default,
+      FUNCTION_RESTORE: FUNCTION_RESTORE_1.default,
+      functionRestore: FUNCTION_RESTORE_1.default,
+      FUNCTION_STATS: FUNCTION_STATS_1.default,
+      functionStats: FUNCTION_STATS_1.default,
+      GEOADD: GEOADD_1.default,
+      geoAdd: GEOADD_1.default,
+      GEODIST: GEODIST_1.default,
+      geoDist: GEODIST_1.default,
+      GEOHASH: GEOHASH_1.default,
+      geoHash: GEOHASH_1.default,
+      GEOPOS: GEOPOS_1.default,
+      geoPos: GEOPOS_1.default,
+      GEORADIUS_RO_WITH: GEORADIUS_RO_WITH_1.default,
+      geoRadiusRoWith: GEORADIUS_RO_WITH_1.default,
+      GEORADIUS_RO: GEORADIUS_RO_1.default,
+      geoRadiusRo: GEORADIUS_RO_1.default,
+      GEORADIUS_STORE: GEORADIUS_STORE_1.default,
+      geoRadiusStore: GEORADIUS_STORE_1.default,
+      GEORADIUS_WITH: GEORADIUS_WITH_1.default,
+      geoRadiusWith: GEORADIUS_WITH_1.default,
+      GEORADIUS: GEORADIUS_1.default,
+      geoRadius: GEORADIUS_1.default,
+      GEORADIUSBYMEMBER_RO_WITH: GEORADIUSBYMEMBER_RO_WITH_1.default,
+      geoRadiusByMemberRoWith: GEORADIUSBYMEMBER_RO_WITH_1.default,
+      GEORADIUSBYMEMBER_RO: GEORADIUSBYMEMBER_RO_1.default,
+      geoRadiusByMemberRo: GEORADIUSBYMEMBER_RO_1.default,
+      GEORADIUSBYMEMBER_STORE: GEORADIUSBYMEMBER_STORE_1.default,
+      geoRadiusByMemberStore: GEORADIUSBYMEMBER_STORE_1.default,
+      GEORADIUSBYMEMBER_WITH: GEORADIUSBYMEMBER_WITH_1.default,
+      geoRadiusByMemberWith: GEORADIUSBYMEMBER_WITH_1.default,
+      GEORADIUSBYMEMBER: GEORADIUSBYMEMBER_1.default,
+      geoRadiusByMember: GEORADIUSBYMEMBER_1.default,
+      GEOSEARCH_WITH: GEOSEARCH_WITH_1.default,
+      geoSearchWith: GEOSEARCH_WITH_1.default,
+      GEOSEARCH: GEOSEARCH_1.default,
+      geoSearch: GEOSEARCH_1.default,
+      GEOSEARCHSTORE: GEOSEARCHSTORE_1.default,
+      geoSearchStore: GEOSEARCHSTORE_1.default,
+      GET: GET_1.default,
+      get: GET_1.default,
+      GETBIT: GETBIT_1.default,
+      getBit: GETBIT_1.default,
+      GETDEL: GETDEL_1.default,
+      getDel: GETDEL_1.default,
+      GETEX: GETEX_1.default,
+      getEx: GETEX_1.default,
+      GETRANGE: GETRANGE_1.default,
+      getRange: GETRANGE_1.default,
+      GETSET: GETSET_1.default,
+      getSet: GETSET_1.default,
+      HDEL: HDEL_1.default,
+      hDel: HDEL_1.default,
+      HELLO: HELLO_1.default,
+      hello: HELLO_1.default,
+      HEXISTS: HEXISTS_1.default,
+      hExists: HEXISTS_1.default,
+      HEXPIRE: HEXPIRE_1.default,
+      hExpire: HEXPIRE_1.default,
+      HEXPIREAT: HEXPIREAT_1.default,
+      hExpireAt: HEXPIREAT_1.default,
+      HEXPIRETIME: HEXPIRETIME_1.default,
+      hExpireTime: HEXPIRETIME_1.default,
+      HGET: HGET_1.default,
+      hGet: HGET_1.default,
+      HGETALL: HGETALL_1.default,
+      hGetAll: HGETALL_1.default,
+      HGETDEL: HGETDEL_1.default,
+      hGetDel: HGETDEL_1.default,
+      HGETEX: HGETEX_1.default,
+      hGetEx: HGETEX_1.default,
+      HINCRBY: HINCRBY_1.default,
+      hIncrBy: HINCRBY_1.default,
+      HINCRBYFLOAT: HINCRBYFLOAT_1.default,
+      hIncrByFloat: HINCRBYFLOAT_1.default,
+      HKEYS: HKEYS_1.default,
+      hKeys: HKEYS_1.default,
+      HLEN: HLEN_1.default,
+      hLen: HLEN_1.default,
+      HMGET: HMGET_1.default,
+      hmGet: HMGET_1.default,
+      HPERSIST: HPERSIST_1.default,
+      hPersist: HPERSIST_1.default,
+      HPEXPIRE: HPEXPIRE_1.default,
+      hpExpire: HPEXPIRE_1.default,
+      HPEXPIREAT: HPEXPIREAT_1.default,
+      hpExpireAt: HPEXPIREAT_1.default,
+      HPEXPIRETIME: HPEXPIRETIME_1.default,
+      hpExpireTime: HPEXPIRETIME_1.default,
+      HPTTL: HPTTL_1.default,
+      hpTTL: HPTTL_1.default,
+      HRANDFIELD_COUNT_WITHVALUES: HRANDFIELD_COUNT_WITHVALUES_1.default,
+      hRandFieldCountWithValues: HRANDFIELD_COUNT_WITHVALUES_1.default,
+      HRANDFIELD_COUNT: HRANDFIELD_COUNT_1.default,
+      hRandFieldCount: HRANDFIELD_COUNT_1.default,
+      HRANDFIELD: HRANDFIELD_1.default,
+      hRandField: HRANDFIELD_1.default,
+      HSCAN: HSCAN_1.default,
+      hScan: HSCAN_1.default,
+      HSCAN_NOVALUES: HSCAN_NOVALUES_1.default,
+      hScanNoValues: HSCAN_NOVALUES_1.default,
+      HSET: HSET_1.default,
+      hSet: HSET_1.default,
+      HSETEX: HSETEX_1.default,
+      hSetEx: HSETEX_1.default,
+      HSETNX: HSETNX_1.default,
+      hSetNX: HSETNX_1.default,
+      HSTRLEN: HSTRLEN_1.default,
+      hStrLen: HSTRLEN_1.default,
+      HTTL: HTTL_1.default,
+      hTTL: HTTL_1.default,
+      HVALS: HVALS_1.default,
+      hVals: HVALS_1.default,
+      HOTKEYS_GET: HOTKEYS_GET_1.default,
+      hotkeysGet: HOTKEYS_GET_1.default,
+      HOTKEYS_RESET: HOTKEYS_RESET_1.default,
+      hotkeysReset: HOTKEYS_RESET_1.default,
+      HOTKEYS_START: HOTKEYS_START_1.default,
+      hotkeysStart: HOTKEYS_START_1.default,
+      HOTKEYS_STOP: HOTKEYS_STOP_1.default,
+      hotkeysStop: HOTKEYS_STOP_1.default,
+      INCR: INCR_1.default,
+      incr: INCR_1.default,
+      INCRBY: INCRBY_1.default,
+      incrBy: INCRBY_1.default,
+      INCRBYFLOAT: INCRBYFLOAT_1.default,
+      incrByFloat: INCRBYFLOAT_1.default,
+      INFO: INFO_1.default,
+      info: INFO_1.default,
+      KEYS: KEYS_1.default,
+      keys: KEYS_1.default,
+      LASTSAVE: LASTSAVE_1.default,
+      lastSave: LASTSAVE_1.default,
+      LATENCY_DOCTOR: LATENCY_DOCTOR_1.default,
+      latencyDoctor: LATENCY_DOCTOR_1.default,
+      LATENCY_GRAPH: LATENCY_GRAPH_1.default,
+      latencyGraph: LATENCY_GRAPH_1.default,
+      LATENCY_HISTORY: LATENCY_HISTORY_1.default,
+      latencyHistory: LATENCY_HISTORY_1.default,
+      LATENCY_HISTOGRAM: LATENCY_HISTOGRAM_1.default,
+      latencyHistogram: LATENCY_HISTOGRAM_1.default,
+      LATENCY_LATEST: LATENCY_LATEST_1.default,
+      latencyLatest: LATENCY_LATEST_1.default,
+      LATENCY_RESET: LATENCY_RESET_1.default,
+      latencyReset: LATENCY_RESET_1.default,
+      LCS_IDX_WITHMATCHLEN: LCS_IDX_WITHMATCHLEN_1.default,
+      lcsIdxWithMatchLen: LCS_IDX_WITHMATCHLEN_1.default,
+      LCS_IDX: LCS_IDX_1.default,
+      lcsIdx: LCS_IDX_1.default,
+      LCS_LEN: LCS_LEN_1.default,
+      lcsLen: LCS_LEN_1.default,
+      LCS: LCS_1.default,
+      lcs: LCS_1.default,
+      LINDEX: LINDEX_1.default,
+      lIndex: LINDEX_1.default,
+      LINSERT: LINSERT_1.default,
+      lInsert: LINSERT_1.default,
+      LLEN: LLEN_1.default,
+      lLen: LLEN_1.default,
+      LMOVE: LMOVE_1.default,
+      lMove: LMOVE_1.default,
+      LMPOP: LMPOP_1.default,
+      lmPop: LMPOP_1.default,
+      LOLWUT: LOLWUT_1.default,
+      LPOP_COUNT: LPOP_COUNT_1.default,
+      lPopCount: LPOP_COUNT_1.default,
+      LPOP: LPOP_1.default,
+      lPop: LPOP_1.default,
+      LPOS_COUNT: LPOS_COUNT_1.default,
+      lPosCount: LPOS_COUNT_1.default,
+      LPOS: LPOS_1.default,
+      lPos: LPOS_1.default,
+      LPUSH: LPUSH_1.default,
+      lPush: LPUSH_1.default,
+      LPUSHX: LPUSHX_1.default,
+      lPushX: LPUSHX_1.default,
+      LRANGE: LRANGE_1.default,
+      lRange: LRANGE_1.default,
+      LREM: LREM_1.default,
+      lRem: LREM_1.default,
+      LSET: LSET_1.default,
+      lSet: LSET_1.default,
+      LTRIM: LTRIM_1.default,
+      lTrim: LTRIM_1.default,
+      MEMORY_DOCTOR: MEMORY_DOCTOR_1.default,
+      memoryDoctor: MEMORY_DOCTOR_1.default,
+      "MEMORY_MALLOC-STATS": MEMORY_MALLOC_STATS_1.default,
+      memoryMallocStats: MEMORY_MALLOC_STATS_1.default,
+      MEMORY_PURGE: MEMORY_PURGE_1.default,
+      memoryPurge: MEMORY_PURGE_1.default,
+      MEMORY_STATS: MEMORY_STATS_1.default,
+      memoryStats: MEMORY_STATS_1.default,
+      MEMORY_USAGE: MEMORY_USAGE_1.default,
+      memoryUsage: MEMORY_USAGE_1.default,
+      MGET: MGET_1.default,
+      mGet: MGET_1.default,
+      MIGRATE: MIGRATE_1.default,
+      migrate: MIGRATE_1.default,
+      MODULE_LIST: MODULE_LIST_1.default,
+      moduleList: MODULE_LIST_1.default,
+      MODULE_LOAD: MODULE_LOAD_1.default,
+      moduleLoad: MODULE_LOAD_1.default,
+      MODULE_UNLOAD: MODULE_UNLOAD_1.default,
+      moduleUnload: MODULE_UNLOAD_1.default,
+      MOVE: MOVE_1.default,
+      move: MOVE_1.default,
+      MSET: MSET_1.default,
+      mSet: MSET_1.default,
+      MSETEX: MSETEX_1.default,
+      mSetEx: MSETEX_1.default,
+      MSETNX: MSETNX_1.default,
+      mSetNX: MSETNX_1.default,
+      OBJECT_ENCODING: OBJECT_ENCODING_1.default,
+      objectEncoding: OBJECT_ENCODING_1.default,
+      OBJECT_FREQ: OBJECT_FREQ_1.default,
+      objectFreq: OBJECT_FREQ_1.default,
+      OBJECT_IDLETIME: OBJECT_IDLETIME_1.default,
+      objectIdleTime: OBJECT_IDLETIME_1.default,
+      OBJECT_REFCOUNT: OBJECT_REFCOUNT_1.default,
+      objectRefCount: OBJECT_REFCOUNT_1.default,
+      PERSIST: PERSIST_1.default,
+      persist: PERSIST_1.default,
+      PEXPIRE: PEXPIRE_1.default,
+      pExpire: PEXPIRE_1.default,
+      PEXPIREAT: PEXPIREAT_1.default,
+      pExpireAt: PEXPIREAT_1.default,
+      PEXPIRETIME: PEXPIRETIME_1.default,
+      pExpireTime: PEXPIRETIME_1.default,
+      PFADD: PFADD_1.default,
+      pfAdd: PFADD_1.default,
+      PFCOUNT: PFCOUNT_1.default,
+      pfCount: PFCOUNT_1.default,
+      PFMERGE: PFMERGE_1.default,
+      pfMerge: PFMERGE_1.default,
+      PING: PING_1.default,
+      /**
+       * ping jsdoc
+       */
+      ping: PING_1.default,
+      PSETEX: PSETEX_1.default,
+      pSetEx: PSETEX_1.default,
+      PTTL: PTTL_1.default,
+      pTTL: PTTL_1.default,
+      PUBLISH: PUBLISH_1.default,
+      publish: PUBLISH_1.default,
+      PUBSUB_CHANNELS: PUBSUB_CHANNELS_1.default,
+      pubSubChannels: PUBSUB_CHANNELS_1.default,
+      PUBSUB_NUMPAT: PUBSUB_NUMPAT_1.default,
+      pubSubNumPat: PUBSUB_NUMPAT_1.default,
+      PUBSUB_NUMSUB: PUBSUB_NUMSUB_1.default,
+      pubSubNumSub: PUBSUB_NUMSUB_1.default,
+      PUBSUB_SHARDNUMSUB: PUBSUB_SHARDNUMSUB_1.default,
+      pubSubShardNumSub: PUBSUB_SHARDNUMSUB_1.default,
+      PUBSUB_SHARDCHANNELS: PUBSUB_SHARDCHANNELS_1.default,
+      pubSubShardChannels: PUBSUB_SHARDCHANNELS_1.default,
+      RANDOMKEY: RANDOMKEY_1.default,
+      randomKey: RANDOMKEY_1.default,
+      READONLY: READONLY_1.default,
+      readonly: READONLY_1.default,
+      RENAME: RENAME_1.default,
+      rename: RENAME_1.default,
+      RENAMENX: RENAMENX_1.default,
+      renameNX: RENAMENX_1.default,
+      REPLICAOF: REPLICAOF_1.default,
+      replicaOf: REPLICAOF_1.default,
+      "RESTORE-ASKING": RESTORE_ASKING_1.default,
+      restoreAsking: RESTORE_ASKING_1.default,
+      RESTORE: RESTORE_1.default,
+      restore: RESTORE_1.default,
+      RPOP_COUNT: RPOP_COUNT_1.default,
+      rPopCount: RPOP_COUNT_1.default,
+      ROLE: ROLE_1.default,
+      role: ROLE_1.default,
+      RPOP: RPOP_1.default,
+      rPop: RPOP_1.default,
+      RPOPLPUSH: RPOPLPUSH_1.default,
+      rPopLPush: RPOPLPUSH_1.default,
+      RPUSH: RPUSH_1.default,
+      rPush: RPUSH_1.default,
+      RPUSHX: RPUSHX_1.default,
+      rPushX: RPUSHX_1.default,
+      SADD: SADD_1.default,
+      sAdd: SADD_1.default,
+      SCAN: SCAN_1.default,
+      scan: SCAN_1.default,
+      SCARD: SCARD_1.default,
+      sCard: SCARD_1.default,
+      SCRIPT_DEBUG: SCRIPT_DEBUG_1.default,
+      scriptDebug: SCRIPT_DEBUG_1.default,
+      SCRIPT_EXISTS: SCRIPT_EXISTS_1.default,
+      scriptExists: SCRIPT_EXISTS_1.default,
+      SCRIPT_FLUSH: SCRIPT_FLUSH_1.default,
+      scriptFlush: SCRIPT_FLUSH_1.default,
+      SCRIPT_KILL: SCRIPT_KILL_1.default,
+      scriptKill: SCRIPT_KILL_1.default,
+      SCRIPT_LOAD: SCRIPT_LOAD_1.default,
+      scriptLoad: SCRIPT_LOAD_1.default,
+      SDIFF: SDIFF_1.default,
+      sDiff: SDIFF_1.default,
+      SDIFFSTORE: SDIFFSTORE_1.default,
+      sDiffStore: SDIFFSTORE_1.default,
+      SET: SET_1.default,
+      set: SET_1.default,
+      SETBIT: SETBIT_1.default,
+      setBit: SETBIT_1.default,
+      SETEX: SETEX_1.default,
+      setEx: SETEX_1.default,
+      SETNX: SETNX_1.default,
+      setNX: SETNX_1.default,
+      SETRANGE: SETRANGE_1.default,
+      setRange: SETRANGE_1.default,
+      SINTER: SINTER_1.default,
+      sInter: SINTER_1.default,
+      SINTERCARD: SINTERCARD_1.default,
+      sInterCard: SINTERCARD_1.default,
+      SINTERSTORE: SINTERSTORE_1.default,
+      sInterStore: SINTERSTORE_1.default,
+      SISMEMBER: SISMEMBER_1.default,
+      sIsMember: SISMEMBER_1.default,
+      SMEMBERS: SMEMBERS_1.default,
+      sMembers: SMEMBERS_1.default,
+      SMISMEMBER: SMISMEMBER_1.default,
+      smIsMember: SMISMEMBER_1.default,
+      SMOVE: SMOVE_1.default,
+      sMove: SMOVE_1.default,
+      SORT_RO: SORT_RO_1.default,
+      sortRo: SORT_RO_1.default,
+      SORT_STORE: SORT_STORE_1.default,
+      sortStore: SORT_STORE_1.default,
+      SORT: SORT_1.default,
+      sort: SORT_1.default,
+      SPOP_COUNT: SPOP_COUNT_1.default,
+      sPopCount: SPOP_COUNT_1.default,
+      SPOP: SPOP_1.default,
+      sPop: SPOP_1.default,
+      SPUBLISH: SPUBLISH_1.default,
+      sPublish: SPUBLISH_1.default,
+      SRANDMEMBER_COUNT: SRANDMEMBER_COUNT_1.default,
+      sRandMemberCount: SRANDMEMBER_COUNT_1.default,
+      SRANDMEMBER: SRANDMEMBER_1.default,
+      sRandMember: SRANDMEMBER_1.default,
+      SREM: SREM_1.default,
+      sRem: SREM_1.default,
+      SSCAN: SSCAN_1.default,
+      sScan: SSCAN_1.default,
+      STRLEN: STRLEN_1.default,
+      strLen: STRLEN_1.default,
+      SUNION: SUNION_1.default,
+      sUnion: SUNION_1.default,
+      SUNIONSTORE: SUNIONSTORE_1.default,
+      sUnionStore: SUNIONSTORE_1.default,
+      SWAPDB: SWAPDB_1.default,
+      swapDb: SWAPDB_1.default,
+      TIME: TIME_1.default,
+      time: TIME_1.default,
+      TOUCH: TOUCH_1.default,
+      touch: TOUCH_1.default,
+      TTL: TTL_1.default,
+      ttl: TTL_1.default,
+      TYPE: TYPE_1.default,
+      type: TYPE_1.default,
+      UNLINK: UNLINK_1.default,
+      unlink: UNLINK_1.default,
+      WAIT: WAIT_1.default,
+      wait: WAIT_1.default,
+      XACK: XACK_1.default,
+      xAck: XACK_1.default,
+      XACKDEL: XACKDEL_1.default,
+      xAckDel: XACKDEL_1.default,
+      XADD_NOMKSTREAM: XADD_NOMKSTREAM_1.default,
+      xAddNoMkStream: XADD_NOMKSTREAM_1.default,
+      XADD: XADD_1.default,
+      xAdd: XADD_1.default,
+      XAUTOCLAIM_JUSTID: XAUTOCLAIM_JUSTID_1.default,
+      xAutoClaimJustId: XAUTOCLAIM_JUSTID_1.default,
+      XAUTOCLAIM: XAUTOCLAIM_1.default,
+      xAutoClaim: XAUTOCLAIM_1.default,
+      XCLAIM_JUSTID: XCLAIM_JUSTID_1.default,
+      xClaimJustId: XCLAIM_JUSTID_1.default,
+      XCLAIM: XCLAIM_1.default,
+      xClaim: XCLAIM_1.default,
+      XCFGSET: XCFGSET_1.default,
+      xCfgSet: XCFGSET_1.default,
+      XDEL: XDEL_1.default,
+      xDel: XDEL_1.default,
+      XDELEX: XDELEX_1.default,
+      xDelEx: XDELEX_1.default,
+      XGROUP_CREATE: XGROUP_CREATE_1.default,
+      xGroupCreate: XGROUP_CREATE_1.default,
+      XGROUP_CREATECONSUMER: XGROUP_CREATECONSUMER_1.default,
+      xGroupCreateConsumer: XGROUP_CREATECONSUMER_1.default,
+      XGROUP_DELCONSUMER: XGROUP_DELCONSUMER_1.default,
+      xGroupDelConsumer: XGROUP_DELCONSUMER_1.default,
+      XGROUP_DESTROY: XGROUP_DESTROY_1.default,
+      xGroupDestroy: XGROUP_DESTROY_1.default,
+      XGROUP_SETID: XGROUP_SETID_1.default,
+      xGroupSetId: XGROUP_SETID_1.default,
+      XINFO_CONSUMERS: XINFO_CONSUMERS_1.default,
+      xInfoConsumers: XINFO_CONSUMERS_1.default,
+      XINFO_GROUPS: XINFO_GROUPS_1.default,
+      xInfoGroups: XINFO_GROUPS_1.default,
+      XINFO_STREAM: XINFO_STREAM_1.default,
+      xInfoStream: XINFO_STREAM_1.default,
+      XLEN: XLEN_1.default,
+      xLen: XLEN_1.default,
+      XPENDING_RANGE: XPENDING_RANGE_1.default,
+      xPendingRange: XPENDING_RANGE_1.default,
+      XPENDING: XPENDING_1.default,
+      xPending: XPENDING_1.default,
+      XRANGE: XRANGE_1.default,
+      xRange: XRANGE_1.default,
+      XREAD: XREAD_1.default,
+      xRead: XREAD_1.default,
+      XREADGROUP: XREADGROUP_1.default,
+      xReadGroup: XREADGROUP_1.default,
+      XREVRANGE: XREVRANGE_1.default,
+      xRevRange: XREVRANGE_1.default,
+      XSETID: XSETID_1.default,
+      xSetId: XSETID_1.default,
+      XTRIM: XTRIM_1.default,
+      xTrim: XTRIM_1.default,
+      ZADD_INCR: ZADD_INCR_1.default,
+      zAddIncr: ZADD_INCR_1.default,
+      ZADD: ZADD_1.default,
+      zAdd: ZADD_1.default,
+      ZCARD: ZCARD_1.default,
+      zCard: ZCARD_1.default,
+      ZCOUNT: ZCOUNT_1.default,
+      zCount: ZCOUNT_1.default,
+      ZDIFF_WITHSCORES: ZDIFF_WITHSCORES_1.default,
+      zDiffWithScores: ZDIFF_WITHSCORES_1.default,
+      ZDIFF: ZDIFF_1.default,
+      zDiff: ZDIFF_1.default,
+      ZDIFFSTORE: ZDIFFSTORE_1.default,
+      zDiffStore: ZDIFFSTORE_1.default,
+      ZINCRBY: ZINCRBY_1.default,
+      zIncrBy: ZINCRBY_1.default,
+      ZINTER_WITHSCORES: ZINTER_WITHSCORES_1.default,
+      zInterWithScores: ZINTER_WITHSCORES_1.default,
+      ZINTER: ZINTER_1.default,
+      zInter: ZINTER_1.default,
+      ZINTERCARD: ZINTERCARD_1.default,
+      zInterCard: ZINTERCARD_1.default,
+      ZINTERSTORE: ZINTERSTORE_1.default,
+      zInterStore: ZINTERSTORE_1.default,
+      ZLEXCOUNT: ZLEXCOUNT_1.default,
+      zLexCount: ZLEXCOUNT_1.default,
+      ZMPOP: ZMPOP_1.default,
+      zmPop: ZMPOP_1.default,
+      ZMSCORE: ZMSCORE_1.default,
+      zmScore: ZMSCORE_1.default,
+      ZPOPMAX_COUNT: ZPOPMAX_COUNT_1.default,
+      zPopMaxCount: ZPOPMAX_COUNT_1.default,
+      ZPOPMAX: ZPOPMAX_1.default,
+      zPopMax: ZPOPMAX_1.default,
+      ZPOPMIN_COUNT: ZPOPMIN_COUNT_1.default,
+      zPopMinCount: ZPOPMIN_COUNT_1.default,
+      ZPOPMIN: ZPOPMIN_1.default,
+      zPopMin: ZPOPMIN_1.default,
+      ZRANDMEMBER_COUNT_WITHSCORES: ZRANDMEMBER_COUNT_WITHSCORES_1.default,
+      zRandMemberCountWithScores: ZRANDMEMBER_COUNT_WITHSCORES_1.default,
+      ZRANDMEMBER_COUNT: ZRANDMEMBER_COUNT_1.default,
+      zRandMemberCount: ZRANDMEMBER_COUNT_1.default,
+      ZRANDMEMBER: ZRANDMEMBER_1.default,
+      zRandMember: ZRANDMEMBER_1.default,
+      ZRANGE_WITHSCORES: ZRANGE_WITHSCORES_1.default,
+      zRangeWithScores: ZRANGE_WITHSCORES_1.default,
+      ZRANGE: ZRANGE_1.default,
+      zRange: ZRANGE_1.default,
+      ZRANGEBYLEX: ZRANGEBYLEX_1.default,
+      zRangeByLex: ZRANGEBYLEX_1.default,
+      ZRANGEBYSCORE_WITHSCORES: ZRANGEBYSCORE_WITHSCORES_1.default,
+      zRangeByScoreWithScores: ZRANGEBYSCORE_WITHSCORES_1.default,
+      ZRANGEBYSCORE: ZRANGEBYSCORE_1.default,
+      zRangeByScore: ZRANGEBYSCORE_1.default,
+      ZRANGESTORE: ZRANGESTORE_1.default,
+      zRangeStore: ZRANGESTORE_1.default,
+      ZRANK_WITHSCORE: ZRANK_WITHSCORE_1.default,
+      zRankWithScore: ZRANK_WITHSCORE_1.default,
+      ZRANK: ZRANK_1.default,
+      zRank: ZRANK_1.default,
+      ZREM: ZREM_1.default,
+      zRem: ZREM_1.default,
+      ZREMRANGEBYLEX: ZREMRANGEBYLEX_1.default,
+      zRemRangeByLex: ZREMRANGEBYLEX_1.default,
+      ZREMRANGEBYRANK: ZREMRANGEBYRANK_1.default,
+      zRemRangeByRank: ZREMRANGEBYRANK_1.default,
+      ZREMRANGEBYSCORE: ZREMRANGEBYSCORE_1.default,
+      zRemRangeByScore: ZREMRANGEBYSCORE_1.default,
+      ZREVRANK: ZREVRANK_1.default,
+      zRevRank: ZREVRANK_1.default,
+      ZSCAN: ZSCAN_1.default,
+      zScan: ZSCAN_1.default,
+      ZSCORE: ZSCORE_1.default,
+      zScore: ZSCORE_1.default,
+      ZUNION_WITHSCORES: ZUNION_WITHSCORES_1.default,
+      zUnionWithScores: ZUNION_WITHSCORES_1.default,
+      ZUNION: ZUNION_1.default,
+      zUnion: ZUNION_1.default,
+      ZUNIONSTORE: ZUNIONSTORE_1.default,
+      zUnionStore: ZUNIONSTORE_1.default,
+      VADD: VADD_1.default,
+      vAdd: VADD_1.default,
+      VCARD: VCARD_1.default,
+      vCard: VCARD_1.default,
+      VDIM: VDIM_1.default,
+      vDim: VDIM_1.default,
+      VEMB: VEMB_1.default,
+      vEmb: VEMB_1.default,
+      VEMB_RAW: VEMB_RAW_1.default,
+      vEmbRaw: VEMB_RAW_1.default,
+      VGETATTR: VGETATTR_1.default,
+      vGetAttr: VGETATTR_1.default,
+      VINFO: VINFO_1.default,
+      vInfo: VINFO_1.default,
+      VLINKS: VLINKS_1.default,
+      vLinks: VLINKS_1.default,
+      VLINKS_WITHSCORES: VLINKS_WITHSCORES_1.default,
+      vLinksWithScores: VLINKS_WITHSCORES_1.default,
+      VRANDMEMBER: VRANDMEMBER_1.default,
+      vRandMember: VRANDMEMBER_1.default,
+      VRANGE: VRANGE_1.default,
+      vRange: VRANGE_1.default,
+      VREM: VREM_1.default,
+      vRem: VREM_1.default,
+      VSETATTR: VSETATTR_1.default,
+      vSetAttr: VSETATTR_1.default,
+      VSIM: VSIM_1.default,
+      vSim: VSIM_1.default,
+      VSIM_WITHSCORES: VSIM_WITHSCORES_1.default,
+      vSimWithScores: VSIM_WITHSCORES_1.default
+    };
+    var index_1 = __importDefault(require_commands());
+    var { HOTKEYS_GET: _HOTKEYS_GET, hotkeysGet: _hotkeysGet, HOTKEYS_RESET: _HOTKEYS_RESET, hotkeysReset: _hotkeysReset, HOTKEYS_START: _HOTKEYS_START, hotkeysStart: _hotkeysStart, HOTKEYS_STOP: _HOTKEYS_STOP, hotkeysStop: _hotkeysStop, ...NON_STICKY_COMMANDS } = index_1.default;
+    exports.NON_STICKY_COMMANDS = NON_STICKY_COMMANDS;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/tracing.js
+var require_tracing = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/tracing.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.publish = exports.getChannel = exports.trace = exports.getTracingChannel = exports.sanitizeArgs = exports.CHANNELS = void 0;
+    var dc = (() => {
+      try {
+        return "getBuiltinModule" in process ? process.getBuiltinModule("node:diagnostics_channel") : __require("node:diagnostics_channel");
+      } catch {
+        return void 0;
+      }
+    })();
+    var hasTracingChannel = typeof dc?.tracingChannel === "function";
+    exports.CHANNELS = {
+      // TracingChannel (async lifecycle)
+      TRACE_COMMAND: "node-redis:command",
+      TRACE_BATCH: "node-redis:batch",
+      TRACE_CONNECT: "node-redis:connect",
+      // Point events (fire-and-forget)
+      CONNECTION_READY: "node-redis:connection:ready",
+      CONNECTION_CLOSED: "node-redis:connection:closed",
+      CONNECTION_RELAXED_TIMEOUT: "node-redis:connection:relaxed-timeout",
+      CONNECTION_HANDOFF: "node-redis:connection:handoff",
+      ERROR: "node-redis:error",
+      MAINTENANCE: "node-redis:maintenance",
+      PUBSUB: "node-redis:pubsub",
+      CACHE_REQUEST: "node-redis:cache:request",
+      CACHE_EVICTION: "node-redis:cache:eviction",
+      COMMAND_REPLY: "node-redis:command:reply",
+      POOL_CONNECTION_WAIT: "node-redis:pool:connection-wait"
+    };
+    var SERIALIZATION_SUBSETS = [
+      { regex: /^ECHO/i, args: 0 },
+      { regex: /^(LPUSH|MSET|PFA|PUBLISH|RPUSH|SADD|SET|SPUBLISH|XADD|ZADD)/i, args: 1 },
+      { regex: /^(HSET|HMSET|LSET|LINSERT)/i, args: 2 },
+      { regex: /^(ACL|BIT|B[LRZ]|CLIENT|CLUSTER|CONFIG|COMMAND|DECR|DEL|EVAL|EX|FUNCTION|GEO|GET|HINCR|HMGET|HSCAN|INCR|L[TRLM]|MEMORY|P[EFISTU]|RPOP|S[CDIMORSU]|XACK|X[CDGILPRT]|Z[CDILMPRS])/i, args: -1 }
+    ];
+    function sanitizeArgs(args) {
+      if (args.length === 0)
+        return [];
+      const commandName = String(args[0]);
+      let allowedArgCount = 0;
+      for (const subset of SERIALIZATION_SUBSETS) {
+        if (subset.regex.test(commandName)) {
+          allowedArgCount = subset.args;
+          break;
+        }
+      }
+      if (allowedArgCount === -1) {
+        return args.map((a) => String(a));
+      }
+      const result = [commandName];
+      for (let i = 1; i < args.length; i++) {
+        if (i <= allowedArgCount) {
+          result.push(String(args[i]));
+        } else {
+          result.push("?");
+        }
+      }
+      return result;
+    }
+    exports.sanitizeArgs = sanitizeArgs;
+    var tracingChannels = hasTracingChannel ? {
+      [exports.CHANNELS.TRACE_COMMAND]: dc.tracingChannel(exports.CHANNELS.TRACE_COMMAND),
+      [exports.CHANNELS.TRACE_BATCH]: dc.tracingChannel(exports.CHANNELS.TRACE_BATCH),
+      [exports.CHANNELS.TRACE_CONNECT]: dc.tracingChannel(exports.CHANNELS.TRACE_CONNECT)
+    } : void 0;
+    function getTracingChannel(name) {
+      return tracingChannels?.[name];
+    }
+    exports.getTracingChannel = getTracingChannel;
+    function trace(name, fn, contextFactory) {
+      const channel = tracingChannels?.[name];
+      if (channel && channel.hasSubscribers !== false) {
+        return channel.tracePromise(fn, contextFactory());
+      }
+      return fn();
+    }
+    exports.trace = trace;
+    var pointChannels = dc?.channel ? {
+      [exports.CHANNELS.CONNECTION_READY]: dc.channel(exports.CHANNELS.CONNECTION_READY),
+      [exports.CHANNELS.CONNECTION_CLOSED]: dc.channel(exports.CHANNELS.CONNECTION_CLOSED),
+      [exports.CHANNELS.CONNECTION_RELAXED_TIMEOUT]: dc.channel(exports.CHANNELS.CONNECTION_RELAXED_TIMEOUT),
+      [exports.CHANNELS.CONNECTION_HANDOFF]: dc.channel(exports.CHANNELS.CONNECTION_HANDOFF),
+      [exports.CHANNELS.ERROR]: dc.channel(exports.CHANNELS.ERROR),
+      [exports.CHANNELS.MAINTENANCE]: dc.channel(exports.CHANNELS.MAINTENANCE),
+      [exports.CHANNELS.PUBSUB]: dc.channel(exports.CHANNELS.PUBSUB),
+      [exports.CHANNELS.CACHE_REQUEST]: dc.channel(exports.CHANNELS.CACHE_REQUEST),
+      [exports.CHANNELS.CACHE_EVICTION]: dc.channel(exports.CHANNELS.CACHE_EVICTION),
+      [exports.CHANNELS.COMMAND_REPLY]: dc.channel(exports.CHANNELS.COMMAND_REPLY),
+      [exports.CHANNELS.POOL_CONNECTION_WAIT]: dc.channel(exports.CHANNELS.POOL_CONNECTION_WAIT)
+    } : void 0;
+    function getChannel(name) {
+      return pointChannels?.[name];
+    }
+    exports.getChannel = getChannel;
+    function publish(name, factory) {
+      const ch = pointChannels?.[name];
+      if (ch?.hasSubscribers) {
+        ch.publish(factory());
+      }
+    }
+    exports.publish = publish;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/enterprise-maintenance-manager.js
+var require_enterprise_maintenance_manager = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/enterprise-maintenance-manager.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var _a;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.emitDiagnostics = exports.dbgMaintenance = exports.MAINTENANCE_EVENTS = exports.SMIGRATED_EVENT = void 0;
+    var net_1 = __require("net");
+    var promises_1 = __require("dns/promises");
+    var node_assert_1 = __importDefault(__require("node:assert"));
+    var promises_2 = __require("node:timers/promises");
+    var node_diagnostics_channel_1 = __importDefault(__require("node:diagnostics_channel"));
+    var tracing_1 = require_tracing();
+    exports.SMIGRATED_EVENT = "__SMIGRATED";
+    exports.MAINTENANCE_EVENTS = {
+      PAUSE_WRITING: "pause-writing",
+      RESUME_WRITING: "resume-writing",
+      TIMEOUTS_UPDATE: "timeouts-update"
+    };
+    var PN = {
+      MOVING: "MOVING",
+      MIGRATING: "MIGRATING",
+      MIGRATED: "MIGRATED",
+      FAILING_OVER: "FAILING_OVER",
+      FAILED_OVER: "FAILED_OVER",
+      SMIGRATING: "SMIGRATING",
+      SMIGRATED: "SMIGRATED"
+    };
+    var dbgMaintenance = (...args) => {
+      if (!process.env.REDIS_DEBUG_MAINTENANCE)
+        return;
+      return console.log((/* @__PURE__ */ new Date()).toISOString().slice(11, 23), "[MNT]", ...args);
+    };
+    exports.dbgMaintenance = dbgMaintenance;
+    var emitDiagnostics = (event) => {
+      if (!process.env.REDIS_EMIT_DIAGNOSTICS)
+        return;
+      const channel = node_diagnostics_channel_1.default.channel("redis.maintenance");
+      channel.publish(event);
+    };
+    exports.emitDiagnostics = emitDiagnostics;
+    var EnterpriseMaintenanceManager = class {
+      #commandsQueue;
+      #options;
+      #isMaintenance = 0;
+      #client;
+      static setupDefaultMaintOptions(options) {
+        if (options.maintNotifications === void 0) {
+          options.maintNotifications = options?.RESP === 3 ? "auto" : "disabled";
+        }
+        if (options.maintEndpointType === void 0) {
+          options.maintEndpointType = "auto";
+        }
+        if (options.maintRelaxedSocketTimeout === void 0) {
+          options.maintRelaxedSocketTimeout = 1e4;
+        }
+        if (options.maintRelaxedCommandTimeout === void 0) {
+          options.maintRelaxedCommandTimeout = 1e4;
+        }
+      }
+      static async getHandshakeCommand(options, clientId) {
+        if (options.maintNotifications === "disabled")
+          return;
+        const host = options.url ? new URL(options.url).hostname : options.socket?.host;
+        if (!host)
+          return;
+        const tls = options.socket?.tls ?? false;
+        const movingEndpointType = await determineEndpoint(tls, host, options);
+        return {
+          cmd: [
+            "CLIENT",
+            "MAINT_NOTIFICATIONS",
+            "ON",
+            "moving-endpoint-type",
+            movingEndpointType
+          ],
+          errorHandler: (error2) => {
+            (0, exports.dbgMaintenance)("handshake failed:", error2);
+            (0, tracing_1.publish)(tracing_1.CHANNELS.ERROR, () => ({
+              error: error2,
+              origin: "client",
+              internal: true,
+              clientId
+            }));
+            if (options.maintNotifications === "enabled") {
+              throw error2;
+            }
+          }
+        };
+      }
+      constructor(commandsQueue, client, options) {
+        this.#commandsQueue = commandsQueue;
+        this.#options = options;
+        this.#client = client;
+        this.#commandsQueue.addPushHandler(this.#onPush);
+      }
+      #onPush = (push) => {
+        (0, exports.dbgMaintenance)("ONPUSH:", push.map(String));
+        if (!Array.isArray(push) || !Object.values(PN).includes(String(push[0]))) {
+          return false;
+        }
+        const type = String(push[0]);
+        (0, tracing_1.publish)(tracing_1.CHANNELS.MAINTENANCE, () => ({
+          notification: type,
+          clientId: this.#client._clientId
+        }));
+        (0, exports.emitDiagnostics)({
+          type,
+          timestamp: Date.now(),
+          data: {
+            push: push.map(String)
+          }
+        });
+        switch (type) {
+          case PN.MOVING: {
+            const afterSeconds = push[2];
+            const url = push[3] ? String(push[3]) : null;
+            (0, exports.dbgMaintenance)("Received MOVING:", afterSeconds, url);
+            this.#onMoving(afterSeconds, url);
+            return true;
+          }
+          case PN.MIGRATING:
+          case PN.SMIGRATING:
+          case PN.FAILING_OVER: {
+            (0, exports.dbgMaintenance)("Received MIGRATING|SMIGRATING|FAILING_OVER");
+            this.#onMigrating();
+            return true;
+          }
+          case PN.MIGRATED:
+          case PN.FAILED_OVER: {
+            (0, exports.dbgMaintenance)("Received MIGRATED|FAILED_OVER");
+            this.#onMigrated();
+            return true;
+          }
+          case PN.SMIGRATED: {
+            (0, exports.dbgMaintenance)("Received SMIGRATED");
+            this.#onSMigrated(push);
+            this.#onMigrated();
+            return true;
+          }
+        }
+        return false;
+      };
+      //  Queue:
+      //     toWrite [ C D E ]
+      //     waitingForReply [ A B ]   - aka In-flight commands
+      //
+      //  time: ---1-2---3-4-5-6---------------------------
+      //
+      //  1. [EVENT] MOVING PN received
+      //  2. [ACTION] Pause writing ( we need to wait for new socket to connect and for all in-flight commands to complete )
+      //  3. [EVENT] New socket connected
+      //  4. [EVENT] In-flight commands completed
+      //  5. [ACTION] Destroy old socket
+      //  6. [ACTION] Resume writing -> we are going to write to the new socket from now on
+      #onMoving = async (afterSeconds, url) => {
+        this.#onMigrating();
+        let host;
+        let port;
+        if (url === null) {
+          (0, node_assert_1.default)(this.#options.maintEndpointType === "none");
+          const { host: h, port: p } = this.#getAddress();
+          host = h;
+          port = p;
+          const waitTime = afterSeconds * 1e3 / 2;
+          (0, exports.dbgMaintenance)(`Wait for ${waitTime}ms`);
+          await (0, promises_2.setTimeout)(waitTime);
+        } else {
+          const split = url.split(":");
+          host = split[0];
+          port = Number(split[1]);
+        }
+        (0, exports.dbgMaintenance)("Pausing writing of new commands to old socket");
+        this.#client._pause();
+        (0, exports.dbgMaintenance)("Creating new tmp client");
+        let start = performance.now();
+        if (this.#options.url) {
+          const u = new URL(this.#options.url);
+          u.hostname = host;
+          u.port = String(port);
+          this.#options.url = u.toString();
+        } else {
+          this.#options.socket = {
+            ...this.#options.socket,
+            host,
+            port
+          };
+        }
+        const tmpClient = this.#client.duplicate();
+        tmpClient.on("error", (error2) => {
+          (0, exports.dbgMaintenance)(`[ERR]`, error2);
+        });
+        (0, exports.dbgMaintenance)(`Tmp client created in ${(performance.now() - start).toFixed(2)}ms`);
+        (0, exports.dbgMaintenance)(`Set timeout for tmp client to ${this.#options.maintRelaxedSocketTimeout}`);
+        tmpClient._maintenanceUpdate({
+          relaxedCommandTimeout: this.#options.maintRelaxedCommandTimeout,
+          relaxedSocketTimeout: this.#options.maintRelaxedSocketTimeout
+        });
+        (0, exports.dbgMaintenance)(`Connecting tmp client: ${host}:${port}`);
+        start = performance.now();
+        await tmpClient.connect();
+        (0, exports.dbgMaintenance)(`Connected to tmp client in ${(performance.now() - start).toFixed(2)}ms`);
+        (0, exports.dbgMaintenance)(`Wait for all in-flight commands to complete`);
+        await this.#commandsQueue.waitForInflightCommandsToComplete();
+        (0, exports.dbgMaintenance)(`In-flight commands completed`);
+        (0, exports.dbgMaintenance)("Swap client sockets...");
+        const oldSocket = this.#client._ejectSocket();
+        const newSocket = tmpClient._ejectSocket();
+        this.#client._insertSocket(newSocket);
+        tmpClient._insertSocket(oldSocket);
+        tmpClient.destroy();
+        (0, exports.dbgMaintenance)("Swap client sockets done.");
+        (0, exports.dbgMaintenance)("Resume writing");
+        this.#client._unpause();
+        this.#onMigrated();
+        (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_HANDOFF, () => ({ clientId: this.#client._clientId }));
+      };
+      #onMigrating = () => {
+        this.#isMaintenance++;
+        if (this.#isMaintenance > 1) {
+          (0, exports.dbgMaintenance)(`Timeout relaxation already done`);
+          return;
+        }
+        const update = {
+          relaxedCommandTimeout: this.#options.maintRelaxedCommandTimeout,
+          relaxedSocketTimeout: this.#options.maintRelaxedSocketTimeout
+        };
+        this.#client._maintenanceUpdate(update);
+      };
+      #onMigrated = () => {
+        this.#isMaintenance = Math.max(this.#isMaintenance - 1, 0);
+        if (this.#isMaintenance > 0) {
+          (0, exports.dbgMaintenance)(`Not ready to unrelax timeouts yet`);
+          return;
+        }
+        const update = {
+          relaxedCommandTimeout: void 0,
+          relaxedSocketTimeout: void 0
+        };
+        this.#client._maintenanceUpdate(update);
+      };
+      #onSMigrated = (push) => {
+        const smigratedEvent = _a.parseSMigratedPush(push);
+        (0, exports.dbgMaintenance)(`emit smigratedEvent`, smigratedEvent);
+        this.#client._handleSmigrated(smigratedEvent);
+      };
+      /**
+       * Parses an SMIGRATED push message into a structured SMigratedEvent.
+       *
+       * SMIGRATED format:
+       * - SMIGRATED, "seqid", followed by a list of N triplets:
+       *     - source endpoint
+       *     - target endpoint
+       *     - comma separated list of slot ranges
+       *
+       * A source and a target endpoint may appear in multiple triplets.
+       * There is no optimization of the source, dest, slot-range list in the SMIGRATED message.
+       * The client code should read through the entire list of triplets in order to get a full
+       * list of moved slots, or full list of sources and targets.
+       *
+       * Example:
+       * [ 'SMIGRATED', 15, [ [ '127.0.0.1:6379', '127.0.0.2:6379', '123,456,789-1000' ], [ '127.0.0.3:6380', '127.0.0.4:6380', '124,457,300-500' ] ] ]
+       *                ^seq     ^source1          ^destination1     ^slots                  ^source2          ^destination2    ^slots
+       *
+       * Result structure guarantees:
+       * - Each source address appears in exactly one entry (entries are deduplicated by source)
+       * - Within each entry, each destination address appears exactly once (destinations are deduplicated per source)
+       * - Each destination contains the complete list of slots that moved from that source to that destination
+       * - Note: The same destination address CAN appear under different sources (e.g., node X receives slots from both A and B)
+       */
+      static parseSMigratedPush(push) {
+        const map = /* @__PURE__ */ new Map();
+        for (const [src, destination, slots] of push[2]) {
+          const source = String(src);
+          const [dHost, dPort] = String(destination).split(":");
+          const parsedSlots = String(slots).split(",").map((singleOrRange) => {
+            const separatorIndex = singleOrRange.indexOf("-");
+            if (separatorIndex === -1) {
+              return Number(singleOrRange);
+            }
+            return [Number(singleOrRange.substring(0, separatorIndex)), Number(singleOrRange.substring(separatorIndex + 1))];
+          });
+          const destinations = map.get(source) ?? [];
+          const dest = destinations.find((d) => d.addr.host === dHost && d.addr.port === Number(dPort));
+          if (dest) {
+            dest.slots = dest.slots.concat(parsedSlots);
+          } else {
+            destinations.push({
+              addr: {
+                host: dHost,
+                port: Number(dPort)
+              },
+              slots: parsedSlots
+            });
+          }
+          map.set(source, destinations);
+        }
+        const entries = [];
+        for (const [src, destinations] of map.entries()) {
+          const [host, port] = src.split(":");
+          entries.push({
+            source: {
+              host,
+              port: Number(port)
+            },
+            destinations
+          });
+        }
+        return {
+          seqId: push[1],
+          entries
+        };
+      }
+      #getAddress() {
+        (0, node_assert_1.default)(this.#options.socket !== void 0);
+        (0, node_assert_1.default)("host" in this.#options.socket);
+        (0, node_assert_1.default)(typeof this.#options.socket.host === "string");
+        const host = this.#options.socket.host;
+        (0, node_assert_1.default)(typeof this.#options.socket.port === "number");
+        const port = this.#options.socket.port;
+        return { host, port };
+      }
+    };
+    _a = EnterpriseMaintenanceManager;
+    exports.default = EnterpriseMaintenanceManager;
+    function isPrivateIP(ip) {
+      const version2 = (0, net_1.isIP)(ip);
+      if (version2 === 4) {
+        const octets = ip.split(".").map(Number);
+        return octets[0] === 10 || octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31 || octets[0] === 192 && octets[1] === 168;
+      }
+      if (version2 === 6) {
+        return ip.startsWith("fc") || // Unique local
+        ip.startsWith("fd") || // Unique local
+        ip === "::1" || // Loopback
+        ip.startsWith("fe80");
+      }
+      return false;
+    }
+    async function determineEndpoint(tlsEnabled, host, options) {
+      (0, node_assert_1.default)(options.maintEndpointType !== void 0);
+      if (options.maintEndpointType !== "auto") {
+        (0, exports.dbgMaintenance)(`Determine endpoint type: ${options.maintEndpointType}`);
+        return options.maintEndpointType;
+      }
+      const ip = (0, net_1.isIP)(host) ? host : (await (0, promises_1.lookup)(host, { family: 0 })).address;
+      const isPrivate = isPrivateIP(ip);
+      let result;
+      if (tlsEnabled) {
+        result = isPrivate ? "internal-fqdn" : "external-fqdn";
+      } else {
+        result = isPrivate ? "internal-ip" : "external-ip";
+      }
+      (0, exports.dbgMaintenance)(`Determine endpoint type: ${result}`);
+      return result;
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/socket.js
+var require_socket = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/socket.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var node_events_1 = __require("node:events");
+    var node_net_1 = __importDefault(__require("node:net"));
+    var node_tls_1 = __importDefault(__require("node:tls"));
+    var errors_1 = require_errors2();
+    var promises_1 = __require("node:timers/promises");
+    var enterprise_maintenance_manager_1 = require_enterprise_maintenance_manager();
+    var tracing_1 = require_tracing();
+    var RedisSocket = class extends node_events_1.EventEmitter {
+      #initiator;
+      #connectTimeout;
+      #reconnectStrategy;
+      #socketFactory;
+      #socketTimeout;
+      #clientId;
+      #maintenanceTimeout;
+      #socket;
+      #isOpen = false;
+      get isOpen() {
+        return this.#isOpen;
+      }
+      #isReady = false;
+      get isReady() {
+        return this.#isReady;
+      }
+      #isSocketUnrefed = false;
+      #socketEpoch = 0;
+      get socketEpoch() {
+        return this.#socketEpoch;
+      }
+      get host() {
+        return this.#socket?.remoteAddress;
+      }
+      get port() {
+        return this.#socket?.remotePort;
+      }
+      constructor(initiator, clientId, options) {
+        super();
+        this.#initiator = initiator;
+        this.#connectTimeout = options?.connectTimeout ?? 5e3;
+        this.#reconnectStrategy = this.#createReconnectStrategy(options);
+        this.#socketFactory = this.#createSocketFactory(options);
+        this.#socketTimeout = options?.socketTimeout;
+        this.#clientId = clientId;
+      }
+      #createReconnectStrategy(options) {
+        const strategy = options?.reconnectStrategy;
+        if (strategy === false || typeof strategy === "number") {
+          return () => strategy;
+        }
+        if (strategy) {
+          return (retries, cause) => {
+            try {
+              const retryIn = strategy(retries, cause);
+              if (retryIn !== false && !(retryIn instanceof Error) && typeof retryIn !== "number") {
+                throw new TypeError(`Reconnect strategy should return \`false | Error | number\`, got ${retryIn} instead`);
+              }
+              return retryIn;
+            } catch (err) {
+              this.emit("error", err);
+              return this.defaultReconnectStrategy(retries, err);
+            }
+          };
+        }
+        return this.defaultReconnectStrategy;
+      }
+      #createSocketFactory(options) {
+        if (options?.tls === true) {
+          const withDefaults2 = {
+            ...options,
+            port: options?.port ?? 6379,
+            // https://nodejs.org/api/tls.html#tlsconnectoptions-callback "Any socket.connect() option not already listed"
+            // @types/node is... incorrect...
+            // @ts-expect-error
+            noDelay: options?.noDelay ?? true,
+            // https://nodejs.org/api/tls.html#tlsconnectoptions-callback "Any socket.connect() option not already listed"
+            // @types/node is... incorrect...
+            // @ts-expect-error
+            keepAlive: options?.keepAlive ?? true,
+            // https://nodejs.org/api/tls.html#tlsconnectoptions-callback "Any socket.connect() option not already listed"
+            // @types/node is... incorrect...
+            // @ts-expect-error
+            keepAliveInitialDelay: options?.keepAliveInitialDelay ?? 5e3,
+            timeout: void 0,
+            onread: void 0,
+            readable: true,
+            writable: true
+          };
+          return {
+            create() {
+              return node_tls_1.default.connect(withDefaults2);
+            },
+            event: "secureConnect"
+          };
+        }
+        if (options && "path" in options) {
+          const withDefaults2 = {
+            ...options,
+            timeout: void 0,
+            onread: void 0,
+            readable: true,
+            writable: true
+          };
+          return {
+            create() {
+              return node_net_1.default.createConnection(withDefaults2);
+            },
+            event: "connect"
+          };
+        }
+        const withDefaults = {
+          ...options,
+          port: options?.port ?? 6379,
+          noDelay: options?.noDelay ?? true,
+          keepAlive: options?.keepAlive ?? true,
+          keepAliveInitialDelay: options?.keepAliveInitialDelay ?? 5e3,
+          timeout: void 0,
+          onread: void 0,
+          readable: true,
+          writable: true
+        };
+        return {
+          create() {
+            return node_net_1.default.createConnection(withDefaults);
+          },
+          event: "connect"
+        };
+      }
+      #shouldReconnect(retries, cause) {
+        const retryIn = this.#reconnectStrategy(retries, cause);
+        if (retryIn === false) {
+          this.#isOpen = false;
+          this.emit("error", cause);
+          return cause;
+        } else if (retryIn instanceof Error) {
+          this.#isOpen = false;
+          this.emit("error", cause);
+          return new errors_1.ReconnectStrategyError(retryIn, cause);
+        }
+        return retryIn;
+      }
+      async connect() {
+        if (this.#isOpen) {
+          throw new Error("Socket already opened");
+        }
+        this.#isOpen = true;
+        return this.#connect();
+      }
+      async #connect() {
+        let retries = 0;
+        do {
+          try {
+            const connectStartTime = performance.now();
+            this.#socket = await this.#createSocket();
+            this.emit("connect");
+            try {
+              await this.#initiator();
+              if (!this.#socket || this.#socket.destroyed || !this.#socket.readable || !this.#socket.writable) {
+                const retryIn = this.#shouldReconnect(retries++, new errors_1.SocketClosedUnexpectedlyError());
+                if (typeof retryIn !== "number") {
+                  throw retryIn;
+                }
+                await (0, promises_1.setTimeout)(retryIn);
+                this.emit("reconnecting");
+                continue;
+              }
+            } catch (err) {
+              this.#socket.destroy();
+              this.#socket = void 0;
+              throw err;
+            }
+            this.#isReady = true;
+            this.#socketEpoch++;
+            (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_READY, () => ({
+              clientId: this.#clientId,
+              serverAddress: this.host,
+              serverPort: this.port,
+              createTimeMs: performance.now() - connectStartTime
+            }));
+            this.emit("ready");
+          } catch (err) {
+            const retryIn = this.#shouldReconnect(retries++, err);
+            if (typeof retryIn !== "number") {
+              throw retryIn;
+            }
+            this.emit("error", err);
+            await (0, promises_1.setTimeout)(retryIn);
+            this.emit("reconnecting");
+          }
+        } while (this.#isOpen && !this.#isReady);
+      }
+      setMaintenanceTimeout(ms) {
+        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Set socket timeout to ${ms}`);
+        if (this.#maintenanceTimeout === ms) {
+          (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Socket already set maintenanceCommandTimeout to ${ms}, skipping`);
+          return;
+        }
+        ;
+        this.#maintenanceTimeout = ms;
+        if (ms !== void 0) {
+          this.#socket?.setTimeout(ms);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_RELAXED_TIMEOUT, () => ({ clientId: this.#clientId, value: 1 }));
+        } else {
+          this.#socket?.setTimeout(this.#socketTimeout ?? 0);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_RELAXED_TIMEOUT, () => ({ clientId: this.#clientId, value: -1 }));
+        }
+      }
+      async #createSocket() {
+        const socket = this.#socketFactory.create();
+        let onTimeout;
+        if (this.#connectTimeout !== void 0) {
+          onTimeout = () => socket.destroy(new errors_1.ConnectionTimeoutError());
+          socket.once("timeout", onTimeout);
+          socket.setTimeout(this.#connectTimeout);
+        }
+        if (this.#isSocketUnrefed) {
+          socket.unref();
+        }
+        await (0, node_events_1.once)(socket, this.#socketFactory.event);
+        if (onTimeout) {
+          socket.removeListener("timeout", onTimeout);
+        }
+        if (this.#socketTimeout) {
+          socket.once("timeout", () => {
+            const error2 = this.#maintenanceTimeout ? new errors_1.SocketTimeoutDuringMaintenanceError(this.#maintenanceTimeout) : new errors_1.SocketTimeoutError(this.#socketTimeout);
+            socket.destroy(error2);
+          });
+          socket.setTimeout(this.#socketTimeout);
+        }
+        socket.once("error", (err) => this.#onSocketError(err)).once("close", (hadError) => {
+          if (hadError || !this.#isOpen || this.#socket !== socket)
+            return;
+          this.#onSocketError(new errors_1.SocketClosedUnexpectedlyError());
+        }).on("drain", () => this.emit("drain")).on("data", (data) => this.emit("data", data));
+        return socket;
+      }
+      #onSocketError(err) {
+        const wasReady = this.#isReady;
+        this.#isReady = false;
+        this.emit("error", err);
+        if (wasReady) {
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_CLOSED, () => ({ clientId: this.#clientId, reason: "error", wasConnected: true }));
+        }
+        if (!wasReady || !this.#isOpen || typeof this.#shouldReconnect(0, err) !== "number")
+          return;
+        this.emit("reconnecting");
+        this.#connect().catch(() => {
+        });
+      }
+      write(iterable) {
+        if (!this.#socket)
+          return;
+        this.#socket.cork();
+        for (const args of iterable) {
+          for (const toWrite of args) {
+            this.#socket.write(toWrite);
+          }
+          if (this.#socket.writableNeedDrain)
+            break;
+        }
+        this.#socket.uncork();
+      }
+      async quit(fn) {
+        if (!this.#isOpen) {
+          throw new errors_1.ClientClosedError();
+        }
+        this.#isOpen = false;
+        const reply = await fn();
+        this.destroySocket();
+        return reply;
+      }
+      close() {
+        if (!this.#isOpen) {
+          throw new errors_1.ClientClosedError();
+        }
+        this.#isOpen = false;
+      }
+      destroy() {
+        if (!this.#isOpen) {
+          throw new errors_1.ClientClosedError();
+        }
+        this.#isOpen = false;
+        this.destroySocket();
+      }
+      destroySocket() {
+        const wasReady = this.#isReady;
+        this.#isReady = false;
+        if (this.#socket) {
+          this.#socket.destroy();
+          this.#socket = void 0;
+        }
+        (0, tracing_1.publish)(tracing_1.CHANNELS.CONNECTION_CLOSED, () => ({ clientId: this.#clientId, reason: "application_close", wasConnected: wasReady }));
+        this.emit("end");
+      }
+      ref() {
+        this.#isSocketUnrefed = false;
+        this.#socket?.ref();
+      }
+      unref() {
+        this.#isSocketUnrefed = true;
+        this.#socket?.unref();
+      }
+      defaultReconnectStrategy(retries, cause) {
+        if (cause instanceof errors_1.SocketTimeoutError) {
+          return false;
+        }
+        const jitter = Math.floor(Math.random() * 200);
+        const delay2 = Math.min(Math.pow(2, retries) * 50, 2e3);
+        return delay2 + jitter;
+      }
+    };
+    exports.default = RedisSocket;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/authx/token.js
+var require_token = __commonJS({
+  "node_modules/@redis/client/dist/lib/authx/token.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Token = void 0;
+    var Token = class {
+      value;
+      expiresAtMs;
+      receivedAtMs;
+      constructor(value, expiresAtMs, receivedAtMs) {
+        this.value = value;
+        this.expiresAtMs = expiresAtMs;
+        this.receivedAtMs = receivedAtMs;
+      }
+      /**
+       * Returns the time-to-live of the token in milliseconds.
+       * @param now The current time in milliseconds since the Unix epoch.
+       */
+      getTtlMs(now) {
+        if (this.expiresAtMs < now) {
+          return 0;
+        }
+        return this.expiresAtMs - now;
+      }
+    };
+    exports.Token = Token;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/authx/token-manager.js
+var require_token_manager = __commonJS({
+  "node_modules/@redis/client/dist/lib/authx/token-manager.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TokenManager = exports.IDPError = void 0;
+    var token_1 = require_token();
+    var IDPError = class extends Error {
+      message;
+      isRetryable;
+      constructor(message, isRetryable) {
+        super(message);
+        this.message = message;
+        this.isRetryable = isRetryable;
+        this.name = "IDPError";
+      }
+    };
+    exports.IDPError = IDPError;
+    var TokenManager = class {
+      identityProvider;
+      config;
+      currentToken = null;
+      refreshTimeout = null;
+      listener = null;
+      retryAttempt = 0;
+      constructor(identityProvider, config2) {
+        this.identityProvider = identityProvider;
+        this.config = config2;
+        if (this.config.expirationRefreshRatio > 1) {
+          throw new Error("expirationRefreshRatio must be less than or equal to 1");
+        }
+        if (this.config.expirationRefreshRatio < 0) {
+          throw new Error("expirationRefreshRatio must be greater or equal to 0");
+        }
+      }
+      /**
+       * Starts the token manager and returns a Disposable that can be used to stop the token manager.
+       *
+       * @param listener The listener that will receive token updates.
+       * @param initialDelayMs The initial delay in milliseconds before the first token refresh.
+       */
+      start(listener, initialDelayMs = 0) {
+        if (this.listener) {
+          this.stop();
+        }
+        this.listener = listener;
+        this.retryAttempt = 0;
+        this.scheduleNextRefresh(initialDelayMs);
+        return {
+          dispose: () => this.stop()
+        };
+      }
+      calculateRetryDelay() {
+        if (!this.config.retry)
+          return 0;
+        const { initialDelayMs, maxDelayMs, backoffMultiplier, jitterPercentage } = this.config.retry;
+        let delay2 = initialDelayMs * Math.pow(backoffMultiplier, this.retryAttempt - 1);
+        delay2 = Math.min(delay2, maxDelayMs);
+        if (jitterPercentage) {
+          const jitterRange = delay2 * (jitterPercentage / 100);
+          const jitterAmount = Math.random() * jitterRange - jitterRange / 2;
+          delay2 += jitterAmount;
+        }
+        let result = Math.max(0, Math.floor(delay2));
+        return result;
+      }
+      shouldRetry(error2) {
+        if (!this.config.retry)
+          return false;
+        const { maxAttempts, isRetryable } = this.config.retry;
+        if (this.retryAttempt >= maxAttempts) {
+          return false;
+        }
+        if (isRetryable) {
+          return isRetryable(error2, this.retryAttempt);
+        }
+        return false;
+      }
+      isRunning() {
+        return this.listener !== null;
+      }
+      async refresh() {
+        if (!this.listener) {
+          throw new Error("TokenManager is not running, but refresh was called");
+        }
+        try {
+          await this.identityProvider.requestToken().then(this.handleNewToken);
+          this.retryAttempt = 0;
+        } catch (error2) {
+          if (this.shouldRetry(error2)) {
+            this.retryAttempt++;
+            const retryDelay = this.calculateRetryDelay();
+            this.notifyError(`Token refresh failed (attempt ${this.retryAttempt}), retrying in ${retryDelay}ms: ${error2}`, true);
+            this.scheduleNextRefresh(retryDelay);
+          } else {
+            this.notifyError(error2, false);
+            this.stop();
+          }
+        }
+      }
+      handleNewToken = async ({ token: nativeToken, ttlMs }) => {
+        if (!this.listener) {
+          throw new Error("TokenManager is not running, but a new token was received");
+        }
+        const token = this.wrapAndSetCurrentToken(nativeToken, ttlMs);
+        this.listener.onNext(token);
+        this.scheduleNextRefresh(this.calculateRefreshTime(token));
+      };
+      /**
+       * Creates a Token object from a native token and sets it as the current token.
+       *
+       * @param nativeToken - The raw token received from the identity provider
+       * @param ttlMs - Time-to-live in milliseconds for the token
+       *
+       * @returns A new Token instance containing the wrapped native token and expiration details
+       *
+       */
+      wrapAndSetCurrentToken(nativeToken, ttlMs) {
+        const now = Date.now();
+        const token = new token_1.Token(nativeToken, now + ttlMs, now);
+        this.currentToken = token;
+        return token;
+      }
+      scheduleNextRefresh(delayMs) {
+        if (this.refreshTimeout) {
+          clearTimeout(this.refreshTimeout);
+          this.refreshTimeout = null;
+        }
+        if (delayMs === 0) {
+          this.refresh();
+        } else {
+          this.refreshTimeout = setTimeout(() => this.refresh(), delayMs);
+        }
+      }
+      /**
+       * Calculates the time in milliseconds when the token should be refreshed
+       * based on the token's TTL and the expirationRefreshRatio configuration.
+       *
+       * @param token The token to calculate the refresh time for.
+       * @param now The current time in milliseconds. Defaults to Date.now().
+       */
+      calculateRefreshTime(token, now = Date.now()) {
+        const ttlMs = token.getTtlMs(now);
+        return Math.floor(ttlMs * this.config.expirationRefreshRatio);
+      }
+      stop() {
+        if (this.refreshTimeout) {
+          clearTimeout(this.refreshTimeout);
+          this.refreshTimeout = null;
+        }
+        this.listener = null;
+        this.currentToken = null;
+        this.retryAttempt = 0;
+      }
+      /**
+       * Returns the current token or null if no token is available.
+       */
+      getCurrentToken() {
+        return this.currentToken;
+      }
+      notifyError(error2, isRetryable) {
+        const errorMessage = error2 instanceof Error ? error2.message : String(error2);
+        if (!this.listener) {
+          throw new Error(`TokenManager is not running but received an error: ${errorMessage}`);
+        }
+        this.listener.onError(new IDPError(errorMessage, isRetryable));
+      }
+    };
+    exports.TokenManager = TokenManager;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/authx/credentials-provider.js
+var require_credentials_provider = __commonJS({
+  "node_modules/@redis/client/dist/lib/authx/credentials-provider.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.UnableToObtainNewCredentialsError = exports.CredentialsError = void 0;
+    var CredentialsError = class extends Error {
+      constructor(message) {
+        super(`Re-authentication with latest credentials failed: ${message}`);
+        this.name = "CredentialsError";
+      }
+    };
+    exports.CredentialsError = CredentialsError;
+    var UnableToObtainNewCredentialsError = class extends Error {
+      constructor(message) {
+        super(`Unable to obtain new credentials : ${message}`);
+        this.name = "UnableToObtainNewCredentialsError";
+      }
+    };
+    exports.UnableToObtainNewCredentialsError = UnableToObtainNewCredentialsError;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/authx/index.js
+var require_authx = __commonJS({
+  "node_modules/@redis/client/dist/lib/authx/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Token = exports.CredentialsError = exports.UnableToObtainNewCredentialsError = exports.IDPError = exports.TokenManager = void 0;
+    var token_manager_1 = require_token_manager();
+    Object.defineProperty(exports, "TokenManager", { enumerable: true, get: function() {
+      return token_manager_1.TokenManager;
+    } });
+    Object.defineProperty(exports, "IDPError", { enumerable: true, get: function() {
+      return token_manager_1.IDPError;
+    } });
+    var credentials_provider_1 = require_credentials_provider();
+    Object.defineProperty(exports, "UnableToObtainNewCredentialsError", { enumerable: true, get: function() {
+      return credentials_provider_1.UnableToObtainNewCredentialsError;
+    } });
+    Object.defineProperty(exports, "CredentialsError", { enumerable: true, get: function() {
+      return credentials_provider_1.CredentialsError;
+    } });
+    var token_1 = require_token();
+    Object.defineProperty(exports, "Token", { enumerable: true, get: function() {
+      return token_1.Token;
+    } });
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/linked-list.js
+var require_linked_list = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/linked-list.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.EmptyAwareSinglyLinkedList = exports.SinglyLinkedList = exports.DoublyLinkedList = void 0;
+    var events_1 = __importDefault(__require("events"));
+    var DoublyLinkedList = class {
+      #length = 0;
+      get length() {
+        return this.#length;
+      }
+      #head;
+      get head() {
+        return this.#head;
+      }
+      #tail;
+      get tail() {
+        return this.#tail;
+      }
+      push(value) {
+        ++this.#length;
+        if (this.#tail === void 0) {
+          return this.#head = this.#tail = {
+            previous: this.#head,
+            next: void 0,
+            value
+          };
+        }
+        return this.#tail = this.#tail.next = {
+          previous: this.#tail,
+          next: void 0,
+          value
+        };
+      }
+      unshift(value) {
+        ++this.#length;
+        if (this.#head === void 0) {
+          return this.#head = this.#tail = {
+            previous: void 0,
+            next: void 0,
+            value
+          };
+        }
+        return this.#head = this.#head.previous = {
+          previous: void 0,
+          next: this.#head,
+          value
+        };
+      }
+      add(value, prepend = false) {
+        return prepend ? this.unshift(value) : this.push(value);
+      }
+      shift() {
+        if (this.#head === void 0)
+          return void 0;
+        --this.#length;
+        const node = this.#head;
+        if (node.next) {
+          node.next.previous = void 0;
+          this.#head = node.next;
+          node.next = void 0;
+        } else {
+          this.#head = this.#tail = void 0;
+        }
+        return node.value;
+      }
+      remove(node) {
+        if (this.#length === 0)
+          return;
+        --this.#length;
+        if (this.#tail === node) {
+          this.#tail = node.previous;
+        }
+        if (this.#head === node) {
+          this.#head = node.next;
+        } else {
+          if (node.previous) {
+            node.previous.next = node.next;
+          }
+          if (node.next) {
+            node.next.previous = node.previous;
+          }
+        }
+        node.previous = void 0;
+        node.next = void 0;
+      }
+      reset() {
+        this.#length = 0;
+        this.#head = this.#tail = void 0;
+      }
+      *[Symbol.iterator]() {
+        let node = this.#head;
+        while (node !== void 0) {
+          yield node.value;
+          node = node.next;
+        }
+      }
+      *nodes() {
+        let node = this.#head;
+        while (node) {
+          const next = node.next;
+          yield node;
+          node = next;
+        }
+      }
+    };
+    exports.DoublyLinkedList = DoublyLinkedList;
+    var SinglyLinkedList = class {
+      #length = 0;
+      get length() {
+        return this.#length;
+      }
+      #head;
+      get head() {
+        return this.#head;
+      }
+      #tail;
+      get tail() {
+        return this.#tail;
+      }
+      push(value) {
+        ++this.#length;
+        const node = {
+          value,
+          next: void 0,
+          removed: false
+        };
+        if (this.#head === void 0) {
+          return this.#head = this.#tail = node;
+        }
+        return this.#tail.next = this.#tail = node;
+      }
+      remove(node, parent) {
+        if (node.removed) {
+          throw new Error("node already removed");
+        }
+        --this.#length;
+        if (this.#head === node) {
+          if (this.#tail === node) {
+            this.#head = this.#tail = void 0;
+          } else {
+            this.#head = node.next;
+          }
+        } else if (this.#tail === node) {
+          this.#tail = parent;
+          parent.next = void 0;
+        } else {
+          parent.next = node.next;
+        }
+        node.removed = true;
+      }
+      shift() {
+        if (this.#head === void 0)
+          return void 0;
+        const node = this.#head;
+        if (--this.#length === 0) {
+          this.#head = this.#tail = void 0;
+        } else {
+          this.#head = node.next;
+        }
+        node.removed = true;
+        return node.value;
+      }
+      reset() {
+        this.#length = 0;
+        this.#head = this.#tail = void 0;
+      }
+      *[Symbol.iterator]() {
+        let node = this.#head;
+        while (node !== void 0) {
+          yield node.value;
+          node = node.next;
+        }
+      }
+    };
+    exports.SinglyLinkedList = SinglyLinkedList;
+    var EmptyAwareSinglyLinkedList = class extends SinglyLinkedList {
+      events = new events_1.default();
+      reset() {
+        const old = this.length;
+        super.reset();
+        if (old !== this.length && this.length === 0) {
+          this.events.emit("empty");
+        }
+      }
+      shift() {
+        const old = this.length;
+        const ret = super.shift();
+        if (old !== this.length && this.length === 0) {
+          this.events.emit("empty");
+        }
+        return ret;
+      }
+      remove(node, parent) {
+        const old = this.length;
+        super.remove(node, parent);
+        if (old !== this.length && this.length === 0) {
+          this.events.emit("empty");
+        }
+      }
+    };
+    exports.EmptyAwareSinglyLinkedList = EmptyAwareSinglyLinkedList;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/RESP/encoder.js
+var require_encoder = __commonJS({
+  "node_modules/@redis/client/dist/lib/RESP/encoder.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var CRLF = "\r\n";
+    function encodeCommand(args) {
+      const toWrite = [];
+      let strings = "*" + args.length + CRLF;
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (typeof arg === "string") {
+          strings += "$" + Buffer.byteLength(arg) + CRLF + arg + CRLF;
+        } else if (arg instanceof Buffer) {
+          toWrite.push(strings + "$" + arg.length.toString() + CRLF, arg);
+          strings = CRLF;
+        } else {
+          throw new TypeError(`"arguments[${i}]" must be of type "string | Buffer", got ${typeof arg} instead.`);
+        }
+      }
+      toWrite.push(strings);
+      return toWrite;
+    }
+    exports.default = encodeCommand;
+  }
+});
+
+// node_modules/cluster-key-slot/lib/index.js
+var require_lib = __commonJS({
+  "node_modules/cluster-key-slot/lib/index.js"(exports, module) {
+    var lookup = [
+      0,
+      4129,
+      8258,
+      12387,
+      16516,
+      20645,
+      24774,
+      28903,
+      33032,
+      37161,
+      41290,
+      45419,
+      49548,
+      53677,
+      57806,
+      61935,
+      4657,
+      528,
+      12915,
+      8786,
+      21173,
+      17044,
+      29431,
+      25302,
+      37689,
+      33560,
+      45947,
+      41818,
+      54205,
+      50076,
+      62463,
+      58334,
+      9314,
+      13379,
+      1056,
+      5121,
+      25830,
+      29895,
+      17572,
+      21637,
+      42346,
+      46411,
+      34088,
+      38153,
+      58862,
+      62927,
+      50604,
+      54669,
+      13907,
+      9842,
+      5649,
+      1584,
+      30423,
+      26358,
+      22165,
+      18100,
+      46939,
+      42874,
+      38681,
+      34616,
+      63455,
+      59390,
+      55197,
+      51132,
+      18628,
+      22757,
+      26758,
+      30887,
+      2112,
+      6241,
+      10242,
+      14371,
+      51660,
+      55789,
+      59790,
+      63919,
+      35144,
+      39273,
+      43274,
+      47403,
+      23285,
+      19156,
+      31415,
+      27286,
+      6769,
+      2640,
+      14899,
+      10770,
+      56317,
+      52188,
+      64447,
+      60318,
+      39801,
+      35672,
+      47931,
+      43802,
+      27814,
+      31879,
+      19684,
+      23749,
+      11298,
+      15363,
+      3168,
+      7233,
+      60846,
+      64911,
+      52716,
+      56781,
+      44330,
+      48395,
+      36200,
+      40265,
+      32407,
+      28342,
+      24277,
+      20212,
+      15891,
+      11826,
+      7761,
+      3696,
+      65439,
+      61374,
+      57309,
+      53244,
+      48923,
+      44858,
+      40793,
+      36728,
+      37256,
+      33193,
+      45514,
+      41451,
+      53516,
+      49453,
+      61774,
+      57711,
+      4224,
+      161,
+      12482,
+      8419,
+      20484,
+      16421,
+      28742,
+      24679,
+      33721,
+      37784,
+      41979,
+      46042,
+      49981,
+      54044,
+      58239,
+      62302,
+      689,
+      4752,
+      8947,
+      13010,
+      16949,
+      21012,
+      25207,
+      29270,
+      46570,
+      42443,
+      38312,
+      34185,
+      62830,
+      58703,
+      54572,
+      50445,
+      13538,
+      9411,
+      5280,
+      1153,
+      29798,
+      25671,
+      21540,
+      17413,
+      42971,
+      47098,
+      34713,
+      38840,
+      59231,
+      63358,
+      50973,
+      55100,
+      9939,
+      14066,
+      1681,
+      5808,
+      26199,
+      30326,
+      17941,
+      22068,
+      55628,
+      51565,
+      63758,
+      59695,
+      39368,
+      35305,
+      47498,
+      43435,
+      22596,
+      18533,
+      30726,
+      26663,
+      6336,
+      2273,
+      14466,
+      10403,
+      52093,
+      56156,
+      60223,
+      64286,
+      35833,
+      39896,
+      43963,
+      48026,
+      19061,
+      23124,
+      27191,
+      31254,
+      2801,
+      6864,
+      10931,
+      14994,
+      64814,
+      60687,
+      56684,
+      52557,
+      48554,
+      44427,
+      40424,
+      36297,
+      31782,
+      27655,
+      23652,
+      19525,
+      15522,
+      11395,
+      7392,
+      3265,
+      61215,
+      65342,
+      53085,
+      57212,
+      44955,
+      49082,
+      36825,
+      40952,
+      28183,
+      32310,
+      20053,
+      24180,
+      11923,
+      16050,
+      3793,
+      7920
+    ];
+    var toUTF8Array = function toUTF8Array2(str) {
+      var char;
+      var i = 0;
+      var p = 0;
+      var utf8 = [];
+      var len = str.length;
+      for (; i < len; i++) {
+        char = str.charCodeAt(i);
+        if (char < 128) {
+          utf8[p++] = char;
+        } else if (char < 2048) {
+          utf8[p++] = char >> 6 | 192;
+          utf8[p++] = char & 63 | 128;
+        } else if ((char & 64512) === 55296 && i + 1 < str.length && (str.charCodeAt(i + 1) & 64512) === 56320) {
+          char = 65536 + ((char & 1023) << 10) + (str.charCodeAt(++i) & 1023);
+          utf8[p++] = char >> 18 | 240;
+          utf8[p++] = char >> 12 & 63 | 128;
+          utf8[p++] = char >> 6 & 63 | 128;
+          utf8[p++] = char & 63 | 128;
+        } else {
+          utf8[p++] = char >> 12 | 224;
+          utf8[p++] = char >> 6 & 63 | 128;
+          utf8[p++] = char & 63 | 128;
+        }
+      }
+      return utf8;
+    };
+    var generate = module.exports = function generate2(str) {
+      var char;
+      var i = 0;
+      var start = -1;
+      var result = 0;
+      var resultHash = 0;
+      var utf8 = typeof str === "string" ? toUTF8Array(str) : str;
+      var len = utf8.length;
+      while (i < len) {
+        char = utf8[i++];
+        if (start === -1) {
+          if (char === 123) {
+            start = i;
+          }
+        } else if (char !== 125) {
+          resultHash = lookup[(char ^ resultHash >> 8) & 255] ^ resultHash << 8;
+        } else if (i - 1 !== start) {
+          return resultHash & 16383;
+        }
+        result = lookup[(char ^ result >> 8) & 255] ^ result << 8;
+      }
+      return result & 16383;
+    };
+    module.exports.generateMulti = function generateMulti(keys) {
+      var i = 1;
+      var len = keys.length;
+      var base = generate(keys[0]);
+      while (i < len) {
+        if (generate(keys[i++]) !== base) return -1;
+      }
+      return base;
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/pub-sub.js
+var require_pub_sub = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/pub-sub.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PubSub = exports.PUBSUB_TYPE = void 0;
+    var cluster_key_slot_1 = __importDefault(require_lib());
+    var tracing_1 = require_tracing();
+    exports.PUBSUB_TYPE = {
+      CHANNELS: "CHANNELS",
+      PATTERNS: "PATTERNS",
+      SHARDED: "SHARDED"
+    };
+    var COMMANDS = {
+      [exports.PUBSUB_TYPE.CHANNELS]: {
+        subscribe: Buffer.from("subscribe"),
+        unsubscribe: Buffer.from("unsubscribe"),
+        message: Buffer.from("message")
+      },
+      [exports.PUBSUB_TYPE.PATTERNS]: {
+        subscribe: Buffer.from("psubscribe"),
+        unsubscribe: Buffer.from("punsubscribe"),
+        message: Buffer.from("pmessage")
+      },
+      [exports.PUBSUB_TYPE.SHARDED]: {
+        subscribe: Buffer.from("ssubscribe"),
+        unsubscribe: Buffer.from("sunsubscribe"),
+        message: Buffer.from("smessage")
+      }
+    };
+    var PubSub = class _PubSub {
+      #clientId;
+      constructor(clientId) {
+        this.#clientId = clientId;
+      }
+      static isStatusReply(reply) {
+        const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
+        return COMMANDS[exports.PUBSUB_TYPE.CHANNELS].subscribe.equals(firstElement) || COMMANDS[exports.PUBSUB_TYPE.CHANNELS].unsubscribe.equals(firstElement) || COMMANDS[exports.PUBSUB_TYPE.PATTERNS].subscribe.equals(firstElement) || COMMANDS[exports.PUBSUB_TYPE.PATTERNS].unsubscribe.equals(firstElement) || COMMANDS[exports.PUBSUB_TYPE.SHARDED].subscribe.equals(firstElement);
+      }
+      static isShardedUnsubscribe(reply) {
+        const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
+        return COMMANDS[exports.PUBSUB_TYPE.SHARDED].unsubscribe.equals(firstElement);
+      }
+      static #channelsArray(channels) {
+        return Array.isArray(channels) ? channels : [channels];
+      }
+      static #listenersSet(listeners, returnBuffers) {
+        return returnBuffers ? listeners.buffers : listeners.strings;
+      }
+      #subscribing = 0;
+      #isActive = false;
+      get isActive() {
+        return this.#isActive;
+      }
+      listeners = {
+        [exports.PUBSUB_TYPE.CHANNELS]: /* @__PURE__ */ new Map(),
+        [exports.PUBSUB_TYPE.PATTERNS]: /* @__PURE__ */ new Map(),
+        [exports.PUBSUB_TYPE.SHARDED]: /* @__PURE__ */ new Map()
+      };
+      subscribe(type, channels, listener, returnBuffers) {
+        const args = [COMMANDS[type].subscribe], channelsArray = _PubSub.#channelsArray(channels);
+        for (const channel of channelsArray) {
+          let channelListeners = this.listeners[type].get(channel);
+          if (!channelListeners || channelListeners.unsubscribing) {
+            args.push(channel);
+          }
+        }
+        if (args.length === 1) {
+          for (const channel of channelsArray) {
+            _PubSub.#listenersSet(this.listeners[type].get(channel), returnBuffers).add(listener);
+          }
+          return;
+        }
+        this.#isActive = true;
+        this.#subscribing++;
+        return {
+          args,
+          channelsCounter: args.length - 1,
+          resolve: () => {
+            this.#subscribing--;
+            for (const channel of channelsArray) {
+              let listeners = this.listeners[type].get(channel);
+              if (!listeners) {
+                listeners = {
+                  unsubscribing: false,
+                  buffers: /* @__PURE__ */ new Set(),
+                  strings: /* @__PURE__ */ new Set()
+                };
+                this.listeners[type].set(channel, listeners);
+              }
+              _PubSub.#listenersSet(listeners, returnBuffers).add(listener);
+            }
+          },
+          reject: () => {
+            this.#subscribing--;
+            this.#updateIsActive();
+          }
+        };
+      }
+      extendChannelListeners(type, channel, listeners) {
+        if (!this.#extendChannelListeners(type, channel, listeners))
+          return;
+        this.#isActive = true;
+        this.#subscribing++;
+        return {
+          args: [
+            COMMANDS[type].subscribe,
+            channel
+          ],
+          channelsCounter: 1,
+          resolve: () => this.#subscribing--,
+          reject: () => {
+            this.#subscribing--;
+            this.#updateIsActive();
+          }
+        };
+      }
+      #extendChannelListeners(type, channel, listeners) {
+        const existingListeners = this.listeners[type].get(channel);
+        if (!existingListeners) {
+          this.listeners[type].set(channel, listeners);
+          return true;
+        }
+        for (const listener of listeners.buffers) {
+          existingListeners.buffers.add(listener);
+        }
+        for (const listener of listeners.strings) {
+          existingListeners.strings.add(listener);
+        }
+        return false;
+      }
+      extendTypeListeners(type, listeners) {
+        const args = [COMMANDS[type].subscribe];
+        for (const [channel, channelListeners] of listeners) {
+          if (this.#extendChannelListeners(type, channel, channelListeners)) {
+            args.push(channel);
+          }
+        }
+        if (args.length === 1)
+          return;
+        this.#isActive = true;
+        this.#subscribing++;
+        return {
+          args,
+          channelsCounter: args.length - 1,
+          resolve: () => this.#subscribing--,
+          reject: () => {
+            this.#subscribing--;
+            this.#updateIsActive();
+          }
+        };
+      }
+      unsubscribe(type, channels, listener, returnBuffers) {
+        const listeners = this.listeners[type];
+        if (!channels) {
+          return this.#unsubscribeCommand(
+            [COMMANDS[type].unsubscribe],
+            // cannot use `this.#subscribed` because there might be some `SUBSCRIBE` commands in the queue
+            // cannot use `this.#subscribed + this.#subscribing` because some `SUBSCRIBE` commands might fail
+            NaN,
+            () => listeners.clear()
+          );
+        }
+        const channelsArray = _PubSub.#channelsArray(channels);
+        if (!listener) {
+          return this.#unsubscribeCommand([COMMANDS[type].unsubscribe, ...channelsArray], channelsArray.length, () => {
+            for (const channel of channelsArray) {
+              listeners.delete(channel);
+            }
+          });
+        }
+        const args = [COMMANDS[type].unsubscribe];
+        for (const channel of channelsArray) {
+          const sets = listeners.get(channel);
+          if (sets) {
+            let current, other;
+            if (returnBuffers) {
+              current = sets.buffers;
+              other = sets.strings;
+            } else {
+              current = sets.strings;
+              other = sets.buffers;
+            }
+            const currentSize = current.has(listener) ? current.size - 1 : current.size;
+            if (currentSize !== 0 || other.size !== 0)
+              continue;
+            sets.unsubscribing = true;
+          }
+          args.push(channel);
+        }
+        if (args.length === 1) {
+          for (const channel of channelsArray) {
+            _PubSub.#listenersSet(listeners.get(channel), returnBuffers).delete(listener);
+          }
+          return;
+        }
+        return this.#unsubscribeCommand(args, args.length - 1, () => {
+          for (const channel of channelsArray) {
+            const sets = listeners.get(channel);
+            if (!sets)
+              continue;
+            (returnBuffers ? sets.buffers : sets.strings).delete(listener);
+            if (sets.buffers.size === 0 && sets.strings.size === 0) {
+              listeners.delete(channel);
+            }
+          }
+        });
+      }
+      #unsubscribeCommand(args, channelsCounter, removeListeners) {
+        return {
+          args,
+          channelsCounter,
+          resolve: () => {
+            removeListeners();
+            this.#updateIsActive();
+          },
+          reject: void 0
+        };
+      }
+      #updateIsActive() {
+        this.#isActive = this.listeners[exports.PUBSUB_TYPE.CHANNELS].size !== 0 || this.listeners[exports.PUBSUB_TYPE.PATTERNS].size !== 0 || this.listeners[exports.PUBSUB_TYPE.SHARDED].size !== 0 || this.#subscribing !== 0;
+      }
+      reset() {
+        this.#isActive = false;
+        this.#subscribing = 0;
+      }
+      resubscribe() {
+        const commands = [];
+        for (const [type, listeners] of Object.entries(this.listeners)) {
+          if (!listeners.size)
+            continue;
+          this.#isActive = true;
+          if (type === exports.PUBSUB_TYPE.SHARDED) {
+            this.#shardedResubscribe(commands, listeners);
+          } else {
+            this.#normalResubscribe(commands, type, listeners);
+          }
+        }
+        return commands;
+      }
+      #normalResubscribe(commands, type, listeners) {
+        this.#subscribing++;
+        const callback = () => this.#subscribing--;
+        commands.push({
+          args: [
+            COMMANDS[type].subscribe,
+            ...listeners.keys()
+          ],
+          channelsCounter: listeners.size,
+          resolve: callback,
+          reject: callback
+        });
+      }
+      #shardedResubscribe(commands, listeners) {
+        const callback = () => this.#subscribing--;
+        for (const channel of listeners.keys()) {
+          this.#subscribing++;
+          commands.push({
+            args: [
+              COMMANDS[exports.PUBSUB_TYPE.SHARDED].subscribe,
+              channel
+            ],
+            channelsCounter: 1,
+            resolve: callback,
+            reject: callback
+          });
+        }
+      }
+      handleMessageReply(reply) {
+        const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
+        if (COMMANDS[exports.PUBSUB_TYPE.CHANNELS].message.equals(firstElement)) {
+          this.#emitPubSubMessage(exports.PUBSUB_TYPE.CHANNELS, reply[2], reply[1]);
+          return true;
+        } else if (COMMANDS[exports.PUBSUB_TYPE.PATTERNS].message.equals(firstElement)) {
+          this.#emitPubSubMessage(exports.PUBSUB_TYPE.PATTERNS, reply[3], reply[2], reply[1]);
+          return true;
+        } else if (COMMANDS[exports.PUBSUB_TYPE.SHARDED].message.equals(firstElement)) {
+          this.#emitPubSubMessage(exports.PUBSUB_TYPE.SHARDED, reply[2], reply[1]);
+          return true;
+        }
+        return false;
+      }
+      removeShardedListeners(channel) {
+        const listeners = this.listeners[exports.PUBSUB_TYPE.SHARDED].get(channel);
+        this.listeners[exports.PUBSUB_TYPE.SHARDED].delete(channel);
+        this.#updateIsActive();
+        return listeners;
+      }
+      removeAllListeners() {
+        const result = {
+          [exports.PUBSUB_TYPE.CHANNELS]: this.listeners[exports.PUBSUB_TYPE.CHANNELS],
+          [exports.PUBSUB_TYPE.PATTERNS]: this.listeners[exports.PUBSUB_TYPE.PATTERNS],
+          [exports.PUBSUB_TYPE.SHARDED]: this.listeners[exports.PUBSUB_TYPE.SHARDED]
+        };
+        this.#updateIsActive();
+        this.listeners[exports.PUBSUB_TYPE.CHANNELS] = /* @__PURE__ */ new Map();
+        this.listeners[exports.PUBSUB_TYPE.PATTERNS] = /* @__PURE__ */ new Map();
+        this.listeners[exports.PUBSUB_TYPE.SHARDED] = /* @__PURE__ */ new Map();
+        return result;
+      }
+      removeShardedPubSubListenersForSlots(slots) {
+        const sharded = /* @__PURE__ */ new Map();
+        for (const [chanel, value] of this.listeners[exports.PUBSUB_TYPE.SHARDED]) {
+          if (slots.has((0, cluster_key_slot_1.default)(chanel))) {
+            sharded.set(chanel, value);
+            this.listeners[exports.PUBSUB_TYPE.SHARDED].delete(chanel);
+          }
+        }
+        this.#updateIsActive();
+        return {
+          [exports.PUBSUB_TYPE.SHARDED]: sharded
+        };
+      }
+      #emitPubSubMessage(type, message, channel, pattern) {
+        const keyString = (pattern ?? channel).toString(), listeners = this.listeners[type].get(keyString);
+        if (!listeners)
+          return;
+        (0, tracing_1.publish)(tracing_1.CHANNELS.PUBSUB, () => ({
+          direction: "in",
+          clientId: this.#clientId,
+          channel,
+          sharded: type === exports.PUBSUB_TYPE.SHARDED
+        }));
+        for (const listener of listeners.buffers) {
+          listener(message, channel);
+        }
+        if (!listeners.strings.size)
+          return;
+        const channelString = pattern ? channel.toString() : keyString, messageString = channelString === "__redis__:invalidate" ? (
+          // https://github.com/redis/redis/pull/7469
+          // https://github.com/redis/redis/issues/7463
+          message === null ? null : message.map((x) => x.toString())
+        ) : message.toString();
+        for (const listener of listeners.strings) {
+          listener(messageString, channelString);
+        }
+      }
+    };
+    exports.PubSub = PubSub;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/commands-queue.js
+var require_commands_queue = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/commands-queue.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var linked_list_1 = require_linked_list();
+    var encoder_1 = __importDefault(require_encoder());
+    var decoder_1 = require_decoder();
+    var pub_sub_1 = require_pub_sub();
+    var errors_1 = require_errors2();
+    var enterprise_maintenance_manager_1 = require_enterprise_maintenance_manager();
+    var PONG = Buffer.from("pong");
+    var RESET = Buffer.from("RESET");
+    var RESP2_PUSH_TYPE_MAPPING = {
+      ...decoder_1.PUSH_TYPE_MAPPING,
+      [decoder_1.RESP_TYPES.SIMPLE_STRING]: Buffer
+    };
+    var RedisCommandsQueue = class _RedisCommandsQueue {
+      #respVersion;
+      #maxLength;
+      #toWrite = new linked_list_1.DoublyLinkedList();
+      #waitingForReply = new linked_list_1.EmptyAwareSinglyLinkedList();
+      #onShardedChannelMoved;
+      #chainInExecution;
+      decoder;
+      #pubSub;
+      #clientId;
+      #pushHandlers = [this.#onPush.bind(this)];
+      #maintenanceCommandTimeout;
+      setMaintenanceCommandTimeout(ms) {
+        if (this.#maintenanceCommandTimeout === ms) {
+          (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Queue already set maintenanceCommandTimeout to ${ms}, skipping`);
+          return;
+        }
+        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Setting maintenance command timeout to ${ms}`);
+        this.#maintenanceCommandTimeout = ms;
+        if (this.#maintenanceCommandTimeout === void 0) {
+          (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Queue will keep maintenanceCommandTimeout for exisitng commands, just to be on the safe side. New commands will receive normal timeouts`);
+          return;
+        }
+        let counter = 0;
+        const total = this.#toWrite.length;
+        for (const node of this.#toWrite.nodes()) {
+          const command = node.value;
+          _RedisCommandsQueue.#removeTimeoutListener(command);
+          counter++;
+          const newTimeout = this.#maintenanceCommandTimeout;
+          const signal = AbortSignal.timeout(newTimeout);
+          command.timeout = {
+            signal,
+            listener: () => {
+              this.#toWrite.remove(node);
+              command.reject(new errors_1.CommandTimeoutDuringMaintenanceError(newTimeout));
+            },
+            originalTimeout: command.timeout?.originalTimeout
+          };
+          signal.addEventListener("abort", command.timeout.listener, {
+            once: true
+          });
+        }
+        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Total of ${counter} of ${total} timeouts reset to ${ms}`);
+      }
+      get isPubSubActive() {
+        return this.#pubSub.isActive;
+      }
+      /**
+       * Returns the total number of pending commands (waiting to write + waiting for reply).
+       */
+      get pendingCount() {
+        return this.#toWrite.length + this.#waitingForReply.length;
+      }
+      constructor(respVersion, maxLength, onShardedChannelMoved, clientId) {
+        this.#respVersion = respVersion;
+        this.#maxLength = maxLength;
+        this.#onShardedChannelMoved = onShardedChannelMoved;
+        this.decoder = this.#initiateDecoder();
+        this.#clientId = clientId;
+        this.#pubSub = new pub_sub_1.PubSub(this.#clientId);
+      }
+      #onReply(reply) {
+        this.#waitingForReply.shift().resolve(reply);
+      }
+      #onErrorReply(err) {
+        this.#waitingForReply.shift().reject(err);
+      }
+      #onPush(push) {
+        if (this.#pubSub.handleMessageReply(push))
+          return true;
+        const isShardedUnsubscribe = pub_sub_1.PubSub.isShardedUnsubscribe(push);
+        if (isShardedUnsubscribe && !this.#waitingForReply.length) {
+          const channel = push[1].toString();
+          this.#onShardedChannelMoved(channel, this.#pubSub.removeShardedListeners(channel));
+          return true;
+        } else if (isShardedUnsubscribe || pub_sub_1.PubSub.isStatusReply(push)) {
+          const head = this.#waitingForReply.head.value;
+          if (Number.isNaN(head.channelsCounter) && push[2] === 0 || --head.channelsCounter === 0) {
+            this.#waitingForReply.shift().resolve();
+          }
+          return true;
+        }
+        return false;
+      }
+      #getTypeMapping() {
+        return this.#waitingForReply.head.value.typeMapping ?? {};
+      }
+      #initiateDecoder() {
+        return new decoder_1.Decoder({
+          onReply: (reply) => this.#onReply(reply),
+          onErrorReply: (err) => this.#onErrorReply(err),
+          //TODO: we can shave off a few cycles by not adding onPush handler at all if CSC is not used
+          onPush: (push) => {
+            for (const pushHandler of this.#pushHandlers) {
+              if (pushHandler(push))
+                return;
+            }
+          },
+          getTypeMapping: () => this.#getTypeMapping()
+        });
+      }
+      addPushHandler(handler) {
+        this.#pushHandlers.push(handler);
+      }
+      async waitForInflightCommandsToComplete(options) {
+        if (this.#waitingForReply.length === 0) {
+          return;
+        }
+        return new Promise((resolve3) => {
+          const onEmpty = () => {
+            if (timeoutId)
+              clearTimeout(timeoutId);
+            resolve3();
+          };
+          let timeoutId;
+          const timeoutMs = options?.timeoutMs;
+          if (timeoutMs !== void 0 && timeoutMs > 0) {
+            timeoutId = setTimeout(() => {
+              this.#waitingForReply.events.off("empty", onEmpty);
+              const pendingCount = this.#waitingForReply.length;
+              (0, enterprise_maintenance_manager_1.dbgMaintenance)(`waitForInflightCommandsToComplete timed out after ${timeoutMs}ms with ${pendingCount} commands still waiting`);
+              if (options?.flushOnTimeout && pendingCount > 0) {
+                (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Flushing ${pendingCount} commands that timed out waiting for reply`);
+                this.#flushWaitingForReply(new errors_1.TimeoutError());
+              }
+              resolve3();
+            }, timeoutMs);
+          }
+          this.#waitingForReply.events.once("empty", onEmpty);
+        });
+      }
+      addCommand(args, options) {
+        if (this.#maxLength && this.#toWrite.length + this.#waitingForReply.length >= this.#maxLength) {
+          return Promise.reject(new Error("The queue is full"));
+        } else if (options?.abortSignal?.aborted) {
+          return Promise.reject(new errors_1.AbortError());
+        }
+        return new Promise((resolve3, reject) => {
+          let node;
+          const value = {
+            args,
+            chainId: options?.chainId,
+            abort: void 0,
+            timeout: void 0,
+            resolve: resolve3,
+            reject,
+            channelsCounter: void 0,
+            typeMapping: options?.typeMapping
+          };
+          value.slotNumber = options?.slotNumber;
+          const timeout = this.#maintenanceCommandTimeout ?? options?.timeout;
+          const wasInMaintenance = this.#maintenanceCommandTimeout !== void 0;
+          if (timeout) {
+            const signal2 = AbortSignal.timeout(timeout);
+            value.timeout = {
+              signal: signal2,
+              listener: () => {
+                this.#toWrite.remove(node);
+                value.reject(wasInMaintenance ? new errors_1.CommandTimeoutDuringMaintenanceError(timeout) : new errors_1.TimeoutError());
+              },
+              originalTimeout: options?.timeout
+            };
+            signal2.addEventListener("abort", value.timeout.listener, {
+              once: true
+            });
+          }
+          const signal = options?.abortSignal;
+          if (signal) {
+            value.abort = {
+              signal,
+              listener: () => {
+                this.#toWrite.remove(node);
+                value.reject(new errors_1.AbortError());
+              }
+            };
+            signal.addEventListener("abort", value.abort.listener, { once: true });
+          }
+          node = this.#toWrite.add(value, options?.asap);
+        });
+      }
+      #addPubSubCommand(command, asap = false, chainId) {
+        return new Promise((resolve3, reject) => {
+          this.#toWrite.add({
+            args: command.args,
+            chainId,
+            abort: void 0,
+            timeout: void 0,
+            resolve() {
+              command.resolve();
+              resolve3();
+            },
+            reject(err) {
+              command.reject?.();
+              reject(err);
+            },
+            channelsCounter: command.channelsCounter,
+            typeMapping: decoder_1.PUSH_TYPE_MAPPING
+          }, asap);
+        });
+      }
+      #setupPubSubHandler() {
+        if (this.#respVersion !== 2)
+          return;
+        this.decoder.onReply = ((reply) => {
+          if (Array.isArray(reply)) {
+            if (this.#onPush(reply))
+              return;
+            const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
+            if (PONG.equals(firstElement)) {
+              const { resolve: resolve3, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
+              resolve3(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
+              return;
+            }
+          }
+          return this.#onReply(reply);
+        });
+        this.decoder.getTypeMapping = () => RESP2_PUSH_TYPE_MAPPING;
+      }
+      subscribe(type, channels, listener, returnBuffers) {
+        const command = this.#pubSub.subscribe(type, channels, listener, returnBuffers);
+        if (!command)
+          return;
+        this.#setupPubSubHandler();
+        return this.#addPubSubCommand(command);
+      }
+      #resetDecoderCallbacks() {
+        this.decoder.onReply = ((reply) => this.#onReply(reply));
+        this.decoder.getTypeMapping = () => this.#getTypeMapping();
+      }
+      unsubscribe(type, channels, listener, returnBuffers) {
+        const command = this.#pubSub.unsubscribe(type, channels, listener, returnBuffers);
+        if (!command)
+          return;
+        if (command && this.#respVersion === 2) {
+          const { resolve: resolve3 } = command;
+          command.resolve = () => {
+            if (!this.#pubSub.isActive) {
+              this.#resetDecoderCallbacks();
+            }
+            resolve3();
+          };
+        }
+        return this.#addPubSubCommand(command);
+      }
+      removeAllPubSubListeners() {
+        return this.#pubSub.removeAllListeners();
+      }
+      removeShardedPubSubListenersForSlots(slots) {
+        return this.#pubSub.removeShardedPubSubListenersForSlots(slots);
+      }
+      resubscribe(chainId) {
+        const commands = this.#pubSub.resubscribe();
+        if (!commands.length)
+          return;
+        this.#setupPubSubHandler();
+        return Promise.all(commands.map((command) => this.#addPubSubCommand(command, true, chainId)));
+      }
+      extendPubSubChannelListeners(type, channel, listeners) {
+        const command = this.#pubSub.extendChannelListeners(type, channel, listeners);
+        if (!command)
+          return;
+        this.#setupPubSubHandler();
+        return this.#addPubSubCommand(command);
+      }
+      extendPubSubListeners(type, listeners) {
+        const command = this.#pubSub.extendTypeListeners(type, listeners);
+        if (!command)
+          return;
+        this.#setupPubSubHandler();
+        return this.#addPubSubCommand(command);
+      }
+      getPubSubListeners(type) {
+        return this.#pubSub.listeners[type];
+      }
+      monitor(callback, options) {
+        return new Promise((resolve3, reject) => {
+          const typeMapping = options?.typeMapping ?? {};
+          this.#toWrite.add({
+            args: ["MONITOR"],
+            chainId: options?.chainId,
+            abort: void 0,
+            timeout: void 0,
+            // using `resolve` instead of using `.then`/`await` to make sure it'll be called before processing the next reply
+            resolve: () => {
+              if (this.#resetFallbackOnReply) {
+                this.#resetFallbackOnReply = callback;
+              } else {
+                this.decoder.onReply = callback;
+              }
+              this.decoder.getTypeMapping = () => typeMapping;
+              resolve3();
+            },
+            reject,
+            channelsCounter: void 0,
+            typeMapping
+          }, options?.asap);
+        });
+      }
+      resetDecoder() {
+        this.#resetDecoderCallbacks();
+        this.decoder.reset();
+      }
+      #resetFallbackOnReply;
+      async reset(chainId, typeMapping) {
+        return new Promise((resolve3, reject) => {
+          this.#resetFallbackOnReply = this.decoder.onReply;
+          this.decoder.onReply = ((reply) => {
+            if (typeof reply === "string" && reply === "RESET" || reply instanceof Buffer && RESET.equals(reply)) {
+              this.#resetDecoderCallbacks();
+              this.#resetFallbackOnReply = void 0;
+              this.#pubSub.reset();
+              this.#waitingForReply.shift().resolve(reply);
+              return;
+            }
+            this.#resetFallbackOnReply(reply);
+          });
+          this.#toWrite.push({
+            args: ["RESET"],
+            chainId,
+            abort: void 0,
+            timeout: void 0,
+            resolve: resolve3,
+            reject,
+            channelsCounter: void 0,
+            typeMapping
+          });
+        });
+      }
+      isWaitingToWrite() {
+        return this.#toWrite.length > 0;
+      }
+      *commandsToWrite() {
+        let toSend = this.#toWrite.shift();
+        while (toSend) {
+          let encoded;
+          try {
+            encoded = (0, encoder_1.default)(toSend.args);
+          } catch (err) {
+            toSend.reject(err);
+            toSend = this.#toWrite.shift();
+            continue;
+          }
+          toSend.args = void 0;
+          if (toSend.abort) {
+            _RedisCommandsQueue.#removeAbortListener(toSend);
+            toSend.abort = void 0;
+          }
+          if (toSend.timeout) {
+            _RedisCommandsQueue.#removeTimeoutListener(toSend);
+            toSend.timeout = void 0;
+          }
+          this.#chainInExecution = toSend.chainId;
+          toSend.chainId = void 0;
+          this.#waitingForReply.push(toSend);
+          yield encoded;
+          toSend = this.#toWrite.shift();
+        }
+      }
+      #flushWaitingForReply(err) {
+        for (const node of this.#waitingForReply) {
+          node.reject(err);
+        }
+        this.#waitingForReply.reset();
+      }
+      static #removeAbortListener(command) {
+        command.abort.signal.removeEventListener("abort", command.abort.listener);
+      }
+      static #removeTimeoutListener(command) {
+        command.timeout?.signal.removeEventListener("abort", command.timeout.listener);
+      }
+      static #flushToWrite(toBeSent, err) {
+        if (toBeSent.abort) {
+          _RedisCommandsQueue.#removeAbortListener(toBeSent);
+        }
+        if (toBeSent.timeout) {
+          _RedisCommandsQueue.#removeTimeoutListener(toBeSent);
+        }
+        toBeSent.reject(err);
+      }
+      flushWaitingForReply(err) {
+        this.resetDecoder();
+        this.#pubSub.reset();
+        this.#flushWaitingForReply(err);
+        if (!this.#chainInExecution)
+          return;
+        while (this.#toWrite.head?.value.chainId === this.#chainInExecution) {
+          _RedisCommandsQueue.#flushToWrite(this.#toWrite.shift(), err);
+        }
+        this.#chainInExecution = void 0;
+      }
+      flushAll(err) {
+        this.resetDecoder();
+        this.#pubSub.reset();
+        this.#flushWaitingForReply(err);
+        for (const node of this.#toWrite) {
+          _RedisCommandsQueue.#flushToWrite(node, err);
+        }
+        this.#toWrite.reset();
+      }
+      isEmpty() {
+        return this.#toWrite.length === 0 && this.#waitingForReply.length === 0;
+      }
+      /**
+       *
+       * Extracts commands for the given slots from the toWrite queue.
+       * Some commands dont have "slotNumber", which means they are not designated to particular slot/node.
+       * We ignore those.
+       */
+      extractCommandsForSlots(slots) {
+        const result = [];
+        let current = this.#toWrite.head;
+        while (current !== void 0) {
+          if (current.value.slotNumber !== void 0 && slots.has(current.value.slotNumber)) {
+            result.push(current.value);
+            const toRemove = current;
+            current = current.next;
+            this.#toWrite.remove(toRemove);
+          } else {
+            current = current.next;
+          }
+        }
+        return result;
+      }
+      /**
+       * Gets all commands from the write queue without removing them.
+       */
+      extractAllCommands() {
+        const result = [];
+        let current = this.#toWrite.head;
+        while (current) {
+          result.push(current.value);
+          this.#toWrite.remove(current);
+          current = current.next;
+        }
+        return result;
+      }
+      /**
+       * Prepends commands to the write queue in reverse.
+       */
+      prependCommandsToWrite(commands) {
+        if (!commands.length) {
+          return;
+        }
+        for (let i = commands.length - 1; i >= 0; i--) {
+          this.#toWrite.unshift(commands[i]);
+        }
+      }
+    };
+    exports.default = RedisCommandsQueue;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/commander.js
+var require_commander = __commonJS({
+  "node_modules/@redis/client/dist/lib/commander.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.scriptArgumentsPrefix = exports.functionArgumentsPrefix = exports.getTransformReply = exports.attachConfig = void 0;
+    function throwResp3SearchModuleUnstableError() {
+      throw new Error("Some RESP3 results for Redis Query Engine responses may change. Refer to the readme for guidance");
+    }
+    function attachConfig({ BaseClass, commands, createCommand, createModuleCommand, createFunctionCommand, createScriptCommand, config: config2 }) {
+      const RESP = config2?.RESP ?? 2, Class2 = class extends BaseClass {
+      };
+      for (const [name, command] of Object.entries(commands)) {
+        if (config2?.RESP == 3 && command.unstableResp3 && !config2.unstableResp3) {
+          Class2.prototype[name] = throwResp3SearchModuleUnstableError;
+        } else {
+          Class2.prototype[name] = createCommand(command, RESP);
+        }
+      }
+      if (config2?.modules) {
+        for (const [moduleName, module2] of Object.entries(config2.modules)) {
+          const fns = /* @__PURE__ */ Object.create(null);
+          for (const [name, command] of Object.entries(module2)) {
+            if (config2.RESP == 3 && command.unstableResp3 && !config2.unstableResp3) {
+              fns[name] = throwResp3SearchModuleUnstableError;
+            } else {
+              fns[name] = createModuleCommand(command, RESP);
+            }
+          }
+          attachNamespace(Class2.prototype, moduleName, fns);
+        }
+      }
+      if (config2?.functions) {
+        for (const [library, commands2] of Object.entries(config2.functions)) {
+          const fns = /* @__PURE__ */ Object.create(null);
+          for (const [name, command] of Object.entries(commands2)) {
+            fns[name] = createFunctionCommand(name, command, RESP);
+          }
+          attachNamespace(Class2.prototype, library, fns);
+        }
+      }
+      if (config2?.scripts) {
+        for (const [name, script] of Object.entries(config2.scripts)) {
+          Class2.prototype[name] = createScriptCommand(script, RESP);
+        }
+      }
+      return Class2;
+    }
+    exports.attachConfig = attachConfig;
+    function attachNamespace(prototype, name, fns) {
+      Object.defineProperty(prototype, name, {
+        get() {
+          const value = Object.create(fns);
+          value._self = this;
+          Object.defineProperty(this, name, { value });
+          return value;
+        }
+      });
+    }
+    function getTransformReply(command, resp) {
+      switch (typeof command.transformReply) {
+        case "function":
+          return command.transformReply;
+        case "object":
+          return command.transformReply[resp];
+      }
+    }
+    exports.getTransformReply = getTransformReply;
+    function functionArgumentsPrefix(name, fn) {
+      const prefix = [
+        fn.IS_READ_ONLY ? "FCALL_RO" : "FCALL",
+        name
+      ];
+      if (fn.NUMBER_OF_KEYS !== void 0) {
+        prefix.push(fn.NUMBER_OF_KEYS.toString());
+      }
+      return prefix;
+    }
+    exports.functionArgumentsPrefix = functionArgumentsPrefix;
+    function scriptArgumentsPrefix(script) {
+      const prefix = [
+        script.IS_READ_ONLY ? "EVALSHA_RO" : "EVALSHA",
+        script.SHA1
+      ];
+      if (script.NUMBER_OF_KEYS !== void 0) {
+        prefix.push(script.NUMBER_OF_KEYS.toString());
+      }
+      return prefix;
+    }
+    exports.scriptArgumentsPrefix = scriptArgumentsPrefix;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/multi-command.js
+var require_multi_command = __commonJS({
+  "node_modules/@redis/client/dist/lib/multi-command.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var errors_1 = require_errors2();
+    var RedisMultiCommand = class {
+      typeMapping;
+      constructor(typeMapping) {
+        this.typeMapping = typeMapping;
+      }
+      queue = [];
+      scriptsInUse = /* @__PURE__ */ new Set();
+      addCommand(args, transformReply) {
+        this.queue.push({
+          args,
+          transformReply
+        });
+      }
+      addScript(script, args, transformReply) {
+        const redisArgs = [];
+        redisArgs.preserve = args.preserve;
+        if (this.scriptsInUse.has(script.SHA1)) {
+          redisArgs.push("EVALSHA", script.SHA1);
+        } else {
+          this.scriptsInUse.add(script.SHA1);
+          redisArgs.push("EVAL", script.SCRIPT);
+        }
+        if (script.NUMBER_OF_KEYS !== void 0) {
+          redisArgs.push(script.NUMBER_OF_KEYS.toString());
+        }
+        redisArgs.push(...args);
+        this.addCommand(redisArgs, transformReply);
+      }
+      transformReplies(rawReplies) {
+        const errorIndexes = [], replies = rawReplies.map((reply, i) => {
+          if (reply instanceof errors_1.ErrorReply) {
+            errorIndexes.push(i);
+            return reply;
+          }
+          const { transformReply, args } = this.queue[i];
+          return transformReply ? transformReply(reply, args.preserve, this.typeMapping) : reply;
+        });
+        if (errorIndexes.length)
+          throw new errors_1.MultiErrorReply(replies, errorIndexes);
+        return replies;
+      }
+    };
+    exports.default = RedisMultiCommand;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/multi-command.js
+var require_multi_command2 = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/multi-command.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = __importDefault(require_commands());
+    var multi_command_1 = __importDefault(require_multi_command());
+    var commander_1 = require_commander();
+    var parser_1 = require_parser();
+    var RedisClientMultiCommand = class _RedisClientMultiCommand {
+      static #createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this.addCommand(redisArgs, transformReply);
+        };
+      }
+      static #createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this._self.addCommand(redisArgs, transformReply);
+        };
+      }
+      static #createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this._self.addCommand(redisArgs, transformReply);
+        };
+      }
+      static #createScriptCommand(script, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          script.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this.#addScript(script, redisArgs, transformReply);
+        };
+      }
+      static extend(config2) {
+        return (0, commander_1.attachConfig)({
+          BaseClass: _RedisClientMultiCommand,
+          commands: commands_1.default,
+          createCommand: _RedisClientMultiCommand.#createCommand,
+          createModuleCommand: _RedisClientMultiCommand.#createModuleCommand,
+          createFunctionCommand: _RedisClientMultiCommand.#createFunctionCommand,
+          createScriptCommand: _RedisClientMultiCommand.#createScriptCommand,
+          config: config2
+        });
+      }
+      #multi;
+      #executeMulti;
+      #executePipeline;
+      #selectedDB;
+      constructor(executeMulti, executePipeline, typeMapping) {
+        this.#multi = new multi_command_1.default(typeMapping);
+        this.#executeMulti = executeMulti;
+        this.#executePipeline = executePipeline;
+      }
+      SELECT(db, transformReply) {
+        this.#selectedDB = db;
+        this.#multi.addCommand(["SELECT", db.toString()], transformReply);
+        return this;
+      }
+      select = this.SELECT;
+      addCommand(args, transformReply) {
+        this.#multi.addCommand(args, transformReply);
+        return this;
+      }
+      #addScript(script, args, transformReply) {
+        this.#multi.addScript(script, args, transformReply);
+        return this;
+      }
+      async exec(execAsPipeline = false) {
+        if (execAsPipeline)
+          return this.execAsPipeline();
+        return this.#multi.transformReplies(await this.#executeMulti(this.#multi.queue, this.#selectedDB));
+      }
+      EXEC = this.exec;
+      execTyped(execAsPipeline = false) {
+        return this.exec(execAsPipeline);
+      }
+      async execAsPipeline() {
+        if (this.#multi.queue.length === 0)
+          return [];
+        return this.#multi.transformReplies(await this.#executePipeline(this.#multi.queue, this.#selectedDB));
+      }
+      execAsPipelineTyped() {
+        return this.execAsPipeline();
+      }
+      /**
+       * Adds a raw command to the multi/pipeline queue.
+       *
+       * Note: Using this method breaks the type inference for `execTyped` and
+       * `execAsPipelineTyped`. This is a known limitation and will be addressed
+       * in the future.
+       */
+      sendCommand(args) {
+        const redisArgs = args.slice();
+        this.#multi.addCommand(redisArgs);
+        return this;
+      }
+    };
+    exports.default = RedisClientMultiCommand;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/legacy-mode.js
+var require_legacy_mode = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/legacy-mode.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RedisLegacyClient = void 0;
+    var commander_1 = require_commander();
+    var commands_1 = __importDefault(require_commands());
+    var multi_command_1 = __importDefault(require_multi_command());
+    var RedisLegacyClient = class _RedisLegacyClient {
+      static #transformArguments(redisArgs, args) {
+        let callback;
+        if (typeof args[args.length - 1] === "function") {
+          callback = args.pop();
+        }
+        _RedisLegacyClient.pushArguments(redisArgs, args);
+        return callback;
+      }
+      static pushArguments(redisArgs, args) {
+        for (let i = 0; i < args.length; ++i) {
+          const arg = args[i];
+          if (Array.isArray(arg)) {
+            _RedisLegacyClient.pushArguments(redisArgs, arg);
+          } else {
+            redisArgs.push(typeof arg === "number" || arg instanceof Date ? arg.toString() : arg);
+          }
+        }
+      }
+      static getTransformReply(command, resp) {
+        return command.TRANSFORM_LEGACY_REPLY ? (0, commander_1.getTransformReply)(command, resp) : void 0;
+      }
+      static #createCommand(name, command, resp) {
+        const transformReply = _RedisLegacyClient.getTransformReply(command, resp);
+        return function(...args) {
+          const redisArgs = [name], callback = _RedisLegacyClient.#transformArguments(redisArgs, args), promise = this.#client.sendCommand(redisArgs);
+          if (!callback) {
+            promise.catch((err) => this.#client.emit("error", err));
+            return;
+          }
+          promise.then((reply) => callback(null, transformReply ? transformReply(reply) : reply)).catch((err) => callback(err));
+        };
+      }
+      #client;
+      #Multi;
+      constructor(client) {
+        this.#client = client;
+        const RESP = client.options?.RESP ?? 2;
+        for (const [name, command] of Object.entries(commands_1.default)) {
+          this[name] = _RedisLegacyClient.#createCommand(name, command, RESP);
+        }
+        this.#Multi = LegacyMultiCommand.factory(RESP);
+      }
+      sendCommand(...args) {
+        const redisArgs = [], callback = _RedisLegacyClient.#transformArguments(redisArgs, args), promise = this.#client.sendCommand(redisArgs);
+        if (!callback) {
+          promise.catch((err) => this.#client.emit("error", err));
+          return;
+        }
+        promise.then((reply) => callback(null, reply)).catch((err) => callback(err));
+      }
+      multi() {
+        return this.#Multi(this.#client);
+      }
+    };
+    exports.RedisLegacyClient = RedisLegacyClient;
+    var LegacyMultiCommand = class _LegacyMultiCommand {
+      static #createCommand(name, command, resp) {
+        const transformReply = RedisLegacyClient.getTransformReply(command, resp);
+        return function(...args) {
+          const redisArgs = [name];
+          RedisLegacyClient.pushArguments(redisArgs, args);
+          this.#multi.addCommand(redisArgs, transformReply);
+          return this;
+        };
+      }
+      static factory(resp) {
+        const Multi = class extends _LegacyMultiCommand {
+        };
+        for (const [name, command] of Object.entries(commands_1.default)) {
+          Multi.prototype[name] = _LegacyMultiCommand.#createCommand(name, command, resp);
+        }
+        return (client) => {
+          return new Multi(client);
+        };
+      }
+      #multi = new multi_command_1.default();
+      #client;
+      constructor(client) {
+        this.#client = client;
+      }
+      sendCommand(...args) {
+        const redisArgs = [];
+        RedisLegacyClient.pushArguments(redisArgs, args);
+        this.#multi.addCommand(redisArgs);
+        return this;
+      }
+      exec(cb) {
+        const promise = this.#client._executeMulti(this.#multi.queue);
+        if (!cb) {
+          promise.catch((err) => this.#client.emit("error", err));
+          return;
+        }
+        promise.then((results) => cb(null, this.#multi.transformReplies(results))).catch((err) => cb?.(err));
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/cache.js
+var require_cache = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/cache.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PooledNoRedirectClientSideCache = exports.BasicPooledClientSideCache = exports.PooledClientSideCacheProvider = exports.BasicClientSideCache = exports.ClientSideCacheProvider = exports.CacheStats = void 0;
+    var stream_1 = __require("stream");
+    var tracing_1 = require_tracing();
+    var CacheStats = class _CacheStats {
+      hitCount;
+      missCount;
+      loadSuccessCount;
+      loadFailureCount;
+      totalLoadTime;
+      evictionCount;
+      /**
+       * Creates a new CacheStats instance with the specified statistics.
+       */
+      constructor(hitCount, missCount, loadSuccessCount, loadFailureCount, totalLoadTime, evictionCount) {
+        this.hitCount = hitCount;
+        this.missCount = missCount;
+        this.loadSuccessCount = loadSuccessCount;
+        this.loadFailureCount = loadFailureCount;
+        this.totalLoadTime = totalLoadTime;
+        this.evictionCount = evictionCount;
+        if (hitCount < 0 || missCount < 0 || loadSuccessCount < 0 || loadFailureCount < 0 || totalLoadTime < 0 || evictionCount < 0) {
+          throw new Error("All statistics values must be non-negative");
+        }
+      }
+      /**
+       * Creates a new CacheStats instance with the specified statistics.
+       *
+       * @param hitCount - Number of cache hits
+       * @param missCount - Number of cache misses
+       * @param loadSuccessCount - Number of successful cache loads
+       * @param loadFailureCount - Number of failed cache loads
+       * @param totalLoadTime - Total load time in milliseconds
+       * @param evictionCount - Number of cache evictions
+       */
+      static of(hitCount = 0, missCount = 0, loadSuccessCount = 0, loadFailureCount = 0, totalLoadTime = 0, evictionCount = 0) {
+        return new _CacheStats(hitCount, missCount, loadSuccessCount, loadFailureCount, totalLoadTime, evictionCount);
+      }
+      /**
+       * Returns a statistics instance where no cache events have been recorded.
+       *
+       * @returns An empty statistics instance
+       */
+      static empty() {
+        return _CacheStats.EMPTY_STATS;
+      }
+      /**
+       * An empty stats instance with all counters set to zero.
+       */
+      static EMPTY_STATS = new _CacheStats(0, 0, 0, 0, 0, 0);
+      /**
+      * Returns the total number of times cache lookup methods have returned
+      * either a cached or uncached value.
+      *
+      * @returns Total number of requests (hits + misses)
+      */
+      requestCount() {
+        return this.hitCount + this.missCount;
+      }
+      /**
+       * Returns the hit rate of the cache.
+       * This is defined as hitCount / requestCount, or 1.0 when requestCount is 0.
+       *
+       * @returns The ratio of cache requests that were hits (between 0.0 and 1.0)
+       */
+      hitRate() {
+        const requestCount = this.requestCount();
+        return requestCount === 0 ? 1 : this.hitCount / requestCount;
+      }
+      /**
+       * Returns the miss rate of the cache.
+       * This is defined as missCount / requestCount, or 0.0 when requestCount is 0.
+       *
+       * @returns The ratio of cache requests that were misses (between 0.0 and 1.0)
+       */
+      missRate() {
+        const requestCount = this.requestCount();
+        return requestCount === 0 ? 0 : this.missCount / requestCount;
+      }
+      /**
+      * Returns the total number of load operations (successful + failed).
+      *
+      * @returns Total number of load operations
+      */
+      loadCount() {
+        return this.loadSuccessCount + this.loadFailureCount;
+      }
+      /**
+       * Returns the ratio of cache loading attempts that failed.
+       * This is defined as loadFailureCount / loadCount, or 0.0 when loadCount is 0.
+       *
+       * @returns Ratio of load operations that failed (between 0.0 and 1.0)
+       */
+      loadFailureRate() {
+        const loadCount = this.loadCount();
+        return loadCount === 0 ? 0 : this.loadFailureCount / loadCount;
+      }
+      /**
+       * Returns the average time spent loading new values, in milliseconds.
+       * This is defined as totalLoadTime / loadCount, or 0.0 when loadCount is 0.
+       *
+       * @returns Average load time in milliseconds
+       */
+      averageLoadPenalty() {
+        const loadCount = this.loadCount();
+        return loadCount === 0 ? 0 : this.totalLoadTime / loadCount;
+      }
+      /**
+      * Returns a new CacheStats representing the difference between this CacheStats
+      * and another. Negative values are rounded up to zero.
+      *
+      * @param other - The statistics to subtract from this instance
+      * @returns The difference between this instance and other
+      */
+      minus(other) {
+        return _CacheStats.of(Math.max(0, this.hitCount - other.hitCount), Math.max(0, this.missCount - other.missCount), Math.max(0, this.loadSuccessCount - other.loadSuccessCount), Math.max(0, this.loadFailureCount - other.loadFailureCount), Math.max(0, this.totalLoadTime - other.totalLoadTime), Math.max(0, this.evictionCount - other.evictionCount));
+      }
+      /**
+       * Returns a new CacheStats representing the sum of this CacheStats and another.
+       *
+       * @param other - The statistics to add to this instance
+       * @returns The sum of this instance and other
+       */
+      plus(other) {
+        return _CacheStats.of(this.hitCount + other.hitCount, this.missCount + other.missCount, this.loadSuccessCount + other.loadSuccessCount, this.loadFailureCount + other.loadFailureCount, this.totalLoadTime + other.totalLoadTime, this.evictionCount + other.evictionCount);
+      }
+    };
+    exports.CacheStats = CacheStats;
+    var DisabledStatsCounter = class _DisabledStatsCounter {
+      static INSTANCE = new _DisabledStatsCounter();
+      constructor() {
+      }
+      recordHits(count) {
+      }
+      recordMisses(count) {
+      }
+      recordLoadSuccess(loadTime) {
+      }
+      recordLoadFailure(loadTime) {
+      }
+      recordEvictions(count) {
+      }
+      snapshot() {
+        return CacheStats.empty();
+      }
+    };
+    function disabledStatsCounter() {
+      return DisabledStatsCounter.INSTANCE;
+    }
+    var DefaultStatsCounter = class _DefaultStatsCounter {
+      #hitCount = 0;
+      #missCount = 0;
+      #loadSuccessCount = 0;
+      #loadFailureCount = 0;
+      #totalLoadTime = 0;
+      #evictionCount = 0;
+      /**
+       * Records cache hits.
+       *
+       * @param count - The number of hits to record
+       */
+      recordHits(count) {
+        this.#hitCount += count;
+      }
+      /**
+       * Records cache misses.
+       *
+       * @param count - The number of misses to record
+       */
+      recordMisses(count) {
+        this.#missCount += count;
+      }
+      /**
+       * Records the successful load of a new entry.
+       *
+       * @param loadTime - The number of milliseconds spent loading the entry
+       */
+      recordLoadSuccess(loadTime) {
+        this.#loadSuccessCount++;
+        this.#totalLoadTime += loadTime;
+      }
+      /**
+       * Records the failed load of a new entry.
+       *
+       * @param loadTime - The number of milliseconds spent attempting to load the entry
+       */
+      recordLoadFailure(loadTime) {
+        this.#loadFailureCount++;
+        this.#totalLoadTime += loadTime;
+      }
+      /**
+       * Records cache evictions.
+       *
+       * @param count - The number of evictions to record
+       */
+      recordEvictions(count) {
+        this.#evictionCount += count;
+      }
+      /**
+       * Returns a snapshot of the current statistics.
+       *
+       * @returns A snapshot of the current statistics
+       */
+      snapshot() {
+        return CacheStats.of(this.#hitCount, this.#missCount, this.#loadSuccessCount, this.#loadFailureCount, this.#totalLoadTime, this.#evictionCount);
+      }
+      /**
+       * Creates a new DefaultStatsCounter.
+       *
+       * @returns A new DefaultStatsCounter instance
+       */
+      static create() {
+        return new _DefaultStatsCounter();
+      }
+    };
+    function generateCacheKey(redisArgs) {
+      const tmp = new Array(redisArgs.length * 2);
+      for (let i = 0; i < redisArgs.length; i++) {
+        tmp[i] = redisArgs[i].length;
+        tmp[i + redisArgs.length] = redisArgs[i];
+      }
+      return tmp.join("_");
+    }
+    var ClientSideCacheEntryBase = class {
+      #invalidated = false;
+      #expireTime;
+      constructor(ttl) {
+        if (ttl == 0) {
+          this.#expireTime = 0;
+        } else {
+          this.#expireTime = Date.now() + ttl;
+        }
+      }
+      invalidate() {
+        this.#invalidated = true;
+      }
+      validate() {
+        return !this.#invalidated && (this.#expireTime == 0 || Date.now() < this.#expireTime);
+      }
+    };
+    var ClientSideCacheEntryValue = class extends ClientSideCacheEntryBase {
+      #value;
+      get value() {
+        return this.#value;
+      }
+      constructor(ttl, value) {
+        super(ttl);
+        this.#value = value;
+      }
+    };
+    var ClientSideCacheEntryPromise = class extends ClientSideCacheEntryBase {
+      #sendCommandPromise;
+      get promise() {
+        return this.#sendCommandPromise;
+      }
+      constructor(ttl, sendCommandPromise) {
+        super(ttl);
+        this.#sendCommandPromise = sendCommandPromise;
+      }
+    };
+    var ClientSideCacheProvider = class extends stream_1.EventEmitter {
+    };
+    exports.ClientSideCacheProvider = ClientSideCacheProvider;
+    var BasicClientSideCache = class extends ClientSideCacheProvider {
+      #cacheKeyToEntryMap;
+      #keyToCacheKeySetMap;
+      ttl;
+      maxEntries;
+      lru;
+      #statsCounter;
+      recordEvictions(count) {
+        this.#statsCounter.recordEvictions(count);
+      }
+      recordHits(count) {
+        this.#statsCounter.recordHits(count);
+      }
+      recordMisses(count) {
+        this.#statsCounter.recordMisses(count);
+      }
+      constructor(config2) {
+        super();
+        this.#cacheKeyToEntryMap = /* @__PURE__ */ new Map();
+        this.#keyToCacheKeySetMap = /* @__PURE__ */ new Map();
+        this.ttl = config2?.ttl ?? 0;
+        this.maxEntries = config2?.maxEntries ?? 0;
+        this.lru = config2?.evictPolicy !== "FIFO";
+        const recordStats = config2?.recordStats !== false;
+        this.#statsCounter = recordStats ? DefaultStatsCounter.create() : disabledStatsCounter();
+      }
+      /* logic of how caching works:
+
+        1. commands use a CommandParser
+          it enables us to define/retrieve
+            cacheKey - a unique key that corresponds to this command and its arguments
+            redisKeys - an array of redis keys as strings that if the key is modified, will cause redis to invalidate this result when cached
+        2. check if cacheKey is in our cache
+          2b1. if its a value cacheEntry - return it
+          2b2. if it's a promise cache entry - wait on promise and then go to 3c.
+        3. if cacheEntry is not in cache
+          3a. send the command save the promise into a a cacheEntry and then wait on result
+          3b. transform reply (if required) based on transformReply
+          3b. check the cacheEntry is still valid - in cache and hasn't been deleted)
+          3c. if valid - overwrite with value entry
+        4. return previously non cached result
+        */
+      async handleCache(client, parser, fn, transformReply, typeMapping) {
+        let reply;
+        const cacheKey = generateCacheKey(parser.redisArgs);
+        let cacheEntry = this.get(cacheKey);
+        if (cacheEntry) {
+          if (cacheEntry instanceof ClientSideCacheEntryValue) {
+            this.#statsCounter.recordHits(1);
+            (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_REQUEST, () => ({ result: "hit", clientId: client._clientId }));
+            return structuredClone(cacheEntry.value);
+          } else if (cacheEntry instanceof ClientSideCacheEntryPromise) {
+            this.#statsCounter.recordMisses(1);
+            (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_REQUEST, () => ({ result: "miss", clientId: client._clientId }));
+            reply = await cacheEntry.promise;
+          } else {
+            throw new Error("unknown cache entry type");
+          }
+        } else {
+          this.#statsCounter.recordMisses(1);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_REQUEST, () => ({ result: "miss", clientId: client._clientId }));
+          const startTime = performance.now();
+          const promise = fn();
+          cacheEntry = this.createPromiseEntry(client, promise);
+          this.set(cacheKey, cacheEntry, parser.keys);
+          try {
+            reply = await promise;
+            const loadTime = performance.now() - startTime;
+            this.#statsCounter.recordLoadSuccess(loadTime);
+          } catch (err) {
+            const loadTime = performance.now() - startTime;
+            this.#statsCounter.recordLoadFailure(loadTime);
+            if (cacheEntry.validate()) {
+              this.delete(cacheKey);
+            }
+            throw err;
+          }
+        }
+        let val;
+        if (transformReply) {
+          val = transformReply(reply, parser.preserve, typeMapping);
+        } else {
+          val = reply;
+        }
+        if (cacheEntry.validate()) {
+          cacheEntry = this.createValueEntry(client, val);
+          this.set(cacheKey, cacheEntry, parser.keys);
+          this.emit("cached-key", cacheKey);
+        } else {
+        }
+        return structuredClone(val);
+      }
+      trackingOn() {
+        return ["CLIENT", "TRACKING", "ON"];
+      }
+      invalidate(key) {
+        if (key === null) {
+          const oldSize = this.size();
+          this.clear(false);
+          if (oldSize > 0) {
+            (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_EVICTION, () => ({ reason: "invalidation", count: oldSize }));
+          }
+          this.emit("invalidate", key);
+          return;
+        }
+        const keySet = this.#keyToCacheKeySetMap.get(key.toString());
+        if (keySet) {
+          let deletedCount = 0;
+          for (const cacheKey of keySet) {
+            const entry = this.#cacheKeyToEntryMap.get(cacheKey);
+            if (entry) {
+              entry.invalidate();
+              deletedCount++;
+            }
+            this.#cacheKeyToEntryMap.delete(cacheKey);
+          }
+          this.#keyToCacheKeySetMap.delete(key.toString());
+          if (deletedCount > 0) {
+            (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_EVICTION, () => ({ reason: "invalidation", count: deletedCount }));
+          }
+        }
+        this.emit("invalidate", key);
+      }
+      clear(resetStats = true) {
+        const oldSize = this.#cacheKeyToEntryMap.size;
+        this.#cacheKeyToEntryMap.clear();
+        this.#keyToCacheKeySetMap.clear();
+        if (resetStats) {
+          if (!(this.#statsCounter instanceof DisabledStatsCounter)) {
+            this.#statsCounter = DefaultStatsCounter.create();
+          }
+        } else {
+          if (oldSize > 0) {
+            this.#statsCounter.recordEvictions(oldSize);
+          }
+        }
+      }
+      get(cacheKey) {
+        const val = this.#cacheKeyToEntryMap.get(cacheKey);
+        if (val && !val.validate()) {
+          this.delete(cacheKey);
+          this.#statsCounter.recordEvictions(1);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_EVICTION, () => ({ reason: "ttl", count: 1 }));
+          this.emit("cache-evict", cacheKey);
+          return void 0;
+        }
+        if (val !== void 0 && this.lru) {
+          this.#cacheKeyToEntryMap.delete(cacheKey);
+          this.#cacheKeyToEntryMap.set(cacheKey, val);
+        }
+        return val;
+      }
+      delete(cacheKey) {
+        const entry = this.#cacheKeyToEntryMap.get(cacheKey);
+        if (entry) {
+          entry.invalidate();
+          this.#cacheKeyToEntryMap.delete(cacheKey);
+        }
+      }
+      has(cacheKey) {
+        return this.#cacheKeyToEntryMap.has(cacheKey);
+      }
+      set(cacheKey, cacheEntry, keys) {
+        let count = this.#cacheKeyToEntryMap.size;
+        const oldEntry = this.#cacheKeyToEntryMap.get(cacheKey);
+        if (oldEntry) {
+          count--;
+          oldEntry.invalidate();
+        }
+        if (this.maxEntries > 0 && count >= this.maxEntries) {
+          this.deleteOldest();
+          this.#statsCounter.recordEvictions(1);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.CACHE_EVICTION, () => ({ reason: "full", count: 1 }));
+        }
+        this.#cacheKeyToEntryMap.set(cacheKey, cacheEntry);
+        for (const key of keys) {
+          if (!this.#keyToCacheKeySetMap.has(key.toString())) {
+            this.#keyToCacheKeySetMap.set(key.toString(), /* @__PURE__ */ new Set());
+          }
+          const cacheKeySet = this.#keyToCacheKeySetMap.get(key.toString());
+          cacheKeySet.add(cacheKey);
+        }
+      }
+      size() {
+        return this.#cacheKeyToEntryMap.size;
+      }
+      createValueEntry(client, value) {
+        return new ClientSideCacheEntryValue(this.ttl, value);
+      }
+      createPromiseEntry(client, sendCommandPromise) {
+        return new ClientSideCacheEntryPromise(this.ttl, sendCommandPromise);
+      }
+      stats() {
+        return this.#statsCounter.snapshot();
+      }
+      onError() {
+        this.clear();
+      }
+      onClose() {
+        this.clear();
+      }
+      /**
+       * @internal
+       */
+      deleteOldest() {
+        const it = this.#cacheKeyToEntryMap[Symbol.iterator]();
+        const n = it.next();
+        if (!n.done) {
+          const key = n.value[0];
+          const entry = this.#cacheKeyToEntryMap.get(key);
+          if (entry) {
+            entry.invalidate();
+          }
+          this.#cacheKeyToEntryMap.delete(key);
+        }
+      }
+      /**
+       * Get cache entries for debugging
+       * @internal
+       */
+      entryEntries() {
+        return this.#cacheKeyToEntryMap.entries();
+      }
+      /**
+       * Get key set entries for debugging
+       * @internal
+       */
+      keySetEntries() {
+        return this.#keyToCacheKeySetMap.entries();
+      }
+    };
+    exports.BasicClientSideCache = BasicClientSideCache;
+    var PooledClientSideCacheProvider = class extends BasicClientSideCache {
+      #disabled = false;
+      disable() {
+        this.#disabled = true;
+      }
+      enable() {
+        this.#disabled = false;
+      }
+      get(cacheKey) {
+        if (this.#disabled) {
+          return void 0;
+        }
+        return super.get(cacheKey);
+      }
+      has(cacheKey) {
+        if (this.#disabled) {
+          return false;
+        }
+        return super.has(cacheKey);
+      }
+      onPoolClose() {
+        this.clear();
+      }
+    };
+    exports.PooledClientSideCacheProvider = PooledClientSideCacheProvider;
+    var BasicPooledClientSideCache = class extends PooledClientSideCacheProvider {
+      onError() {
+        this.clear(false);
+      }
+      onClose() {
+        this.clear(false);
+      }
+    };
+    exports.BasicPooledClientSideCache = BasicPooledClientSideCache;
+    var PooledClientSideCacheEntryValue = class extends ClientSideCacheEntryValue {
+      #creator;
+      constructor(ttl, creator, value) {
+        super(ttl, value);
+        this.#creator = creator;
+      }
+      validate() {
+        let ret = super.validate();
+        if (this.#creator) {
+          ret = ret && this.#creator.client.isReady && this.#creator.client.socketEpoch == this.#creator.epoch;
+        }
+        return ret;
+      }
+    };
+    var PooledClientSideCacheEntryPromise = class extends ClientSideCacheEntryPromise {
+      #creator;
+      constructor(ttl, creator, sendCommandPromise) {
+        super(ttl, sendCommandPromise);
+        this.#creator = creator;
+      }
+      validate() {
+        let ret = super.validate();
+        return ret && this.#creator.client.isReady && this.#creator.client.socketEpoch == this.#creator.epoch;
+      }
+    };
+    var PooledNoRedirectClientSideCache = class extends BasicPooledClientSideCache {
+      createValueEntry(client, value) {
+        const creator = {
+          epoch: client.socketEpoch,
+          client
+        };
+        return new PooledClientSideCacheEntryValue(this.ttl, creator, value);
+      }
+      createPromiseEntry(client, sendCommandPromise) {
+        const creator = {
+          epoch: client.socketEpoch,
+          client
+        };
+        return new PooledClientSideCacheEntryPromise(this.ttl, creator, sendCommandPromise);
+      }
+      onError() {
+      }
+      onClose() {
+      }
+    };
+    exports.PooledNoRedirectClientSideCache = PooledNoRedirectClientSideCache;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/single-entry-cache.js
+var require_single_entry_cache = __commonJS({
+  "node_modules/@redis/client/dist/lib/single-entry-cache.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SingleEntryCache = class {
+      #cached;
+      #serializedKey;
+      /**
+       * Retrieves an instance from the cache based on the provided key object.
+       *
+       * @param keyObj - The key object to look up in the cache.
+       * @returns The cached instance if found, undefined otherwise.
+       *
+       * @remarks
+       * This method uses JSON.stringify for comparison, which may not work correctly
+       * if the properties in the key object are rearranged or reordered.
+       */
+      get(keyObj) {
+        return JSON.stringify(keyObj, makeCircularReplacer()) === this.#serializedKey ? this.#cached : void 0;
+      }
+      set(keyObj, obj) {
+        this.#cached = obj;
+        this.#serializedKey = JSON.stringify(keyObj, makeCircularReplacer());
+      }
+    };
+    exports.default = SingleEntryCache;
+    function makeCircularReplacer() {
+      const seen = /* @__PURE__ */ new WeakSet();
+      return function serialize(_, value) {
+        if (value && typeof value === "object") {
+          if (seen.has(value)) {
+            return "circular";
+          }
+          seen.add(value);
+          return value;
+        }
+        return value;
+      };
+    }
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/identity.js
+var require_identity = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/identity.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.generateClusterClientId = exports.generateClientId = exports.ClientRole = void 0;
+    var node_crypto_1 = __require("node:crypto");
+    var MAX_ID_LENGTH = 128;
+    var ClientRole;
+    (function(ClientRole2) {
+      ClientRole2["STANDALONE"] = "standalone";
+      ClientRole2["CLUSTER"] = "cluster";
+      ClientRole2["CLUSTER_NODE"] = "clusterNode";
+      ClientRole2["POOL"] = "pool";
+      ClientRole2["POOL_MEMBER"] = "poolMember";
+      ClientRole2["SENTINEL"] = "sentinel";
+      ClientRole2["SENTINEL_CLIENT"] = "sentinelClient";
+    })(ClientRole || (exports.ClientRole = ClientRole = {}));
+    var truncateId = (prefix, hash) => {
+      const suffix = `-${hash}`;
+      const fullId = `${prefix}${suffix}`;
+      if (fullId.length <= MAX_ID_LENGTH) {
+        return fullId;
+      }
+      const ellipsis = "...";
+      const maxPrefixLength = MAX_ID_LENGTH - ellipsis.length - suffix.length;
+      const truncatedPrefix = prefix.substring(0, maxPrefixLength);
+      return `${truncatedPrefix}${ellipsis}${suffix}`;
+    };
+    var generateClientId = (host, port, db) => {
+      const hash = (0, node_crypto_1.randomBytes)(4).toString("hex");
+      const prefix = `${host ?? "unknown"}:${port ?? "unknown"}/${db ?? "unknown"}`;
+      return truncateId(prefix, hash);
+    };
+    exports.generateClientId = generateClientId;
+    var generateClusterClientId = (nodes) => {
+      const hash = (0, node_crypto_1.randomBytes)(4).toString("hex");
+      const prefix = nodes.map((n) => `${n?.socket?.host ?? "unknown"}:${n?.socket?.port ?? "unknown"}`).join(",");
+      return truncateId(prefix, hash);
+    };
+    exports.generateClusterClientId = generateClusterClientId;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/pool.js
+var require_pool = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/pool.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RedisClientPool = void 0;
+    var commands_1 = require_commands();
+    var _1 = __importDefault(require_client());
+    var node_events_1 = __require("node:events");
+    var node_perf_hooks_1 = __require("node:perf_hooks");
+    var linked_list_1 = require_linked_list();
+    var errors_1 = require_errors2();
+    var commander_1 = require_commander();
+    var multi_command_1 = __importDefault(require_multi_command2());
+    var cache_1 = require_cache();
+    var parser_1 = require_parser();
+    var single_entry_cache_1 = __importDefault(require_single_entry_cache());
+    var tracing_1 = require_tracing();
+    var identity_1 = require_identity();
+    var RedisClientPool = class _RedisClientPool extends node_events_1.EventEmitter {
+      static #createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this.execute((client) => client._executeCommand(command, parser, this._commandOptions, transformReply));
+        };
+      }
+      static #createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this._self.execute((client) => client._executeCommand(command, parser, this._self._commandOptions, transformReply));
+        };
+      }
+      static #createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          return this._self.execute((client) => client._executeCommand(fn, parser, this._self._commandOptions, transformReply));
+        };
+      }
+      static #createScriptCommand(script, resp) {
+        const prefix = (0, commander_1.scriptArgumentsPrefix)(script);
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.pushVariadic(prefix);
+          script.parseCommand(parser, ...args);
+          return this.execute((client) => client._executeScript(script, parser, this._commandOptions, transformReply));
+        };
+      }
+      static #SingleEntryCache = new single_entry_cache_1.default();
+      static create(clientOptions, options) {
+        let Pool = _RedisClientPool.#SingleEntryCache.get(clientOptions);
+        if (!Pool) {
+          Pool = (0, commander_1.attachConfig)({
+            BaseClass: _RedisClientPool,
+            commands: commands_1.NON_STICKY_COMMANDS,
+            createCommand: _RedisClientPool.#createCommand,
+            createModuleCommand: _RedisClientPool.#createModuleCommand,
+            createFunctionCommand: _RedisClientPool.#createFunctionCommand,
+            createScriptCommand: _RedisClientPool.#createScriptCommand,
+            config: clientOptions
+          });
+          Pool.prototype.Multi = multi_command_1.default.extend(clientOptions);
+          _RedisClientPool.#SingleEntryCache.set(clientOptions, Pool);
+        }
+        return Object.create(new Pool(clientOptions, options));
+      }
+      // TODO: defaults
+      static #DEFAULTS = {
+        minimum: 1,
+        maximum: 100,
+        acquireTimeout: 3e3,
+        cleanupDelay: 3e3
+      };
+      #clientFactory;
+      #options;
+      #identity;
+      #idleClients = new linked_list_1.SinglyLinkedList();
+      /**
+       * The number of idle clients.
+       */
+      get idleClients() {
+        return this._self.#idleClients.length;
+      }
+      #clientsInUse = new linked_list_1.DoublyLinkedList();
+      /**
+       * The number of clients in use.
+       */
+      get clientsInUse() {
+        return this._self.#clientsInUse.length;
+      }
+      /**
+       * The total number of clients in the pool (including connecting, idle, and in use).
+       */
+      get totalClients() {
+        return this._self.#idleClients.length + this._self.#clientsInUse.length;
+      }
+      #tasksQueue = new linked_list_1.SinglyLinkedList();
+      /**
+       * The number of tasks waiting for a client to become available.
+       */
+      get tasksQueueLength() {
+        return this._self.#tasksQueue.length;
+      }
+      #isOpen = false;
+      /**
+       * Whether the pool is open (either connecting or connected).
+       */
+      get isOpen() {
+        return this._self.#isOpen;
+      }
+      #isClosing = false;
+      /**
+       * Whether the pool is closing (*not* closed).
+       */
+      get isClosing() {
+        return this._self.#isClosing;
+      }
+      /**
+       * Resolve function called when all in-flight tasks complete during close().
+       * Used to signal that the pool has finished draining and clients can be closed.
+       */
+      #drainResolve;
+      #clientSideCache;
+      get clientSideCache() {
+        return this._self.#clientSideCache;
+      }
+      /**
+       * @internal
+       * Returns the pool identity for tracking in metrics.
+       */
+      get identity() {
+        return this._self.#identity;
+      }
+      /**
+       * You are probably looking for {@link RedisClient.createPool `RedisClient.createPool`},
+       * {@link RedisClientPool.fromClient `RedisClientPool.fromClient`},
+       * or {@link RedisClientPool.fromOptions `RedisClientPool.fromOptions`}...
+       */
+      constructor(clientOptions, options) {
+        super();
+        const socketOpts = clientOptions?.socket;
+        this.#identity = {
+          id: (0, identity_1.generateClientId)(socketOpts?.host, socketOpts?.port, clientOptions?.database),
+          role: identity_1.ClientRole.POOL
+        };
+        this.#options = {
+          ..._RedisClientPool.#DEFAULTS,
+          ...options
+        };
+        if (options?.clientSideCache) {
+          if (clientOptions === void 0) {
+            clientOptions = {};
+          }
+          if (options.clientSideCache instanceof cache_1.PooledClientSideCacheProvider) {
+            this.#clientSideCache = clientOptions.clientSideCache = options.clientSideCache;
+          } else {
+            const cscConfig = options.clientSideCache;
+            this.#clientSideCache = clientOptions.clientSideCache = new cache_1.BasicPooledClientSideCache(cscConfig);
+          }
+        }
+        this.#clientFactory = _1.default.factory(clientOptions).bind(void 0, clientOptions);
+      }
+      _self = this;
+      _commandOptions;
+      withCommandOptions(options) {
+        const proxy = Object.create(this._self);
+        proxy._commandOptions = options;
+        return proxy;
+      }
+      #commandOptionsProxy(key, value) {
+        const proxy = Object.create(this._self);
+        proxy._commandOptions = Object.create(this._commandOptions ?? null);
+        proxy._commandOptions[key] = value;
+        return proxy;
+      }
+      /**
+       * Override the `typeMapping` command option
+       */
+      withTypeMapping(typeMapping) {
+        return this._self.#commandOptionsProxy("typeMapping", typeMapping);
+      }
+      /**
+       * Override the `abortSignal` command option
+       */
+      withAbortSignal(abortSignal) {
+        return this._self.#commandOptionsProxy("abortSignal", abortSignal);
+      }
+      /**
+       * Override the `asap` command option to `true`
+       * TODO: remove?
+       */
+      asap() {
+        return this._self.#commandOptionsProxy("asap", true);
+      }
+      async connect() {
+        if (this._self.#isOpen)
+          return;
+        this._self.#isOpen = true;
+        const promises = [];
+        while (promises.length < this._self.#options.minimum) {
+          promises.push(this._self.#create());
+        }
+        try {
+          await Promise.all(promises);
+        } catch (err) {
+          this.destroy();
+          throw err;
+        }
+        return this;
+      }
+      async #create() {
+        const client = this._self.#clientFactory();
+        client._setIdentity(identity_1.ClientRole.POOL_MEMBER, this._self.#identity.id);
+        client.on("error", (err) => this.emit("error", err));
+        const node = this._self.#clientsInUse.push(client);
+        try {
+          await client.connect();
+        } catch (err) {
+          this._self.#clientsInUse.remove(node);
+          throw err;
+        }
+        this._self.#returnClient(node);
+      }
+      execute(fn) {
+        return new Promise((resolve3, reject) => {
+          if (this._self.#isClosing || !this._self.#isOpen) {
+            return reject(new errors_1.ClientClosedError());
+          }
+          const waitStartTimestamp = node_perf_hooks_1.performance.now();
+          const client = this._self.#idleClients.shift(), { tail } = this._self.#tasksQueue;
+          if (!client) {
+            let timeout;
+            if (this._self.#options.acquireTimeout > 0) {
+              timeout = setTimeout(() => {
+                this._self.#tasksQueue.remove(task, tail);
+                reject(new errors_1.TimeoutError("Timeout waiting for a client"));
+              }, this._self.#options.acquireTimeout);
+            }
+            const task = this._self.#tasksQueue.push({
+              timeout,
+              // @ts-ignore
+              resolve: resolve3,
+              reject,
+              fn,
+              waitStartTimestamp
+            });
+            if (this.totalClients < this._self.#options.maximum) {
+              this._self.#create();
+            }
+            return;
+          }
+          const node = this._self.#clientsInUse.push(client);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: client._clientId, waitStartTimestamp }));
+          this._self.#executeTask(node, resolve3, reject, fn);
+        });
+      }
+      #executeTask(node, resolve3, reject, fn) {
+        const result = fn(node.value);
+        if (result instanceof Promise) {
+          result.then(resolve3, reject).finally(() => {
+            this.#returnClient(node);
+          });
+        } else {
+          resolve3(result);
+          this.#returnClient(node);
+        }
+      }
+      #returnClient(node) {
+        const task = this.#tasksQueue.shift();
+        if (task) {
+          clearTimeout(task.timeout);
+          (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: node.value._clientId, waitStartTimestamp: task.waitStartTimestamp }));
+          this.#executeTask(node, task.resolve, task.reject, task.fn);
+          return;
+        }
+        this.#clientsInUse.remove(node);
+        this.#idleClients.push(node.value);
+        if (this.#isClosing && this.#clientsInUse.length === 0) {
+          this.#drainResolve?.();
+          return;
+        }
+        this.#scheduleCleanup();
+      }
+      cleanupTimeout;
+      #scheduleCleanup() {
+        if (this.totalClients <= this.#options.minimum)
+          return;
+        clearTimeout(this.cleanupTimeout);
+        this.cleanupTimeout = setTimeout(() => this.#cleanup(), this.#options.cleanupDelay);
+      }
+      #cleanup() {
+        const toDestroy = Math.min(this.#idleClients.length, this.totalClients - this.#options.minimum);
+        for (let i = 0; i < toDestroy; i++) {
+          const client = this.#idleClients.shift();
+          client.destroy();
+        }
+      }
+      sendCommand(args, options) {
+        return this.execute((client) => client.sendCommand(args, options));
+      }
+      MULTI() {
+        return new this.Multi((commands, selectedDB) => this.execute((client) => client._executeMulti(commands, selectedDB)), (commands) => this.execute((client) => client._executePipeline(commands)), this._commandOptions?.typeMapping);
+      }
+      multi = this.MULTI;
+      async close() {
+        if (this._self.#isClosing)
+          return;
+        if (!this._self.#isOpen)
+          return;
+        this._self.#isClosing = true;
+        clearTimeout(this._self.cleanupTimeout);
+        try {
+          if (this._self.#clientsInUse.length > 0) {
+            await new Promise((resolve3) => {
+              this._self.#drainResolve = resolve3;
+            });
+          }
+          const promises = [];
+          for (const client of this._self.#idleClients) {
+            promises.push(client.close());
+          }
+          await Promise.all(promises);
+          this._self.#clientSideCache?.onPoolClose();
+          this._self.#idleClients.reset();
+          this._self.#clientsInUse.reset();
+        } catch (err) {
+        } finally {
+          this._self.#drainResolve = void 0;
+          this._self.#isClosing = false;
+          this._self.#isOpen = false;
+        }
+      }
+      destroy() {
+        for (const client of this._self.#idleClients) {
+          client.destroy();
+        }
+        this._self.#idleClients.reset();
+        for (const client of this._self.#clientsInUse) {
+          client.destroy();
+        }
+        this._self.#clientSideCache?.onPoolClose();
+        this._self.#clientsInUse.reset();
+        this._self.#isOpen = false;
+      }
+    };
+    exports.RedisClientPool = RedisClientPool;
+  }
+});
+
+// node_modules/@redis/client/dist/package.json
+var require_package = __commonJS({
+  "node_modules/@redis/client/dist/package.json"(exports, module) {
+    module.exports = {
+      name: "@redis/client",
+      version: "5.12.1",
+      license: "MIT",
+      main: "./dist/index.js",
+      types: "./dist/index.d.ts",
+      files: [
+        "dist/",
+        "!dist/tsconfig.tsbuildinfo"
+      ],
+      scripts: {
+        test: "nyc -r text-summary -r lcov mocha -r tsx --reporter mocha-multi-reporters --reporter-options configFile=mocha-multi-reporter-config.json --exit './lib/**/*.spec.ts'",
+        release: "release-it"
+      },
+      dependencies: {
+        "cluster-key-slot": "1.1.2"
+      },
+      devDependencies: {
+        "@node-rs/xxhash": "1.7.6",
+        "@opentelemetry/api": "^1.9.0",
+        "@opentelemetry/sdk-metrics": "^2.2.0",
+        "@redis/test-utils": "*",
+        "@types/sinon": "^17.0.3",
+        sinon: "^17.0.1"
+      },
+      peerDependencies: {
+        "@opentelemetry/api": ">=1 <2",
+        "@node-rs/xxhash": "^1.1.0"
+      },
+      peerDependenciesMeta: {
+        "@opentelemetry/api": {
+          optional: true
+        },
+        "@node-rs/xxhash": {
+          optional: true
+        }
+      },
+      engines: {
+        node: ">= 18.19.0"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/redis/node-redis.git"
+      },
+      bugs: {
+        url: "https://github.com/redis/node-redis/issues"
+      },
+      homepage: "https://github.com/redis/node-redis/tree/master/packages/client",
+      keywords: [
+        "redis"
+      ]
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/client-registry.js
+var require_client_registry = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/client-registry.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ClientRegistry = void 0;
+    var NoOpClientRegistry = class {
+      register(_handle) {
+      }
+      unregister(_clientId) {
+      }
+      getById(_clientId) {
+        return void 0;
+      }
+      getAll() {
+        return [];
+      }
+    };
+    var ClientRegistryImpl = class {
+      #clients = /* @__PURE__ */ new Map();
+      register(handle) {
+        this.#clients.set(handle.identity.id, handle);
+      }
+      unregister(clientId) {
+        this.#clients.delete(clientId);
+      }
+      getById(clientId) {
+        return this.#clients.get(clientId);
+      }
+      getAll() {
+        return this.#clients.values();
+      }
+    };
+    var ClientRegistry = class _ClientRegistry {
+      static #instance = new NoOpClientRegistry();
+      static #initialized = false;
+      constructor() {
+      }
+      /**
+       * Initialize the client registry with the real implementation.
+       * Should be called from OpenTelemetry.init().
+       */
+      static init() {
+        if (_ClientRegistry.#initialized) {
+          return;
+        }
+        _ClientRegistry.#instance = new ClientRegistryImpl();
+        _ClientRegistry.#initialized = true;
+      }
+      /**
+       * Get the current registry instance.
+       * Returns NoOp registry if not initialized, real registry otherwise.
+       */
+      static get instance() {
+        return _ClientRegistry.#instance;
+      }
+      /**
+       * Check if the registry has been initialized.
+       */
+      static isInitialized() {
+        return _ClientRegistry.#initialized;
+      }
+      /**
+       * Reset the registry to its initial state (NoOp).
+       * Only for testing purposes.
+       * @internal
+       */
+      static reset() {
+        _ClientRegistry.#instance = new NoOpClientRegistry();
+        _ClientRegistry.#initialized = false;
+      }
+    };
+    exports.ClientRegistry = ClientRegistry;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/types.js
+var require_types2 = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.METRIC_ERROR_ORIGIN = exports.METRIC_ERROR_TYPE = exports.DEFAULT_HISTOGRAM_BUCKETS = exports.DEFAULT_METRIC_GROUPS = exports.METRIC_NAMES = exports.DEFAULT_OTEL_ATTRIBUTES = exports.INSTRUMENTATION_SCOPE_NAME = exports.CSC_EVICTION_REASON = exports.CSC_RESULT = exports.CONNECTION_CLOSE_REASON = exports.ERROR_CATEGORY = exports.OTEL_ATTRIBUTES = exports.METRIC_GROUP = void 0;
+    var package_json_1 = require_package();
+    exports.METRIC_GROUP = {
+      COMMAND: "command",
+      CONNECTION_BASIC: "connection-basic",
+      CONNECTION_ADVANCED: "connection-advanced",
+      RESILIENCY: "resiliency",
+      PUBSUB: "pubsub",
+      STREAMING: "streaming",
+      CLIENT_SIDE_CACHING: "client-side-caching"
+    };
+    exports.OTEL_ATTRIBUTES = {
+      // Database & network
+      dbSystemName: "db.system.name",
+      dbNamespace: "db.namespace",
+      dbOperationName: "db.operation.name",
+      dbResponseStatusCode: "db.response.status_code",
+      errorType: "error.type",
+      serverAddress: "server.address",
+      serverPort: "server.port",
+      networkPeerAddress: "network.peer.address",
+      networkPeerPort: "network.peer.port",
+      dbStoredProcedureName: "db.stored_procedure.name",
+      dbClientConnectionPoolName: "db.client.connection.pool.name",
+      dbClientConnectionState: "db.client.connection.state",
+      // Redis-specific extensions
+      redisClientLibrary: "redis.client.library",
+      redisRedirectionKind: "redis.client.redirection.kind",
+      redisClientErrorsInternal: "redis.client.errors.internal",
+      redisClientErrorsCategory: "redis.client.errors.category",
+      redisClientConnectionCloseReason: "redis.client.connection.close.reason",
+      redisClientCscResult: "redis.client.csc.result",
+      redisClientCscReason: "redis.client.csc.reason",
+      redisClientPubSubChannel: "redis.client.pubsub.channel",
+      redisClientPubSubSharded: "redis.client.pubsub.sharded",
+      redisClientPubSubMessageDirection: "redis.client.pubsub.message.direction",
+      redisClientStreamName: "redis.client.stream.name",
+      redisClientConsumerGroup: "redis.client.stream.consumer_group",
+      redisClientOperationRetryAttempts: "redis.client.operation.retry_attempts",
+      redisClientOperationBlocking: "redis.client.operation.blocking",
+      redisClientConnectionNotification: "redis.client.connection.notification",
+      redisClientParentId: "redis.client.parent.id"
+    };
+    exports.ERROR_CATEGORY = {
+      NETWORK: "network",
+      TLS: "tls",
+      AUTH: "auth",
+      SERVER: "server",
+      OTHER: "other"
+    };
+    exports.CONNECTION_CLOSE_REASON = {
+      APPLICATION_CLOSE: "application_close",
+      POOL_EVICTION_IDLE: "pool_eviction_idle",
+      SERVER_CLOSE: "server_close",
+      ERROR: "error",
+      HEALTHCHECK_FAILED: "healthcheck_failed"
+    };
+    exports.CSC_RESULT = {
+      HIT: "hit",
+      MISS: "miss"
+    };
+    exports.CSC_EVICTION_REASON = {
+      FULL: "full",
+      INVALIDATION: "invalidation",
+      TTL: "ttl"
+    };
+    exports.INSTRUMENTATION_SCOPE_NAME = "node-redis";
+    exports.DEFAULT_OTEL_ATTRIBUTES = {
+      [exports.OTEL_ATTRIBUTES.redisClientLibrary]: `node-redis:${package_json_1.version}`,
+      [exports.OTEL_ATTRIBUTES.dbSystemName]: "redis"
+    };
+    exports.METRIC_NAMES = {
+      // Command metrics
+      dbClientOperationDuration: "db.client.operation.duration",
+      // Connection metrics
+      dbClientConnectionCount: "db.client.connection.count",
+      dbClientConnectionCreateTime: "db.client.connection.create_time",
+      redisClientConnectionRelaxedTimeout: "redis.client.connection.relaxed_timeout",
+      redisClientConnectionHandoff: "redis.client.connection.handoff",
+      // Connection Advanced metrics
+      dbClientConnectionPendingRequests: "db.client.connection.pending_requests",
+      dbClientConnectionWaitTime: "db.client.connection.wait_time",
+      redisClientConnectionClosed: "redis.client.connection.closed",
+      // Resiliency metrics
+      redisClientErrors: "redis.client.errors",
+      redisClientMaintenanceNotifications: "redis.client.maintenance.notifications",
+      // PubSub metrics
+      redisClientPubsubMessages: "redis.client.pubsub.messages",
+      // Stream metrics
+      redisClientStreamLag: "redis.client.stream.lag",
+      // Client-Side Caching metrics
+      redisClientCscRequests: "redis.client.csc.requests",
+      redisClientCscItems: "redis.client.csc.items",
+      redisClientCscEvictions: "redis.client.csc.evictions",
+      redisClientCscNetworkSaved: "redis.client.csc.network_saved"
+    };
+    exports.DEFAULT_METRIC_GROUPS = [
+      "connection-basic",
+      "resiliency"
+    ];
+    var DEFAULT_HISTOGRAM_BUCKET = [1e-3, 5e-3, 0.01, 0.05, 0.1, 0.5, 1, 5, 10];
+    exports.DEFAULT_HISTOGRAM_BUCKETS = {
+      OPERATION_DURATION: DEFAULT_HISTOGRAM_BUCKET,
+      CONNECTION_CREATE_TIME: DEFAULT_HISTOGRAM_BUCKET,
+      CONNECTION_WAIT_TIME: DEFAULT_HISTOGRAM_BUCKET,
+      CONNECTION_USE_TIME: DEFAULT_HISTOGRAM_BUCKET,
+      STREAM_LAG: DEFAULT_HISTOGRAM_BUCKET
+    };
+    exports.METRIC_ERROR_TYPE = {
+      MOVED: "MOVED",
+      ASK: "ASK",
+      HANDSHAKE_FAILED: "HANDSHAKE_FAILED"
+    };
+    exports.METRIC_ERROR_ORIGIN = {
+      CLIENT: "client",
+      CLUSTER: "cluster"
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/utils/error.util.js
+var require_error_util = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/utils/error.util.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isRedirectionError = exports.getErrorInfo = void 0;
+    var types_1 = require_types2();
+    var errors_1 = require_errors2();
+    var REDIS_ERROR_PREFIX_REGEX = /^([A-Z][A-Z0-9_]*)\s/;
+    function extractRedisStatusCode(error2) {
+      if (!(error2 instanceof errors_1.ErrorReply)) {
+        return void 0;
+      }
+      const match = REDIS_ERROR_PREFIX_REGEX.exec(error2.message);
+      return match?.[1];
+    }
+    var NETWORK_ERROR_CODES = /* @__PURE__ */ new Set([
+      "ECONNREFUSED",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+      "EPIPE",
+      "ECONNABORTED",
+      "EAI_AGAIN"
+    ]);
+    var TLS_ERROR_CODES = /* @__PURE__ */ new Set([
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      "CERT_HAS_EXPIRED",
+      "DEPTH_ZERO_SELF_SIGNED_CERT",
+      "SELF_SIGNED_CERT_IN_CHAIN",
+      "ERR_TLS_CERT_ALTNAME_INVALID",
+      "CERT_SIGNATURE_FAILURE",
+      "ERR_SSL_WRONG_VERSION_NUMBER"
+    ]);
+    var AUTH_ERROR_PREFIXES = /* @__PURE__ */ new Set([
+      "NOAUTH",
+      "WRONGPASS",
+      "NOPERM"
+    ]);
+    var SERVER_ERROR_PREFIXES = /* @__PURE__ */ new Set([
+      "ASK",
+      "BUSY",
+      "BUSYGROUP",
+      "BUSYKEY",
+      "CLUSTERDOWN",
+      "CROSSSLOT",
+      "DENIED",
+      "ERR",
+      "EXECABORT",
+      "INPROG",
+      "INVALIDOBJ",
+      "IOERR",
+      "LOADING",
+      "MASTERDOWN",
+      "MISCONF",
+      "MOVED",
+      "NOAUTH",
+      "NOGROUP",
+      "NOGOODSLAVE",
+      "NOMASTERLINK",
+      "NOPERM",
+      "NOPROTO",
+      "NOQUORUM",
+      "NOREPLICAS",
+      "NOSCRIPT",
+      "NOTBUSY",
+      "NOTREADY",
+      "OOM",
+      "READONLY",
+      "TRYAGAIN",
+      "UNBLOCKED",
+      "UNKILLABLE",
+      "WRONGPASS",
+      "WRONGTYPE"
+    ]);
+    function isNodeRedisNetworkError(error2) {
+      return error2 instanceof errors_1.ConnectionTimeoutError || error2 instanceof errors_1.SocketTimeoutError || error2 instanceof errors_1.SocketClosedUnexpectedlyError || error2 instanceof errors_1.SocketTimeoutDuringMaintenanceError || error2 instanceof errors_1.CommandTimeoutDuringMaintenanceError;
+    }
+    function isTlsErrorMessage(message) {
+      const lowerMessage = message.toLowerCase();
+      return lowerMessage.includes("certificate") || lowerMessage.includes("handshake") || lowerMessage.includes("ssl") || lowerMessage.includes("tls");
+    }
+    function categorizeRedisError(error2) {
+      const prefix = extractRedisStatusCode(error2);
+      if (!prefix) {
+        return void 0;
+      }
+      if (AUTH_ERROR_PREFIXES.has(prefix)) {
+        return types_1.ERROR_CATEGORY.AUTH;
+      }
+      if (SERVER_ERROR_PREFIXES.has(prefix)) {
+        return types_1.ERROR_CATEGORY.SERVER;
+      }
+      return void 0;
+    }
+    function getCategory(error2) {
+      if (isNodeRedisNetworkError(error2)) {
+        return types_1.ERROR_CATEGORY.NETWORK;
+      }
+      const errorCode = error2.code;
+      if (errorCode) {
+        if (NETWORK_ERROR_CODES.has(errorCode)) {
+          return types_1.ERROR_CATEGORY.NETWORK;
+        }
+        if (TLS_ERROR_CODES.has(errorCode)) {
+          return types_1.ERROR_CATEGORY.TLS;
+        }
+      }
+      if (isTlsErrorMessage(error2.message)) {
+        return types_1.ERROR_CATEGORY.TLS;
+      }
+      const category = categorizeRedisError(error2);
+      if (category) {
+        return category;
+      }
+      return types_1.ERROR_CATEGORY.OTHER;
+    }
+    function getErrorInfo(error2) {
+      if (!(error2 instanceof Error)) {
+        return {
+          errorType: "unknown",
+          category: types_1.ERROR_CATEGORY.OTHER,
+          statusCode: void 0
+        };
+      }
+      const actualError = error2 instanceof errors_1.ReconnectStrategyError ? error2.originalError : error2;
+      return {
+        errorType: actualError.constructor.name,
+        category: getCategory(actualError),
+        statusCode: extractRedisStatusCode(actualError)
+      };
+    }
+    exports.getErrorInfo = getErrorInfo;
+    function isRedirectionError(statusCode) {
+      return statusCode !== void 0 && (statusCode.startsWith(types_1.METRIC_ERROR_TYPE.ASK) || statusCode.startsWith(types_1.METRIC_ERROR_TYPE.MOVED));
+    }
+    exports.isRedirectionError = isRedirectionError;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/utils/index.js
+var require_utils2 = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/utils/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseClientAttributes = exports.noopFunction = exports.isRedirectionError = exports.getErrorInfo = void 0;
+    var types_1 = require_types2();
+    var error_util_1 = require_error_util();
+    Object.defineProperty(exports, "getErrorInfo", { enumerable: true, get: function() {
+      return error_util_1.getErrorInfo;
+    } });
+    Object.defineProperty(exports, "isRedirectionError", { enumerable: true, get: function() {
+      return error_util_1.isRedirectionError;
+    } });
+    function noopFunction() {
+    }
+    exports.noopFunction = noopFunction;
+    var parseClientAttributes = (clientAttributes) => {
+      return {
+        ...clientAttributes?.db === void 0 ? {} : {
+          [types_1.OTEL_ATTRIBUTES.dbNamespace]: clientAttributes.db.toString()
+        },
+        ...clientAttributes?.host && {
+          [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes.host
+        },
+        ...clientAttributes?.port && {
+          [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes.port.toString()
+        },
+        ...clientAttributes?.clientId && {
+          [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes.clientId
+        },
+        ...clientAttributes?.parentId && {
+          [types_1.OTEL_ATTRIBUTES.redisClientParentId]: clientAttributes.parentId
+        }
+      };
+    };
+    exports.parseClientAttributes = parseClientAttributes;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/metrics.js
+var require_metrics = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/metrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTelMetrics = void 0;
+    var client_registry_1 = require_client_registry();
+    var types_1 = require_types2();
+    var utils_1 = require_utils2();
+    var errors_1 = require_errors2();
+    var tracing_1 = require_tracing();
+    function resolveClientAttributes(clientId) {
+      return clientId ? client_registry_1.ClientRegistry.instance.getById(clientId)?.getAttributes() : void 0;
+    }
+    function subscribeTC(tc, handlers) {
+      const h = handlers;
+      tc.subscribe(h);
+      return () => tc.unsubscribe(h);
+    }
+    var OTelCommandMetrics = class {
+      #instruments;
+      #options;
+      #metricsState = /* @__PURE__ */ new WeakMap();
+      #unsubscribers = [];
+      constructor(options, instruments) {
+        this.#options = options;
+        this.#instruments = instruments;
+        this.#subscribeToTracingChannel();
+      }
+      #subscribeToTracingChannel() {
+        const commandTC = (0, tracing_1.getTracingChannel)(tracing_1.CHANNELS.TRACE_COMMAND);
+        const batchTC = (0, tracing_1.getTracingChannel)(tracing_1.CHANNELS.TRACE_BATCH);
+        if (!commandTC || !batchTC)
+          return;
+        const onStart = (ctx) => {
+          const commandName = ctx.command?.toString() || "UNKNOWN";
+          if (this.#isCommandExcluded(commandName))
+            return;
+          this.#metricsState.set(ctx, {
+            startTime: performance.now(),
+            clientAttributes: resolveClientAttributes(ctx.clientId),
+            commandName
+          });
+        };
+        const onAsyncEnd = (ctx) => {
+          const state = this.#metricsState.get(ctx);
+          if (!state)
+            return;
+          this.#metricsState.delete(ctx);
+          this.#instruments.dbClientOperationDuration.record((performance.now() - state.startTime) / 1e3, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.dbNamespace]: state.clientAttributes?.db?.toString(),
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: state.clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: state.clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbOperationName]: state.commandName
+          });
+        };
+        const onError = (ctx) => {
+          const state = this.#metricsState.get(ctx);
+          if (!state)
+            return;
+          this.#metricsState.delete(ctx);
+          const errorInfo = (0, utils_1.getErrorInfo)(ctx.error);
+          this.#instruments.dbClientOperationDuration.record((performance.now() - state.startTime) / 1e3, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.dbNamespace]: state.clientAttributes?.db?.toString(),
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: state.clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: state.clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbOperationName]: state.commandName,
+            [types_1.OTEL_ATTRIBUTES.errorType]: errorInfo.errorType,
+            [types_1.OTEL_ATTRIBUTES.redisClientErrorsCategory]: errorInfo.category,
+            ...errorInfo.statusCode !== void 0 ? { [types_1.OTEL_ATTRIBUTES.dbResponseStatusCode]: errorInfo.statusCode } : {}
+          });
+        };
+        const onBatchStart = (ctx) => {
+          this.#metricsState.set(ctx, {
+            startTime: performance.now(),
+            clientAttributes: resolveClientAttributes(ctx.clientId),
+            commandName: ctx.batchMode
+          });
+        };
+        const onBatchAsyncEnd = (ctx) => {
+          const state = this.#metricsState.get(ctx);
+          if (!state)
+            return;
+          this.#metricsState.delete(ctx);
+          this.#instruments.dbClientOperationDuration.record((performance.now() - state.startTime) / 1e3, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.dbNamespace]: state.clientAttributes?.db?.toString(),
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: state.clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: state.clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbOperationName]: state.commandName
+          });
+        };
+        const onBatchError = (ctx) => {
+          const state = this.#metricsState.get(ctx);
+          if (!state)
+            return;
+          this.#metricsState.delete(ctx);
+          const errorInfo = (0, utils_1.getErrorInfo)(ctx.error);
+          this.#instruments.dbClientOperationDuration.record((performance.now() - state.startTime) / 1e3, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.dbNamespace]: state.clientAttributes?.db?.toString(),
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: state.clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: state.clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbOperationName]: state.commandName,
+            [types_1.OTEL_ATTRIBUTES.errorType]: errorInfo.errorType,
+            [types_1.OTEL_ATTRIBUTES.redisClientErrorsCategory]: errorInfo.category,
+            ...errorInfo.statusCode !== void 0 ? { [types_1.OTEL_ATTRIBUTES.dbResponseStatusCode]: errorInfo.statusCode } : {}
+          });
+        };
+        this.#unsubscribers.push(subscribeTC(commandTC, { start: onStart, asyncEnd: onAsyncEnd, error: onError }), subscribeTC(batchTC, { start: onBatchStart, asyncEnd: onBatchAsyncEnd, error: onBatchError }));
+      }
+      destroy() {
+        this.#unsubscribers.forEach((fn) => fn());
+      }
+      #isCommandExcluded(commandName) {
+        return this.#options.hasIncludeCommands && !this.#options.includeCommands[commandName] || this.#options.excludeCommands[commandName];
+      }
+    };
+    var OTelChannelSubscribers = class {
+      #instruments;
+      #options;
+      #unsubscribers = [];
+      constructor(options, instruments, enabledGroups) {
+        this.#options = options;
+        this.#instruments = instruments;
+        const hasBasic = enabledGroups.includes(types_1.METRIC_GROUP.CONNECTION_BASIC);
+        const hasAdvanced = enabledGroups.includes(types_1.METRIC_GROUP.CONNECTION_ADVANCED);
+        if (hasBasic) {
+          this.#subscribeConnectionBasic();
+        }
+        if (hasAdvanced) {
+          this.#subscribeConnectionAdvanced();
+        }
+        if (hasBasic || hasAdvanced) {
+          this.#subscribeConnectionClosed(hasBasic, hasAdvanced);
+        }
+        if (enabledGroups.includes(types_1.METRIC_GROUP.RESILIENCY)) {
+          this.#subscribeResiliency();
+        }
+        if (enabledGroups.includes(types_1.METRIC_GROUP.CLIENT_SIDE_CACHING)) {
+          this.#subscribeClientSideCache();
+        }
+        if (enabledGroups.includes(types_1.METRIC_GROUP.PUBSUB)) {
+          this.#subscribePubSub();
+        }
+        if (enabledGroups.includes(types_1.METRIC_GROUP.PUBSUB) || enabledGroups.includes(types_1.METRIC_GROUP.STREAMING)) {
+          this.#subscribeCommandReply(enabledGroups);
+        }
+      }
+      #sub(name, handler) {
+        const ch = (0, tracing_1.getChannel)(name);
+        if (!ch)
+          return;
+        ch.subscribe(handler);
+        this.#unsubscribers.push(() => ch.unsubscribe(handler));
+      }
+      destroy() {
+        this.#unsubscribers.forEach((fn) => fn());
+      }
+      // -- Connection Basic --
+      #subscribeConnectionBasic() {
+        this.#sub(tracing_1.CHANNELS.CONNECTION_READY, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.dbClientConnectionCreateTime.record(ctx.createTimeMs / 1e3, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+          });
+          this.#instruments.dbClientConnectionCount.add(1, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            [types_1.OTEL_ATTRIBUTES.dbClientConnectionState]: "used"
+          });
+        });
+        this.#sub(tracing_1.CHANNELS.CONNECTION_RELAXED_TIMEOUT, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientConnectionRelaxedTimeout.add(ctx.value, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+          });
+        });
+        this.#sub(tracing_1.CHANNELS.CONNECTION_HANDOFF, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientConnectionHandoff.add(1, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+          });
+        });
+      }
+      // -- Connection Closed (shared by basic + advanced) --
+      #subscribeConnectionClosed(hasBasic, hasAdvanced) {
+        this.#sub(tracing_1.CHANNELS.CONNECTION_CLOSED, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          if (hasBasic && ctx.wasConnected) {
+            this.#instruments.dbClientConnectionCount.add(-1, {
+              ...this.#options.attributes,
+              ...(0, utils_1.parseClientAttributes)(clientAttributes),
+              [types_1.OTEL_ATTRIBUTES.dbClientConnectionState]: "used"
+            });
+          }
+          if (hasAdvanced) {
+            this.#instruments.redisClientConnectionClosed.add(1, {
+              ...this.#options.attributes,
+              ...(0, utils_1.parseClientAttributes)(clientAttributes),
+              [types_1.OTEL_ATTRIBUTES.redisClientConnectionCloseReason]: ctx.reason
+            });
+          }
+        });
+      }
+      // -- Connection Advanced --
+      #subscribeConnectionAdvanced() {
+        this.#sub(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, (ctx) => {
+          if (!ctx.waitStartTimestamp)
+            return;
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.dbClientConnectionWaitTime.record((performance.now() - ctx.waitStartTimestamp) / 1e3, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+          });
+        });
+      }
+      #recordError(error2, clientId, extra) {
+        const clientAttributes = resolveClientAttributes(clientId);
+        const errorInfo = (0, utils_1.getErrorInfo)(error2);
+        this.#instruments.redisClientErrors.add(1, {
+          ...this.#options.attributes,
+          ...(0, utils_1.parseClientAttributes)(clientAttributes),
+          [types_1.OTEL_ATTRIBUTES.errorType]: errorInfo.errorType,
+          [types_1.OTEL_ATTRIBUTES.redisClientErrorsCategory]: errorInfo.category,
+          ...errorInfo.statusCode !== void 0 && {
+            [types_1.OTEL_ATTRIBUTES.dbResponseStatusCode]: errorInfo.statusCode
+          },
+          ...extra
+        });
+      }
+      // -- Resiliency --
+      #subscribeResiliency() {
+        this.#sub(tracing_1.CHANNELS.ERROR, (ctx) => {
+          if (ctx.origin === "client" && (0, utils_1.isRedirectionError)((0, utils_1.getErrorInfo)(ctx.error).statusCode))
+            return;
+          this.#recordError(ctx.error, ctx.clientId, {
+            [types_1.OTEL_ATTRIBUTES.redisClientErrorsInternal]: ctx.internal,
+            ...ctx.retryCount !== void 0 && {
+              [types_1.OTEL_ATTRIBUTES.redisClientOperationRetryAttempts]: ctx.retryCount
+            }
+          });
+        });
+        const commandTC = (0, tracing_1.getTracingChannel)(tracing_1.CHANNELS.TRACE_COMMAND);
+        if (commandTC) {
+          const onError = (ctx) => {
+            if ((0, utils_1.isRedirectionError)((0, utils_1.getErrorInfo)(ctx.error).statusCode))
+              return;
+            this.#recordError(ctx.error, ctx.clientId, {
+              [types_1.OTEL_ATTRIBUTES.redisClientErrorsInternal]: false
+            });
+          };
+          this.#unsubscribers.push(subscribeTC(commandTC, { error: onError }));
+        }
+        this.#sub(tracing_1.CHANNELS.MAINTENANCE, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientMaintenanceNotifications.add(1, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            [types_1.OTEL_ATTRIBUTES.redisClientConnectionNotification]: ctx.notification
+          });
+        });
+      }
+      // -- Client-Side Cache --
+      #subscribeClientSideCache() {
+        this.#sub(tracing_1.CHANNELS.CACHE_REQUEST, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientCscRequests.add(1, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes?.clientId,
+            [types_1.OTEL_ATTRIBUTES.redisClientCscResult]: ctx.result
+          });
+        });
+        this.#sub(tracing_1.CHANNELS.CACHE_EVICTION, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientCscEvictions.add(ctx.count ?? 1, {
+            ...this.#options.attributes,
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes?.clientId,
+            [types_1.OTEL_ATTRIBUTES.redisClientCscReason]: ctx.reason
+          });
+        });
+      }
+      // -- PubSub --
+      #subscribePubSub() {
+        this.#sub(tracing_1.CHANNELS.PUBSUB, (ctx) => {
+          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          this.#instruments.redisClientPubsubMessages.add(1, {
+            ...this.#options.attributes,
+            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            [types_1.OTEL_ATTRIBUTES.redisClientPubSubMessageDirection]: ctx.direction,
+            [types_1.OTEL_ATTRIBUTES.redisClientPubSubSharded]: ctx.sharded ?? false,
+            ...ctx.channel !== void 0 && !this.#options.hidePubSubChannelNames ? { [types_1.OTEL_ATTRIBUTES.redisClientPubSubChannel]: ctx.channel.toString() } : {}
+          });
+        });
+      }
+      // -- Command Reply (shared by PubSub out + Streaming) --
+      #subscribeCommandReply(enabledGroups) {
+        const hasPubSub = enabledGroups.includes(types_1.METRIC_GROUP.PUBSUB);
+        const hasStreaming = enabledGroups.includes(types_1.METRIC_GROUP.STREAMING);
+        this.#sub(tracing_1.CHANNELS.COMMAND_REPLY, (ctx) => {
+          const commandName = ctx.args[0]?.toString().toUpperCase();
+          if (hasPubSub && (commandName === "PUBLISH" || commandName === "SPUBLISH")) {
+            const clientAttributes = resolveClientAttributes(ctx.clientId);
+            this.#instruments.redisClientPubsubMessages.add(1, {
+              ...this.#options.attributes,
+              ...(0, utils_1.parseClientAttributes)(clientAttributes),
+              [types_1.OTEL_ATTRIBUTES.redisClientPubSubMessageDirection]: "out",
+              [types_1.OTEL_ATTRIBUTES.redisClientPubSubSharded]: commandName === "SPUBLISH",
+              ...ctx.args[1] !== void 0 && !this.#options.hidePubSubChannelNames ? { [types_1.OTEL_ATTRIBUTES.redisClientPubSubChannel]: ctx.args[1].toString() } : {}
+            });
+            return;
+          }
+          if (hasStreaming && (commandName === "XREAD" || commandName === "XREADGROUP")) {
+            const reply = ctx.reply;
+            if (!reply || !Array.isArray(reply) || reply.length === 0)
+              return;
+            const now = Date.now();
+            const clientAttributes = resolveClientAttributes(ctx.clientId);
+            const isXReadGroup = commandName === "XREADGROUP" && ctx.args[1]?.toString().toUpperCase() === "GROUP";
+            const consumerGroup = isXReadGroup ? ctx.args[2]?.toString() : void 0;
+            for (const streamData of reply) {
+              if (!streamData || typeof streamData !== "object")
+                continue;
+              const { name: stream, messages } = streamData;
+              if (!messages || !Array.isArray(messages) || messages.length === 0)
+                continue;
+              const streamAttributes = {
+                ...this.#options.attributes,
+                ...(0, utils_1.parseClientAttributes)(clientAttributes),
+                ...!this.#options.hideStreamNames ? { [types_1.OTEL_ATTRIBUTES.redisClientStreamName]: stream } : {},
+                ...consumerGroup !== void 0 ? { [types_1.OTEL_ATTRIBUTES.redisClientConsumerGroup]: consumerGroup } : {}
+              };
+              for (const message of messages) {
+                if (!message?.id)
+                  continue;
+                const [tsPart] = message.id.split("-");
+                const messageTimestamp = Number.parseInt(tsPart, 10);
+                if (!Number.isFinite(messageTimestamp))
+                  continue;
+                this.#instruments.redisClientStreamLag.record((now - messageTimestamp) / 1e3, streamAttributes);
+              }
+            }
+          }
+        });
+      }
+    };
+    var OTelMetrics = class _OTelMetrics {
+      // Create a noop instance by default
+      static #instance;
+      static #initialized = false;
+      commandMetrics;
+      #channelSubscribers;
+      #instruments;
+      #options;
+      constructor(api, config2) {
+        this.#options = this.parseOptions(config2);
+        if (!this.#options.enabled) {
+          this.commandMetrics = { destroy() {
+          } };
+          this.#channelSubscribers = { destroy() {
+          } };
+          this.#instruments = void 0;
+          return;
+        }
+        const meter = this.#getMeter(api, this.#options);
+        this.#instruments = this.registerInstruments(meter, this.#options);
+        if (this.#options.enabledMetricGroups.includes(types_1.METRIC_GROUP.COMMAND)) {
+          this.commandMetrics = new OTelCommandMetrics(this.#options, this.#instruments);
+        } else {
+          this.commandMetrics = { destroy() {
+          } };
+        }
+        this.#channelSubscribers = new OTelChannelSubscribers(this.#options, this.#instruments, this.#options.enabledMetricGroups);
+      }
+      static init({ api, config: config2 }) {
+        if (_OTelMetrics.#initialized) {
+          throw new errors_1.OpenTelemetryError("OTelMetrics already initialized");
+        }
+        const instance = new _OTelMetrics(api, config2);
+        _OTelMetrics.#instance = instance;
+        _OTelMetrics.#initialized = true;
+      }
+      /**
+       * Reset the instance to noop. Used for testing.
+       *
+       * @internal
+       */
+      static reset() {
+        if (!_OTelMetrics.#initialized)
+          return;
+        _OTelMetrics.#instance.commandMetrics.destroy();
+        _OTelMetrics.#instance.#channelSubscribers.destroy();
+        _OTelMetrics.#initialized = false;
+      }
+      static isInitialized() {
+        return _OTelMetrics.#initialized;
+      }
+      static get instance() {
+        return _OTelMetrics.#instance;
+      }
+      #getMeter(api, options) {
+        if (options.meterProvider) {
+          return options.meterProvider.getMeter(types_1.INSTRUMENTATION_SCOPE_NAME);
+        }
+        return api.metrics.getMeter(types_1.INSTRUMENTATION_SCOPE_NAME);
+      }
+      parseOptions(config2) {
+        return {
+          enabled: !!config2?.metrics?.enabled,
+          attributes: {
+            ...types_1.DEFAULT_OTEL_ATTRIBUTES
+          },
+          meterProvider: config2?.metrics?.meterProvider,
+          includeCommands: (config2?.metrics?.includeCommands ?? []).reduce((acc, c) => {
+            acc[c.toUpperCase()] = true;
+            return acc;
+          }, {}),
+          hasIncludeCommands: !!config2?.metrics?.includeCommands?.length,
+          excludeCommands: (config2?.metrics?.excludeCommands ?? []).reduce((acc, c) => {
+            acc[c.toUpperCase()] = true;
+            return acc;
+          }, {}),
+          hasExcludeCommands: !!config2?.metrics?.excludeCommands?.length,
+          enabledMetricGroups: config2?.metrics?.enabledMetricGroups ?? types_1.DEFAULT_METRIC_GROUPS,
+          hidePubSubChannelNames: config2?.metrics?.hidePubSubChannelNames ?? false,
+          hideStreamNames: config2?.metrics?.hideStreamNames ?? false,
+          bucketsOperationDuration: config2?.metrics?.bucketsOperationDuration ?? types_1.DEFAULT_HISTOGRAM_BUCKETS.OPERATION_DURATION,
+          bucketsConnectionCreateTime: config2?.metrics?.bucketsConnectionCreateTime ?? types_1.DEFAULT_HISTOGRAM_BUCKETS.CONNECTION_CREATE_TIME,
+          bucketsConnectionWaitTime: config2?.metrics?.bucketsConnectionWaitTime ?? types_1.DEFAULT_HISTOGRAM_BUCKETS.CONNECTION_WAIT_TIME,
+          bucketsStreamProcessingDuration: config2?.metrics?.bucketsStreamProcessingDuration ?? types_1.DEFAULT_HISTOGRAM_BUCKETS.STREAM_LAG
+        };
+      }
+      createHistogram(meter, instrumentConfig) {
+        return meter.createHistogram(instrumentConfig.name, {
+          unit: instrumentConfig.unit,
+          description: instrumentConfig.description,
+          ...instrumentConfig?.histogramBoundaries?.length ? {
+            advice: {
+              explicitBucketBoundaries: instrumentConfig.histogramBoundaries
+            }
+          } : {}
+        });
+      }
+      createCounter(meter, instrumentConfig) {
+        return meter.createCounter(instrumentConfig.name, {
+          unit: instrumentConfig.unit,
+          description: instrumentConfig.description
+        });
+      }
+      createUpDownCounter(meter, instrumentConfig) {
+        return meter.createUpDownCounter(instrumentConfig.name, {
+          unit: instrumentConfig.unit,
+          description: instrumentConfig.description
+        });
+      }
+      createObservableGaugeWithCallback(meter, instrumentConfig, options, callback) {
+        const gauge = meter.createObservableGauge(instrumentConfig.name, {
+          unit: instrumentConfig.unit,
+          description: instrumentConfig.description
+        });
+        if (options.enabledMetricGroups.includes(instrumentConfig.metricGroup)) {
+          meter.addBatchObservableCallback((observableResult) => callback(observableResult, options), [gauge]);
+        }
+        return gauge;
+      }
+      registerInstruments(meter, options) {
+        return {
+          // Command
+          dbClientOperationDuration: this.createHistogram(meter, {
+            name: types_1.METRIC_NAMES.dbClientOperationDuration,
+            unit: "s",
+            description: "Duration of a Redis client operation (includes retries)",
+            metricGroup: types_1.METRIC_GROUP.COMMAND,
+            histogramBoundaries: options.bucketsOperationDuration
+          }),
+          // Basic connection
+          dbClientConnectionCount: this.createUpDownCounter(meter, {
+            name: types_1.METRIC_NAMES.dbClientConnectionCount,
+            unit: "{connection}",
+            description: "Current number of active connections",
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_BASIC
+          }),
+          dbClientConnectionCreateTime: this.createHistogram(meter, {
+            name: types_1.METRIC_NAMES.dbClientConnectionCreateTime,
+            unit: "s",
+            description: "Time taken to create a new connection to the Redis server",
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_BASIC,
+            histogramBoundaries: options.bucketsConnectionCreateTime
+          }),
+          redisClientConnectionRelaxedTimeout: this.createUpDownCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientConnectionRelaxedTimeout,
+            unit: "{relaxation}",
+            description: `How many times the connection timeout has been increased/decreased (after a server maintenance notification).
+           Counts up for relaxed timeout, counts down for unrelaxed timeout`,
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_BASIC
+          }),
+          redisClientConnectionHandoff: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientConnectionHandoff,
+            unit: "{handoff}",
+            description: "Connections that have been handed off to another node (e.g after a MOVING notification)",
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_BASIC
+          }),
+          // Advanced connection
+          dbClientConnectionWaitTime: this.createHistogram(meter, {
+            name: types_1.METRIC_NAMES.dbClientConnectionWaitTime,
+            unit: "s",
+            description: "Time spent waiting for an available connection from the pool",
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_ADVANCED,
+            histogramBoundaries: options.bucketsConnectionWaitTime
+          }),
+          // The DB semconv models pending requests as an UpDownCounter on pooled
+          // connections. That does not map cleanly to node-redis today, so we keep
+          // this disabled for now and may reintroduce it later as an async gauge
+          // with a client-specific name.
+          // See: https://opentelemetry.io/docs/specs/semconv/db/database-metrics/#connection-pools
+          // dbClientConnectionPendingRequests: this.createObservableGaugeWithCallback(
+          //   meter,
+          //   options.enabledMetricGroups,
+          //   {
+          //     name: METRIC_NAMES.dbClientConnectionPendingRequests,
+          //     unit: "{request}",
+          //     description: "Current number of pending requests per connection",
+          //     metricGroup: METRIC_GROUP.CONNECTION_ADVANCED,
+          //   },
+          //   options,
+          //   (observableResult, opts) => {
+          //     for (const handle of ClientRegistry.instance.getAll()) {
+          //       observableResult.observe(
+          //         this.#instruments.dbClientConnectionPendingRequests,
+          //         handle.getPendingRequests(),
+          //         {
+          //           ...opts.attributes,
+          //           ...parseClientAttributes(handle.getAttributes()),
+          //         },
+          //       );
+          //     }
+          //   },
+          // ),
+          dbClientConnectionPendingRequests: meter.createObservableGauge(types_1.METRIC_NAMES.dbClientConnectionPendingRequests),
+          redisClientConnectionClosed: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientConnectionClosed,
+            unit: "{connection}",
+            description: "Total number of closed connections",
+            metricGroup: types_1.METRIC_GROUP.CONNECTION_ADVANCED
+          }),
+          // Resiliency
+          redisClientErrors: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientErrors,
+            unit: "{error}",
+            description: "A counter of all errors (both returned and handled internally)",
+            metricGroup: types_1.METRIC_GROUP.RESILIENCY
+          }),
+          redisClientMaintenanceNotifications: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientMaintenanceNotifications,
+            unit: "{notification}",
+            description: "Number of maintenance notifications received",
+            metricGroup: types_1.METRIC_GROUP.RESILIENCY
+          }),
+          // PubSub
+          redisClientPubsubMessages: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientPubsubMessages,
+            unit: "{message}",
+            description: "Number of pub/sub messages processed",
+            metricGroup: types_1.METRIC_GROUP.PUBSUB
+          }),
+          // Streams
+          redisClientStreamLag: this.createHistogram(meter, {
+            name: types_1.METRIC_NAMES.redisClientStreamLag,
+            unit: "s",
+            description: "End-to-end lag per message",
+            metricGroup: types_1.METRIC_GROUP.STREAMING,
+            histogramBoundaries: options.bucketsStreamProcessingDuration
+          }),
+          // Client-Side Caching
+          redisClientCscRequests: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientCscRequests,
+            unit: "{request}",
+            description: "Number of client-side cache requests (hits and misses)",
+            metricGroup: types_1.METRIC_GROUP.CLIENT_SIDE_CACHING
+          }),
+          redisClientCscItems: this.createObservableGaugeWithCallback(meter, {
+            name: types_1.METRIC_NAMES.redisClientCscItems,
+            unit: "{item}",
+            description: "Current number of items in the client-side cache",
+            metricGroup: types_1.METRIC_GROUP.CLIENT_SIDE_CACHING
+          }, options, (observableResult, opts) => {
+            for (const handle of client_registry_1.ClientRegistry.instance.getAll()) {
+              observableResult.observe(this.#instruments.redisClientCscItems, handle.getCacheItemCount(), {
+                ...opts.attributes,
+                ...(0, utils_1.parseClientAttributes)(handle.getAttributes())
+              });
+            }
+          }),
+          redisClientCscEvictions: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientCscEvictions,
+            unit: "{eviction}",
+            description: "Number of items evicted from the client-side cache",
+            metricGroup: types_1.METRIC_GROUP.CLIENT_SIDE_CACHING
+          }),
+          redisClientCscNetworkSaved: this.createCounter(meter, {
+            name: types_1.METRIC_NAMES.redisClientCscNetworkSaved,
+            unit: "By",
+            description: "Estimated bytes saved by client-side cache hits",
+            metricGroup: types_1.METRIC_GROUP.CLIENT_SIDE_CACHING
+          })
+        };
+      }
+    };
+    exports.OTelMetrics = OTelMetrics;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/opentelemetry/index.js
+var require_opentelemetry = __commonJS({
+  "node_modules/@redis/client/dist/lib/opentelemetry/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ClientRegistry = exports.OTelMetrics = exports.CSC_EVICTION_REASON = exports.CSC_RESULT = exports.CONNECTION_CLOSE_REASON = exports.OTEL_ATTRIBUTES = exports.OpenTelemetry = void 0;
+    var errors_1 = require_errors2();
+    var client_registry_1 = require_client_registry();
+    var metrics_1 = require_metrics();
+    var OpenTelemetry = class _OpenTelemetry {
+      static _instance = null;
+      // Make sure it's a singleton
+      constructor() {
+      }
+      /**
+       * Initializes node-redis OpenTelemetry observability.
+       *
+       * This bootstraps node-redis metrics instrumentation and registers the
+       * internal client registry used by metric collectors.
+       *
+       * Call this once during application startup, before creating Redis clients
+       * you want to observe.
+       *
+       * @param config - Observability configuration.
+       *
+       * @remarks Requires Node.js >= 18.19.0.
+       *
+       * @throws {OpenTelemetryError} If OpenTelemetry is already initialized.
+       * @throws {OpenTelemetryError} If `@opentelemetry/api` is not installed.
+       *
+       * @example
+       * ```ts
+       * import { metrics } from "@opentelemetry/api";
+       * import {
+       *   ConsoleMetricExporter,
+       *   MeterProvider,
+       *   PeriodicExportingMetricReader
+       * } from "@opentelemetry/sdk-metrics";
+       * import { OpenTelemetry } from "redis";
+       *
+       * const reader = new PeriodicExportingMetricReader({
+       *   exporter: new ConsoleMetricExporter()
+       * });
+       *
+       * const provider = new MeterProvider({ readers: [reader] });
+       * metrics.setGlobalMeterProvider(provider);
+       *
+       * OpenTelemetry.init({
+       *   metrics: {
+       *     enabled: true,
+       *     enabledMetricGroups: ["pubsub", "connection-basic", "resiliency"],
+       *     includeCommands: ["GET", "SET"],
+       *     hidePubSubChannelNames: true
+       *   }
+       * });
+       * ```
+       */
+      static init(config2) {
+        if (_OpenTelemetry._instance) {
+          throw new errors_1.OpenTelemetryError("OpenTelemetry already initialized");
+        }
+        const api = (() => {
+          try {
+            return __require("@opentelemetry/api");
+          } catch {
+            throw new errors_1.OpenTelemetryError("@opentelemetry/api not found");
+          }
+        })();
+        _OpenTelemetry._instance = new _OpenTelemetry();
+        client_registry_1.ClientRegistry.init();
+        metrics_1.OTelMetrics.init({ api, config: config2 });
+      }
+    };
+    exports.OpenTelemetry = OpenTelemetry;
+    var types_1 = require_types2();
+    Object.defineProperty(exports, "OTEL_ATTRIBUTES", { enumerable: true, get: function() {
+      return types_1.OTEL_ATTRIBUTES;
+    } });
+    Object.defineProperty(exports, "CONNECTION_CLOSE_REASON", { enumerable: true, get: function() {
+      return types_1.CONNECTION_CLOSE_REASON;
+    } });
+    Object.defineProperty(exports, "CSC_RESULT", { enumerable: true, get: function() {
+      return types_1.CSC_RESULT;
+    } });
+    Object.defineProperty(exports, "CSC_EVICTION_REASON", { enumerable: true, get: function() {
+      return types_1.CSC_EVICTION_REASON;
+    } });
+    var metrics_2 = require_metrics();
+    Object.defineProperty(exports, "OTelMetrics", { enumerable: true, get: function() {
+      return metrics_2.OTelMetrics;
+    } });
+    var client_registry_2 = require_client_registry();
+    Object.defineProperty(exports, "ClientRegistry", { enumerable: true, get: function() {
+      return client_registry_2.ClientRegistry;
+    } });
+  }
+});
+
+// node_modules/@redis/client/dist/lib/client/index.js
+var require_client = __commonJS({
+  "node_modules/@redis/client/dist/lib/client/index.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var _a;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = __importDefault(require_commands());
+    var socket_1 = __importDefault(require_socket());
+    var authx_1 = require_authx();
+    var commands_queue_1 = __importDefault(require_commands_queue());
+    var node_events_1 = __require("node:events");
+    var commander_1 = require_commander();
+    var errors_1 = require_errors2();
+    var node_url_1 = __require("node:url");
+    var pub_sub_1 = require_pub_sub();
+    var multi_command_1 = __importDefault(require_multi_command2());
+    var HELLO_1 = __importDefault(require_HELLO());
+    var legacy_mode_1 = require_legacy_mode();
+    var pool_1 = require_pool();
+    var generic_transformers_1 = require_generic_transformers();
+    var cache_1 = require_cache();
+    var parser_1 = require_parser();
+    var single_entry_cache_1 = __importDefault(require_single_entry_cache());
+    var package_json_1 = require_package();
+    var enterprise_maintenance_manager_1 = __importStar(require_enterprise_maintenance_manager());
+    var opentelemetry_1 = require_opentelemetry();
+    var identity_1 = require_identity();
+    var tracing_1 = require_tracing();
+    var noop = () => {
+    };
+    var RedisClient = class extends node_events_1.EventEmitter {
+      static #createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this._self._executeCommand(command, parser, this._commandOptions, transformReply);
+        };
+      }
+      static #createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this._self._executeCommand(command, parser, this._self._commandOptions, transformReply);
+        };
+      }
+      static #createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          return this._self._executeCommand(fn, parser, this._self._commandOptions, transformReply);
+        };
+      }
+      static #createScriptCommand(script, resp) {
+        const prefix = (0, commander_1.scriptArgumentsPrefix)(script);
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          script.parseCommand(parser, ...args);
+          return this._executeScript(script, parser, this._commandOptions, transformReply);
+        };
+      }
+      static #SingleEntryCache = new single_entry_cache_1.default();
+      static factory(config2) {
+        let Client = _a.#SingleEntryCache.get(config2);
+        if (!Client) {
+          Client = (0, commander_1.attachConfig)({
+            BaseClass: _a,
+            commands: commands_1.default,
+            createCommand: _a.#createCommand,
+            createModuleCommand: _a.#createModuleCommand,
+            createFunctionCommand: _a.#createFunctionCommand,
+            createScriptCommand: _a.#createScriptCommand,
+            config: config2
+          });
+          Client.prototype.Multi = multi_command_1.default.extend(config2);
+          _a.#SingleEntryCache.set(config2, Client);
+        }
+        return (options) => {
+          return Object.create(new Client(options));
+        };
+      }
+      static create(options) {
+        return _a.factory(options)(options);
+      }
+      static parseOptions(options) {
+        if (options?.url) {
+          const parsed = _a.parseURL(options.url);
+          if (options.socket) {
+            if (options.socket.tls !== void 0 && options.socket.tls !== parsed.socket.tls) {
+              throw new TypeError(`tls socket option is set to ${options.socket.tls} which is mismatch with protocol or the URL ${options.url} passed`);
+            }
+            parsed.socket = Object.assign(options.socket, parsed.socket);
+          }
+          Object.assign(options, parsed);
+        }
+        return options;
+      }
+      static parseURL(url) {
+        const { hostname: hostname2, port, protocol, username, password, pathname } = new node_url_1.URL(url), parsed = {
+          socket: {
+            // Use net.SocketAddress.parse() once supported.
+            host: hostname2.replace(/^\[([0-9a-f:]+)\]$/, "$1"),
+            tls: false
+          }
+        };
+        if (protocol !== "redis:" && protocol !== "rediss:") {
+          throw new TypeError("Invalid protocol");
+        }
+        parsed.socket.tls = protocol === "rediss:";
+        if (port) {
+          parsed.socket.port = Number(port);
+        }
+        if (username) {
+          parsed.username = decodeURIComponent(username);
+        }
+        if (password) {
+          parsed.password = decodeURIComponent(password);
+        }
+        if (username || password) {
+          parsed.credentialsProvider = {
+            type: "async-credentials-provider",
+            credentials: async () => ({
+              username: username ? decodeURIComponent(username) : void 0,
+              password: password ? decodeURIComponent(password) : void 0
+            })
+          };
+        }
+        if (pathname.length > 1) {
+          const database = Number(pathname.substring(1));
+          if (isNaN(database)) {
+            throw new TypeError("Invalid pathname");
+          }
+          parsed.database = database;
+        }
+        return parsed;
+      }
+      #options;
+      #socket;
+      #queue;
+      #selectedDB = 0;
+      #monitorCallback;
+      _self = this;
+      _commandOptions;
+      // flag used to annotate that the client
+      // was in a watch transaction when
+      // a topology change occured
+      #dirtyWatch;
+      #watchEpoch;
+      #clientSideCache;
+      #credentialsSubscription = null;
+      // Flag used to pause writing to the socket during maintenance windows.
+      // When true, prevents new commands from being written while waiting for:
+      // 1. New socket to be ready after maintenance redirect
+      // 2. In-flight commands on the old socket to complete
+      #paused = false;
+      #clientIdentity;
+      #registered = false;
+      get clientSideCache() {
+        return this._self.#clientSideCache;
+      }
+      get options() {
+        return this._self.#options;
+      }
+      /**
+       * @internal
+       * Returns the client ID for metrics attribution.
+       */
+      get _clientId() {
+        return this._self.#clientIdentity.id;
+      }
+      /**
+       * @internal
+       * Sets the client identity. Used by pool/cluster/sentinel when creating child clients.
+       */
+      _setIdentity(role, parentId) {
+        this._self.#clientIdentity.role = role;
+        if (parentId) {
+          this._self.#clientIdentity.parentId = parentId;
+        }
+      }
+      /**
+       * @internal
+       * Creates a metrics handle for this client.
+       */
+      #createMetricsHandle() {
+        return {
+          identity: this._self.#clientIdentity,
+          getAttributes: () => ({
+            host: this._self.#socket.host,
+            port: this._self.#socket.port,
+            db: this._self.#selectedDB,
+            clientId: this._self.#clientIdentity.id,
+            parentId: this._self.#clientIdentity.parentId,
+            isPubSub: this._self.#queue.isPubSubActive
+          }),
+          getPendingRequests: () => this._self.#queue.pendingCount,
+          getCacheItemCount: () => this._self.#clientSideCache?.size() ?? 0,
+          isConnected: () => this._self.#socket.isReady
+        };
+      }
+      /**
+       * @internal
+       * Registers this client with the metrics registry.
+       */
+      #registerForMetrics() {
+        if (this.#registered) {
+          return;
+        }
+        opentelemetry_1.ClientRegistry.instance.register(this.#createMetricsHandle());
+        this.#registered = true;
+      }
+      /**
+       * @internal
+       * Unregisters this client from the metrics registry.
+       */
+      #unregisterFromMetrics() {
+        if (!this.#registered)
+          return;
+        opentelemetry_1.ClientRegistry.instance.unregister(this.#clientIdentity.id);
+        this.#registered = false;
+      }
+      get isOpen() {
+        return this._self.#socket.isOpen;
+      }
+      get isReady() {
+        return this._self.#socket.isReady;
+      }
+      get isPubSubActive() {
+        return this._self.#queue.isPubSubActive;
+      }
+      get socketEpoch() {
+        return this._self.#socket.socketEpoch;
+      }
+      get isWatching() {
+        return this._self.#watchEpoch !== void 0;
+      }
+      /**
+       * Indicates whether the client's WATCH command has been invalidated by a topology change.
+       * When this returns true, any transaction using WATCH will fail with a WatchError.
+       * @returns true if the watched keys have been modified, false otherwise
+       */
+      get isDirtyWatch() {
+        return this._self.#dirtyWatch !== void 0;
+      }
+      /**
+       * Marks the client's WATCH command as invalidated due to a topology change.
+       * This will cause any subsequent EXEC in a transaction to fail with a WatchError.
+       * @param msg - The error message explaining why the WATCH is dirty
+       */
+      setDirtyWatch(msg) {
+        this._self.#dirtyWatch = msg;
+      }
+      constructor(options) {
+        super();
+        this.#validateOptions(options);
+        this.#options = this.#initiateOptions(options);
+        const socketOpts = this.#options.socket;
+        this.#clientIdentity = {
+          id: (0, identity_1.generateClientId)(socketOpts?.host, socketOpts?.port, this.#selectedDB),
+          role: identity_1.ClientRole.STANDALONE
+        };
+        this.#queue = this.#initiateQueue(this.#clientIdentity.id);
+        this.#socket = this.#initiateSocket(this.#clientIdentity.id);
+        this.#registerForMetrics();
+        if (this.#options.maintNotifications !== "disabled") {
+          new enterprise_maintenance_manager_1.default(this.#queue, this, this.#options);
+        }
+        ;
+        if (this.#options.clientSideCache) {
+          if (this.#options.clientSideCache instanceof cache_1.ClientSideCacheProvider) {
+            this.#clientSideCache = this.#options.clientSideCache;
+          } else {
+            const cscConfig = this.#options.clientSideCache;
+            this.#clientSideCache = new cache_1.BasicClientSideCache(cscConfig);
+          }
+          this.#queue.addPushHandler((push) => {
+            if (push[0].toString() !== "invalidate")
+              return false;
+            if (push[1] !== null) {
+              for (const key of push[1]) {
+                this.#clientSideCache?.invalidate(key);
+              }
+            } else {
+              this.#clientSideCache?.invalidate(null);
+            }
+            return true;
+          });
+        } else if (options?.emitInvalidate) {
+          this.#queue.addPushHandler((push) => {
+            if (push[0].toString() !== "invalidate")
+              return false;
+            if (push[1] !== null) {
+              for (const key of push[1]) {
+                this.emit("invalidate", key);
+              }
+            } else {
+              this.emit("invalidate", null);
+            }
+            return true;
+          });
+        }
+      }
+      #validateOptions(options) {
+        if (options?.clientSideCache && options?.RESP !== 3) {
+          throw new Error("Client Side Caching is only supported with RESP3");
+        }
+        if (options?.emitInvalidate && options?.RESP !== 3) {
+          throw new Error("emitInvalidate is only supported with RESP3");
+        }
+        if (options?.clientSideCache && options?.emitInvalidate) {
+          throw new Error("emitInvalidate is not supported (or necessary) when clientSideCache is enabled");
+        }
+        if (options?.maintNotifications && options?.maintNotifications !== "disabled" && options?.RESP !== 3) {
+          throw new Error("Graceful Maintenance is only supported with RESP3");
+        }
+      }
+      #initiateOptions(options = {}) {
+        if (!options.credentialsProvider && (options.username || options.password)) {
+          options.credentialsProvider = {
+            type: "async-credentials-provider",
+            credentials: async () => ({
+              username: options.username,
+              password: options.password
+            })
+          };
+        }
+        if (options.database) {
+          this._self.#selectedDB = options.database;
+        }
+        if (options.commandOptions) {
+          this._commandOptions = options.commandOptions;
+        }
+        if (options.maintNotifications !== "disabled") {
+          enterprise_maintenance_manager_1.default.setupDefaultMaintOptions(options);
+        }
+        if (options.url) {
+          const parsedOptions = _a.parseOptions(options);
+          if (parsedOptions?.database) {
+            this._self.#selectedDB = parsedOptions.database;
+          }
+          return parsedOptions;
+        }
+        return options;
+      }
+      #initiateQueue(clientId) {
+        return new commands_queue_1.default(this.#options.RESP ?? 2, this.#options.commandsQueueMaxLength, (channel, listeners) => this.emit("sharded-channel-moved", channel, listeners), clientId);
+      }
+      /**
+       * @param credentials
+       */
+      reAuthenticate = async (credentials) => {
+        if (!(this.isPubSubActive && !this.#options.RESP)) {
+          await this.sendCommand((0, generic_transformers_1.parseArgs)(commands_1.default.AUTH, {
+            username: credentials.username,
+            password: credentials.password ?? ""
+          }));
+        }
+      };
+      #subscribeForStreamingCredentials(cp) {
+        return cp.subscribe({
+          onNext: (credentials) => {
+            this.reAuthenticate(credentials).catch((error2) => {
+              const errorMessage = error2 instanceof Error ? error2.message : String(error2);
+              cp.onReAuthenticationError(new authx_1.CredentialsError(errorMessage));
+            });
+          },
+          onError: (e) => {
+            const errorMessage = `Error from streaming credentials provider: ${e.message}`;
+            cp.onReAuthenticationError(new authx_1.UnableToObtainNewCredentialsError(errorMessage));
+          }
+        });
+      }
+      async #handshake(chainId, asap) {
+        const promises = [];
+        const commandsWithErrorHandlers = await this.#getHandshakeCommands();
+        if (asap)
+          commandsWithErrorHandlers.reverse();
+        for (const { cmd, errorHandler } of commandsWithErrorHandlers) {
+          promises.push(this.#queue.addCommand(cmd, {
+            chainId,
+            asap
+          }).catch(errorHandler));
+        }
+        return promises;
+      }
+      async #getHandshakeCommands() {
+        const commands = [];
+        const cp = this.#options.credentialsProvider;
+        if (this.#options.RESP) {
+          const hello = {};
+          if (cp && cp.type === "async-credentials-provider") {
+            const credentials = await cp.credentials();
+            if (credentials.password) {
+              hello.AUTH = {
+                username: credentials.username ?? "default",
+                password: credentials.password
+              };
+            }
+          }
+          if (cp && cp.type === "streaming-credentials-provider") {
+            const [credentials, disposable] = await this.#subscribeForStreamingCredentials(cp);
+            this.#credentialsSubscription = disposable;
+            if (credentials.password) {
+              hello.AUTH = {
+                username: credentials.username ?? "default",
+                password: credentials.password
+              };
+            }
+          }
+          if (this.#options.name) {
+            hello.SETNAME = this.#options.name;
+          }
+          commands.push({ cmd: (0, generic_transformers_1.parseArgs)(HELLO_1.default, this.#options.RESP, hello) });
+        } else {
+          if (cp && cp.type === "async-credentials-provider") {
+            const credentials = await cp.credentials();
+            if (credentials.username || credentials.password) {
+              commands.push({
+                cmd: (0, generic_transformers_1.parseArgs)(commands_1.default.AUTH, {
+                  username: credentials.username,
+                  password: credentials.password ?? ""
+                })
+              });
+            }
+          }
+          if (cp && cp.type === "streaming-credentials-provider") {
+            const [credentials, disposable] = await this.#subscribeForStreamingCredentials(cp);
+            this.#credentialsSubscription = disposable;
+            if (credentials.username || credentials.password) {
+              commands.push({
+                cmd: (0, generic_transformers_1.parseArgs)(commands_1.default.AUTH, {
+                  username: credentials.username,
+                  password: credentials.password ?? ""
+                })
+              });
+            }
+          }
+          if (this.#options.name) {
+            commands.push({
+              cmd: (0, generic_transformers_1.parseArgs)(commands_1.default.CLIENT_SETNAME, this.#options.name)
+            });
+          }
+        }
+        if (this.#selectedDB !== 0) {
+          commands.push({ cmd: ["SELECT", this.#selectedDB.toString()] });
+        }
+        if (this.#options.readonly) {
+          commands.push({ cmd: (0, generic_transformers_1.parseArgs)(commands_1.default.READONLY) });
+        }
+        if (!this.#options.disableClientInfo) {
+          commands.push({
+            cmd: ["CLIENT", "SETINFO", "LIB-VER", package_json_1.version],
+            errorHandler: () => {
+            }
+          });
+          commands.push({
+            cmd: [
+              "CLIENT",
+              "SETINFO",
+              "LIB-NAME",
+              this.#options.clientInfoTag ? `node-redis(${this.#options.clientInfoTag})` : "node-redis"
+            ],
+            errorHandler: () => {
+            }
+          });
+        }
+        if (this.#clientSideCache) {
+          commands.push({ cmd: this.#clientSideCache.trackingOn() });
+        }
+        if (this.#options?.emitInvalidate) {
+          commands.push({ cmd: ["CLIENT", "TRACKING", "ON"] });
+        }
+        const maintenanceHandshakeCmd = await enterprise_maintenance_manager_1.default.getHandshakeCommand(this.#options, this._clientId);
+        if (maintenanceHandshakeCmd) {
+          commands.push(maintenanceHandshakeCmd);
+        }
+        ;
+        return commands;
+      }
+      #attachListeners(socket) {
+        socket.on("data", (chunk) => {
+          try {
+            this.#queue.decoder.write(chunk);
+          } catch (err) {
+            this.#queue.resetDecoder();
+            this.emit("error", err);
+          }
+        }).on("error", (err) => {
+          this.emit("error", err);
+          this.#clientSideCache?.onError();
+          if (this.#socket.isOpen && !this.#options.disableOfflineQueue) {
+            this.#queue.flushWaitingForReply(err);
+          } else {
+            this.#queue.flushAll(err);
+          }
+        }).on("connect", () => this.emit("connect")).on("ready", () => {
+          this.emit("ready");
+          this.#setPingTimer();
+          this.#maybeScheduleWrite();
+        }).on("reconnecting", () => this.emit("reconnecting")).on("drain", () => this.#maybeScheduleWrite()).on("end", () => this.emit("end"));
+      }
+      #initiateSocket(clientId) {
+        const socketInitiator = async () => {
+          const promises = [], chainId = Symbol("Socket Initiator");
+          const resubscribePromise = this.#queue.resubscribe(chainId);
+          resubscribePromise?.catch((error2) => {
+            if (error2.message && error2.message.startsWith("MOVED")) {
+              this.emit("__MOVED", this._self.#queue.removeAllPubSubListeners());
+            }
+          });
+          if (resubscribePromise) {
+            promises.push(resubscribePromise);
+          }
+          if (this.#monitorCallback) {
+            promises.push(this.#queue.monitor(this.#monitorCallback, {
+              typeMapping: this._commandOptions?.typeMapping,
+              chainId,
+              asap: true
+            }));
+          }
+          promises.push(...await this.#handshake(chainId, true));
+          if (promises.length) {
+            this.#write();
+            return Promise.all(promises);
+          }
+        };
+        const socket = new socket_1.default(socketInitiator, clientId, this.#options.socket);
+        this.#attachListeners(socket);
+        return socket;
+      }
+      #pingTimer;
+      #setPingTimer() {
+        if (!this.#options.pingInterval || !this.#socket.isReady)
+          return;
+        clearTimeout(this.#pingTimer);
+        this.#pingTimer = setTimeout(() => {
+          if (!this.#socket.isReady)
+            return;
+          this.sendCommand(["PING"]).then((reply) => this.emit("ping-interval", reply)).catch((err) => this.emit("error", err)).finally(() => this.#setPingTimer());
+        }, this.#options.pingInterval);
+      }
+      withCommandOptions(options) {
+        const proxy = Object.create(this._self);
+        proxy._commandOptions = options;
+        return proxy;
+      }
+      _commandOptionsProxy(key, value) {
+        const proxy = Object.create(this._self);
+        proxy._commandOptions = Object.create(this._commandOptions ?? null);
+        proxy._commandOptions[key] = value;
+        return proxy;
+      }
+      /**
+       * Override the `typeMapping` command option
+       */
+      withTypeMapping(typeMapping) {
+        return this._commandOptionsProxy("typeMapping", typeMapping);
+      }
+      /**
+       * Override the `abortSignal` command option
+       */
+      withAbortSignal(abortSignal) {
+        return this._commandOptionsProxy("abortSignal", abortSignal);
+      }
+      /**
+       * Override the `asap` command option to `true`
+       */
+      asap() {
+        return this._commandOptionsProxy("asap", true);
+      }
+      /**
+       * Create the "legacy" (v3/callback) interface
+       */
+      legacy() {
+        return new legacy_mode_1.RedisLegacyClient(this);
+      }
+      /**
+       * Create {@link RedisClientPool `RedisClientPool`} using this client as a prototype
+       */
+      createPool(options) {
+        return pool_1.RedisClientPool.create(this._self.#options, options);
+      }
+      duplicate(overrides) {
+        return new (Object.getPrototypeOf(this)).constructor({
+          ...this._self.#options,
+          commandOptions: this._commandOptions,
+          ...overrides
+        });
+      }
+      async connect() {
+        await (0, tracing_1.trace)(tracing_1.CHANNELS.TRACE_CONNECT, () => this._self.#socket.connect(), () => ({
+          ...this._self.#socketTraceContext(),
+          clientId: this._self._clientId
+        }));
+        return this;
+      }
+      /**
+       * @internal
+       */
+      _ejectSocket() {
+        const socket = this._self.#socket;
+        this._self.#socket = null;
+        socket.removeAllListeners();
+        return socket;
+      }
+      /**
+       * @internal
+       */
+      _insertSocket(socket) {
+        if (this._self.#socket) {
+          this._self._ejectSocket().destroy();
+        }
+        this._self.#socket = socket;
+        this._self.#attachListeners(this._self.#socket);
+      }
+      /**
+       * @internal
+       */
+      _maintenanceUpdate(update) {
+        this._self.#socket.setMaintenanceTimeout(update.relaxedSocketTimeout);
+        this._self.#queue.setMaintenanceCommandTimeout(update.relaxedCommandTimeout);
+      }
+      /**
+       * @internal
+       */
+      _pause() {
+        this._self.#paused = true;
+      }
+      /**
+       * @internal
+       */
+      _unpause() {
+        this._self.#paused = false;
+        this._self.#maybeScheduleWrite();
+      }
+      /**
+       * @internal
+       */
+      _handleSmigrated(smigratedEvent) {
+        this._self.emit(enterprise_maintenance_manager_1.SMIGRATED_EVENT, smigratedEvent);
+      }
+      /**
+       * @internal
+       */
+      _getQueue() {
+        return this._self.#queue;
+      }
+      /**
+       * @internal
+       */
+      async _executeCommand(command, parser, commandOptions, transformReply) {
+        const csc = this._self.#clientSideCache;
+        const defaultTypeMapping = this._self.#options.commandOptions === commandOptions || this._self.#options.commandOptions?.typeMapping === commandOptions?.typeMapping;
+        const fn = () => {
+          return this.sendCommand(parser.redisArgs, commandOptions);
+        };
+        if (csc && command.CACHEABLE && defaultTypeMapping) {
+          return await csc.handleCache(this._self, parser, fn, transformReply, commandOptions?.typeMapping);
+        } else {
+          const reply = await fn();
+          const finalReply = transformReply ? transformReply(reply, parser.preserve, commandOptions?.typeMapping) : reply;
+          (0, tracing_1.publish)(tracing_1.CHANNELS.COMMAND_REPLY, () => ({ args: (0, tracing_1.sanitizeArgs)(parser.redisArgs), reply: finalReply, clientId: this._self._clientId }));
+          return finalReply;
+        }
+      }
+      /**
+       * @internal
+       */
+      async _executeScript(script, parser, options, transformReply) {
+        const args = parser.redisArgs;
+        let reply;
+        try {
+          reply = await this.sendCommand(args, options);
+        } catch (err) {
+          if (!err?.message?.startsWith?.("NOSCRIPT"))
+            throw err;
+          args[0] = "EVAL";
+          args[1] = script.SCRIPT;
+          reply = await this.sendCommand(args, options);
+        }
+        return transformReply ? transformReply(reply, parser.preserve, options?.typeMapping) : reply;
+      }
+      sendCommand(args, options) {
+        return (0, tracing_1.trace)(tracing_1.CHANNELS.TRACE_COMMAND, () => {
+          if (!this._self.#socket.isOpen) {
+            return Promise.reject(new errors_1.ClientClosedError());
+          } else if (!this._self.#socket.isReady && this._self.#options.disableOfflineQueue) {
+            return Promise.reject(new errors_1.ClientOfflineError());
+          }
+          const opts = {
+            ...this._self._commandOptions,
+            ...options
+          };
+          const promise = this._self.#queue.addCommand(args, opts);
+          this._self.#scheduleWrite();
+          return promise;
+        }, () => this._self.#commandTraceContext(args));
+      }
+      #commandTraceContext(args) {
+        return {
+          command: String(args[0]).toUpperCase(),
+          args: (0, tracing_1.sanitizeArgs)(args),
+          database: this.#selectedDB,
+          clientId: this._clientId,
+          ...this.#socketTraceContext()
+        };
+      }
+      #socketTraceContext() {
+        const socketOptions = this.#options.socket;
+        if (socketOptions && "path" in socketOptions) {
+          return { serverAddress: socketOptions.path, serverPort: void 0 };
+        }
+        return {
+          serverAddress: socketOptions?.host ?? "localhost",
+          serverPort: socketOptions?.port ?? 6379
+        };
+      }
+      async SELECT(db) {
+        await this.sendCommand(["SELECT", db.toString()]);
+        this._self.#selectedDB = db;
+      }
+      select = this.SELECT;
+      #pubSubCommand(promise) {
+        if (promise === void 0)
+          return Promise.resolve();
+        this.#scheduleWrite();
+        return promise;
+      }
+      SUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.subscribe(pub_sub_1.PUBSUB_TYPE.CHANNELS, channels, listener, bufferMode));
+      }
+      subscribe = this.SUBSCRIBE;
+      UNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.unsubscribe(pub_sub_1.PUBSUB_TYPE.CHANNELS, channels, listener, bufferMode));
+      }
+      unsubscribe = this.UNSUBSCRIBE;
+      PSUBSCRIBE(patterns, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.subscribe(pub_sub_1.PUBSUB_TYPE.PATTERNS, patterns, listener, bufferMode));
+      }
+      pSubscribe = this.PSUBSCRIBE;
+      PUNSUBSCRIBE(patterns, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.unsubscribe(pub_sub_1.PUBSUB_TYPE.PATTERNS, patterns, listener, bufferMode));
+      }
+      pUnsubscribe = this.PUNSUBSCRIBE;
+      SSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.subscribe(pub_sub_1.PUBSUB_TYPE.SHARDED, channels, listener, bufferMode));
+      }
+      sSubscribe = this.SSUBSCRIBE;
+      SUNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#pubSubCommand(this._self.#queue.unsubscribe(pub_sub_1.PUBSUB_TYPE.SHARDED, channels, listener, bufferMode));
+      }
+      sUnsubscribe = this.SUNSUBSCRIBE;
+      async WATCH(key) {
+        const reply = await this._self.sendCommand((0, generic_transformers_1.pushVariadicArguments)(["WATCH"], key));
+        this._self.#watchEpoch ??= this._self.socketEpoch;
+        return reply;
+      }
+      watch = this.WATCH;
+      async UNWATCH() {
+        const reply = await this._self.sendCommand(["UNWATCH"]);
+        this._self.#watchEpoch = void 0;
+        return reply;
+      }
+      unwatch = this.UNWATCH;
+      getPubSubListeners(type) {
+        return this._self.#queue.getPubSubListeners(type);
+      }
+      extendPubSubChannelListeners(type, channel, listeners) {
+        return this._self.#pubSubCommand(this._self.#queue.extendPubSubChannelListeners(type, channel, listeners));
+      }
+      extendPubSubListeners(type, listeners) {
+        return this._self.#pubSubCommand(this._self.#queue.extendPubSubListeners(type, listeners));
+      }
+      #write() {
+        if (this.#paused) {
+          return;
+        }
+        this.#socket.write(this.#queue.commandsToWrite());
+      }
+      #scheduledWrite;
+      #scheduleWrite() {
+        if (!this.#socket.isReady || this.#scheduledWrite)
+          return;
+        this.#scheduledWrite = setImmediate(() => {
+          this.#write();
+          this.#scheduledWrite = void 0;
+        });
+      }
+      #maybeScheduleWrite() {
+        if (!this.#queue.isWaitingToWrite())
+          return;
+        this.#scheduleWrite();
+      }
+      /**
+       * @internal
+       */
+      async _executePipeline(commands, selectedDB) {
+        if (!this._self.#socket.isOpen) {
+          return Promise.reject(new errors_1.ClientClosedError());
+        }
+        const batchSize = commands.length;
+        return (0, tracing_1.trace)(tracing_1.CHANNELS.TRACE_BATCH, async () => {
+          const chainId = Symbol("Pipeline Chain");
+          const promise = Promise.all(commands.map(({ args }) => {
+            const traced = (0, tracing_1.trace)(tracing_1.CHANNELS.TRACE_COMMAND, () => this._self.#queue.addCommand(args, {
+              chainId,
+              typeMapping: this._commandOptions?.typeMapping
+            }), () => ({
+              ...this._self.#commandTraceContext(args),
+              batchMode: "PIPELINE",
+              batchSize
+            }));
+            traced.catch(noop);
+            return traced;
+          }));
+          this._self.#scheduleWrite();
+          const result = await promise;
+          if (selectedDB !== void 0) {
+            this._self.#selectedDB = selectedDB;
+          }
+          return result;
+        }, () => ({
+          batchMode: "PIPELINE",
+          batchSize,
+          database: this._self.#selectedDB,
+          clientId: this._self._clientId,
+          ...this._self.#socketTraceContext()
+        }));
+      }
+      /**
+       * @internal
+       */
+      async _executeMulti(commands, selectedDB) {
+        const dirtyWatch = this._self.#dirtyWatch;
+        this._self.#dirtyWatch = void 0;
+        const watchEpoch = this._self.#watchEpoch;
+        this._self.#watchEpoch = void 0;
+        if (!this._self.#socket.isOpen) {
+          throw new errors_1.ClientClosedError();
+        }
+        if (dirtyWatch) {
+          throw new errors_1.WatchError(dirtyWatch);
+        }
+        if (watchEpoch && watchEpoch !== this._self.socketEpoch) {
+          throw new errors_1.WatchError("Client reconnected after WATCH");
+        }
+        const batchSize = commands.length;
+        return (0, tracing_1.trace)(tracing_1.CHANNELS.TRACE_BATCH, async () => {
+          const typeMapping = this._commandOptions?.typeMapping;
+          const chainId = Symbol("MULTI Chain");
+          const promises = [
+            this._self.#queue.addCommand(["MULTI"], { chainId })
+          ];
+          for (const { args } of commands) {
+            promises.push(this._self.#queue.addCommand(args, {
+              chainId,
+              typeMapping
+            }));
+          }
+          promises.push(this._self.#queue.addCommand(["EXEC"], { chainId }));
+          this._self.#scheduleWrite();
+          const results = await Promise.all(promises), execResult = results[results.length - 1];
+          if (execResult === null) {
+            throw new errors_1.WatchError();
+          }
+          if (selectedDB !== void 0) {
+            this._self.#selectedDB = selectedDB;
+          }
+          return execResult;
+        }, () => ({
+          batchMode: "MULTI",
+          batchSize,
+          database: this._self.#selectedDB,
+          clientId: this._self._clientId,
+          ...this._self.#socketTraceContext()
+        }));
+      }
+      MULTI() {
+        return new this.Multi(this._executeMulti.bind(this), this._executePipeline.bind(this), this._commandOptions?.typeMapping);
+      }
+      multi = this.MULTI;
+      async *scanIterator(options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.scan(cursor, options);
+          cursor = reply.cursor;
+          yield reply.keys;
+        } while (cursor !== "0");
+      }
+      async *hScanIterator(key, options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.hScan(key, cursor, options);
+          cursor = reply.cursor;
+          yield reply.entries;
+        } while (cursor !== "0");
+      }
+      async *hScanValuesIterator(key, options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.hScanNoValues(key, cursor, options);
+          cursor = reply.cursor;
+          yield reply.fields;
+        } while (cursor !== "0");
+      }
+      async *hScanNoValuesIterator(key, options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.hScanNoValues(key, cursor, options);
+          cursor = reply.cursor;
+          yield reply.fields;
+        } while (cursor !== "0");
+      }
+      async *sScanIterator(key, options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.sScan(key, cursor, options);
+          cursor = reply.cursor;
+          yield reply.members;
+        } while (cursor !== "0");
+      }
+      async *zScanIterator(key, options) {
+        let cursor = options?.cursor ?? "0";
+        do {
+          const reply = await this.zScan(key, cursor, options);
+          cursor = reply.cursor;
+          yield reply.members;
+        } while (cursor !== "0");
+      }
+      async MONITOR(callback) {
+        const promise = this._self.#queue.monitor(callback, {
+          typeMapping: this._commandOptions?.typeMapping
+        });
+        this._self.#scheduleWrite();
+        await promise;
+        this._self.#monitorCallback = callback;
+      }
+      monitor = this.MONITOR;
+      /**
+       * Reset the client to its default state (i.e. stop PubSub, stop monitoring, select default DB, etc.)
+       */
+      async reset() {
+        const chainId = Symbol("Reset Chain"), promises = [this._self.#queue.reset(chainId)], selectedDB = this._self.#options?.database ?? 0;
+        this._self.#credentialsSubscription?.dispose();
+        this._self.#credentialsSubscription = null;
+        promises.push(...await this._self.#handshake(chainId, false));
+        this._self.#scheduleWrite();
+        await Promise.all(promises);
+        this._self.#selectedDB = selectedDB;
+        this._self.#monitorCallback = void 0;
+        this._self.#dirtyWatch = void 0;
+        this._self.#watchEpoch = void 0;
+      }
+      /**
+       * If the client has state, reset it.
+       * An internal function to be used by wrapper class such as `RedisClientPool`.
+       * @internal
+       */
+      resetIfDirty() {
+        let shouldReset = false;
+        if (this._self.#selectedDB !== (this._self.#options?.database ?? 0)) {
+          console.warn("Returning a client with a different selected DB");
+          shouldReset = true;
+        }
+        if (this._self.#monitorCallback) {
+          console.warn("Returning a client with active MONITOR");
+          shouldReset = true;
+        }
+        if (this._self.#queue.isPubSubActive) {
+          console.warn("Returning a client with active PubSub");
+          shouldReset = true;
+        }
+        if (this._self.#dirtyWatch || this._self.#watchEpoch) {
+          console.warn("Returning a client with active WATCH");
+          shouldReset = true;
+        }
+        if (shouldReset) {
+          return this.reset();
+        }
+      }
+      /**
+       * @deprecated use .close instead
+       */
+      QUIT() {
+        this._self.#credentialsSubscription?.dispose();
+        this._self.#credentialsSubscription = null;
+        return this._self.#socket.quit(async () => {
+          clearTimeout(this._self.#pingTimer);
+          const quitPromise = this._self.#queue.addCommand(["QUIT"]);
+          this._self.#scheduleWrite();
+          this._self.#unregisterFromMetrics();
+          return quitPromise;
+        });
+      }
+      quit = this.QUIT;
+      /**
+       * @deprecated use .destroy instead
+       */
+      disconnect() {
+        return Promise.resolve(this.destroy());
+      }
+      /**
+       * Close the client. Wait for pending commands.
+       */
+      close() {
+        return new Promise((resolve3) => {
+          clearTimeout(this._self.#pingTimer);
+          this._self.#socket.close();
+          this._self.#clientSideCache?.onClose();
+          if (this._self.#queue.isEmpty()) {
+            this._self.#unregisterFromMetrics();
+            this._self.#socket.destroySocket();
+            return resolve3();
+          }
+          const maybeClose = () => {
+            if (!this._self.#queue.isEmpty())
+              return;
+            this._self.#socket.off("data", maybeClose);
+            this._self.#unregisterFromMetrics();
+            this._self.#socket.destroySocket();
+            resolve3();
+          };
+          this._self.#socket.on("data", maybeClose);
+          this._self.#credentialsSubscription?.dispose();
+          this._self.#credentialsSubscription = null;
+        });
+      }
+      /**
+       * Destroy the client. Rejects all commands immediately.
+       */
+      destroy() {
+        clearTimeout(this._self.#pingTimer);
+        this._self.#queue.flushAll(new errors_1.DisconnectsClientError());
+        this._self.#socket.destroy();
+        this._self.#clientSideCache?.onClose();
+        this._self.#unregisterFromMetrics();
+        this._self.#credentialsSubscription?.dispose();
+        this._self.#credentialsSubscription = null;
+      }
+      ref() {
+        this._self.#socket.ref();
+      }
+      unref() {
+        this._self.#socket.unref();
+      }
+    };
+    _a = RedisClient;
+    exports.default = RedisClient;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/cluster/cluster-slots.js
+var require_cluster_slots = __commonJS({
+  "node_modules/@redis/client/dist/lib/cluster/cluster-slots.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var _a;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RESUBSCRIBE_LISTENERS_EVENT = void 0;
+    var errors_1 = require_errors2();
+    var client_1 = __importDefault(require_client());
+    var pub_sub_1 = require_pub_sub();
+    var cluster_key_slot_1 = __importDefault(require_lib());
+    var cache_1 = require_cache();
+    var enterprise_maintenance_manager_1 = require_enterprise_maintenance_manager();
+    var identity_1 = require_identity();
+    exports.RESUBSCRIBE_LISTENERS_EVENT = "__resubscribeListeners";
+    var RedisClusterSlots = class {
+      static #SLOTS = 16384;
+      #options;
+      #clientFactory;
+      #emit;
+      #clusterClientId;
+      slots = new Array(_a.#SLOTS);
+      masters = new Array();
+      replicas = new Array();
+      nodeByAddress = /* @__PURE__ */ new Map();
+      pubSubNode;
+      clientSideCache;
+      smigratedSeqIdsSeen = /* @__PURE__ */ new Set();
+      #isOpen = false;
+      get isOpen() {
+        return this.#isOpen;
+      }
+      #validateOptions(options) {
+        if (options?.clientSideCache && options?.RESP !== 3) {
+          throw new Error("Client Side Caching is only supported with RESP3");
+        }
+      }
+      constructor(options, emit, clusterClientId) {
+        this.#validateOptions(options);
+        this.#options = options;
+        this.#clusterClientId = clusterClientId;
+        if (options?.clientSideCache) {
+          if (options.clientSideCache instanceof cache_1.PooledClientSideCacheProvider) {
+            this.clientSideCache = options.clientSideCache;
+          } else {
+            this.clientSideCache = new cache_1.BasicPooledClientSideCache(options.clientSideCache);
+          }
+        }
+        this.#clientFactory = client_1.default.factory(this.#options);
+        this.#emit = emit;
+      }
+      async connect() {
+        if (this.#isOpen) {
+          throw new Error("Cluster already open");
+        }
+        this.#isOpen = true;
+        try {
+          await this.#discoverWithRootNodes();
+          this.#emit("connect");
+        } catch (err) {
+          this.#isOpen = false;
+          throw err;
+        }
+      }
+      async #discoverWithRootNodes() {
+        let start = Math.floor(Math.random() * this.#options.rootNodes.length);
+        for (let i = start; i < this.#options.rootNodes.length; i++) {
+          if (!this.#isOpen)
+            throw new Error("Cluster closed");
+          if (await this.#discover(this.#options.rootNodes[i])) {
+            return;
+          }
+        }
+        for (let i = 0; i < start; i++) {
+          if (!this.#isOpen)
+            throw new Error("Cluster closed");
+          if (await this.#discover(this.#options.rootNodes[i])) {
+            return;
+          }
+        }
+        throw new errors_1.RootNodesUnavailableError();
+      }
+      #resetSlots() {
+        this.slots = new Array(_a.#SLOTS);
+        this.masters = [];
+        this.replicas = [];
+        this._randomNodeIterator = void 0;
+      }
+      async #discover(rootNode) {
+        this.clientSideCache?.clear();
+        this.clientSideCache?.disable();
+        try {
+          const addressesInUse = /* @__PURE__ */ new Set(), promises = [], eagerConnect = this.#options.minimizeConnections !== true;
+          const shards = await this.#getShards(rootNode);
+          this.#resetSlots();
+          for (const { from, to, master, replicas } of shards) {
+            const shard = {
+              master: this.#initiateSlotNode(master, false, eagerConnect, addressesInUse, promises)
+            };
+            if (this.#options.useReplicas) {
+              shard.replicas = replicas.map((replica) => this.#initiateSlotNode(replica, true, eagerConnect, addressesInUse, promises));
+            }
+            for (let i = from; i <= to; i++) {
+              this.slots[i] = shard;
+            }
+          }
+          if (this.pubSubNode && !addressesInUse.has(this.pubSubNode.address)) {
+            const channelsListeners = this.pubSubNode.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.CHANNELS), patternsListeners = this.pubSubNode.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.PATTERNS);
+            this.pubSubNode.client.destroy();
+            if (channelsListeners.size || patternsListeners.size) {
+              promises.push(this.#initiatePubSubClient({
+                [pub_sub_1.PUBSUB_TYPE.CHANNELS]: channelsListeners,
+                [pub_sub_1.PUBSUB_TYPE.PATTERNS]: patternsListeners
+              }));
+            }
+          }
+          for (const [address, node] of this.nodeByAddress.entries()) {
+            if (addressesInUse.has(address))
+              continue;
+            if (node.client) {
+              node.client.destroy();
+            }
+            const { pubSub } = node;
+            if (pubSub) {
+              pubSub.client.destroy();
+            }
+            this.nodeByAddress.delete(address);
+          }
+          await Promise.all(promises);
+          this.clientSideCache?.enable();
+          return true;
+        } catch (err) {
+          this.#emit("error", err);
+          return false;
+        }
+      }
+      #handleSmigrated = async (event) => {
+        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: handle smigrated`, JSON.stringify(event, null, 2));
+        if (this.smigratedSeqIdsSeen.has(event.seqId)) {
+          (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: sequence id ${event.seqId} already seen, abort`);
+          return;
+        }
+        this.smigratedSeqIdsSeen.add(event.seqId);
+        for (const entry of event.entries) {
+          const sourceAddress = `${entry.source.host}:${entry.source.port}`;
+          const sourceNode = this.nodeByAddress.get(sourceAddress);
+          (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Looking for sourceAddress=${sourceAddress}. Available addresses in nodeByAddress: ${Array.from(this.nodeByAddress.keys()).join(", ")}`);
+          if (!sourceNode) {
+            (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: address ${sourceAddress} not in 'nodeByAddress', skipping this entry`);
+            continue;
+          }
+          if (sourceNode.client === void 0) {
+            (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Node for ${sourceAddress} does not have a client, skipping this entry`);
+            continue;
+          }
+          const allMovingSlots = /* @__PURE__ */ new Set();
+          try {
+            sourceNode.client?._pause();
+            if ("pubSub" in sourceNode) {
+              sourceNode.pubSub?.client._pause();
+            }
+            let lastDestNode;
+            for (const { addr: { host, port }, slots } of entry.destinations) {
+              const destinationAddress = `${host}:${port}`;
+              let destMasterNode = this.nodeByAddress.get(destinationAddress);
+              (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Looking for destAddress=${destinationAddress}. Found in nodeByAddress: ${destMasterNode ? "YES" : "NO"}`);
+              let destShard;
+              if (!destMasterNode) {
+                const promises = [];
+                destMasterNode = this.#initiateSlotNode({ host, port, id: `smigrated-${host}:${port}` }, false, true, /* @__PURE__ */ new Set(), promises);
+                await Promise.all([...promises, this.#initiateShardedPubSubClient(destMasterNode)]);
+                destMasterNode.client?._pause();
+                destMasterNode.pubSub?.client._pause();
+                destShard = {
+                  master: destMasterNode
+                };
+              } else {
+                const allMasters = [...new Set(this.slots)].map((s) => `${s.master.host}:${s.master.port}`);
+                (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Searching for shard with host=${host}, port=${port}. Available masters in slots: ${allMasters.join(", ")}`);
+                const existingShard = this.slots.find((shard) => shard.master.host === host && shard.master.port === port);
+                if (!existingShard) {
+                  (0, enterprise_maintenance_manager_1.dbgMaintenance)("Could not find shard");
+                  throw new Error("Could not find shard");
+                }
+                destShard = existingShard;
+                destMasterNode.client?._pause();
+                destMasterNode.pubSub?.client._pause();
+              }
+              lastDestNode = destMasterNode;
+              const destinationSlots = /* @__PURE__ */ new Set();
+              for (const slot of slots) {
+                if (typeof slot === "number") {
+                  this.slots[slot] = destShard;
+                  destinationSlots.add(slot);
+                  allMovingSlots.add(slot);
+                } else {
+                  for (let s = slot[0]; s <= slot[1]; s++) {
+                    this.slots[s] = destShard;
+                    destinationSlots.add(s);
+                    allMovingSlots.add(s);
+                  }
+                }
+              }
+              (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Updated slots to point to destination ${destMasterNode.address}. Sample slots: ${Array.from(slots).slice(0, 5).join(", ")}${slots.length > 5 ? "..." : ""}`);
+              const commandsForDestination = sourceNode.client._getQueue().extractCommandsForSlots(destinationSlots);
+              destMasterNode.client?._getQueue().prependCommandsToWrite(commandsForDestination);
+              (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Extracted ${commandsForDestination.length} commands for ${destinationSlots.size} slots, prepended to ${destMasterNode.address}`);
+              destMasterNode.client?._unpause();
+              destMasterNode.pubSub?.client._unpause();
+            }
+            (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Total ${allMovingSlots.size} slots moved from ${sourceAddress}. Sample: ${Array.from(allMovingSlots).slice(0, 10).join(", ")}${allMovingSlots.size > 10 ? "..." : ""}`);
+            const INFLIGHT_TIMEOUT_MS = 5e3;
+            const inflightPromises = [];
+            const inflightOptions = { timeoutMs: INFLIGHT_TIMEOUT_MS, flushOnTimeout: true };
+            inflightPromises.push(sourceNode.client._getQueue().waitForInflightCommandsToComplete(inflightOptions));
+            if ("pubSub" in sourceNode && sourceNode.pubSub !== void 0) {
+              inflightPromises.push(sourceNode.pubSub.client._getQueue().waitForInflightCommandsToComplete(inflightOptions));
+            }
+            if (this.pubSubNode?.address === sourceAddress) {
+              inflightPromises.push(this.pubSubNode.client._getQueue().waitForInflightCommandsToComplete(inflightOptions));
+            }
+            await Promise.all(inflightPromises);
+            const sourceStillHasSlots = this.slots.find((slot) => slot.master.address === sourceAddress) !== void 0;
+            if (sourceStillHasSlots) {
+              if ("pubSub" in sourceNode) {
+                const listeners = sourceNode.pubSub?.client._getQueue().removeShardedPubSubListenersForSlots(allMovingSlots);
+                this.#emit(exports.RESUBSCRIBE_LISTENERS_EVENT, listeners);
+              }
+              sourceNode.client?._unpause();
+              if ("pubSub" in sourceNode) {
+                sourceNode.pubSub?.client._unpause();
+              }
+            } else {
+              const remainingCommands = sourceNode.client._getQueue().extractAllCommands();
+              if (remainingCommands.length > 0 && lastDestNode) {
+                lastDestNode.client?._getQueue().prependCommandsToWrite(remainingCommands);
+                lastDestNode.client?._unpause();
+                (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Moved ${remainingCommands.length} remaining slotless commands to ${lastDestNode.address}`);
+              }
+              if ("pubSub" in sourceNode) {
+                const listeners = sourceNode.pubSub?.client._getQueue().removeAllPubSubListeners();
+                this.#emit(exports.RESUBSCRIBE_LISTENERS_EVENT, listeners);
+              }
+              this.masters = this.masters.filter((master) => master.address !== sourceAddress);
+              this.replicas = this.replicas.filter((replica) => replica.address !== sourceAddress);
+              this.nodeByAddress.delete(sourceAddress);
+              if (this.pubSubNode?.address === sourceAddress) {
+                const channelsListeners = this.pubSubNode.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.CHANNELS), patternsListeners = this.pubSubNode.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.PATTERNS);
+                const oldPubSubClient = this.pubSubNode.client;
+                if (channelsListeners.size || patternsListeners.size) {
+                  await this.#initiatePubSubClient({
+                    [pub_sub_1.PUBSUB_TYPE.CHANNELS]: channelsListeners,
+                    [pub_sub_1.PUBSUB_TYPE.PATTERNS]: patternsListeners
+                  });
+                } else {
+                  this.pubSubNode = void 0;
+                }
+                oldPubSubClient.destroy();
+              }
+              sourceNode.client?.destroy();
+              if ("pubSub" in sourceNode) {
+                sourceNode.pubSub?.client.destroy();
+              }
+            }
+          } catch (err) {
+            (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Error during SMIGRATED handling for source ${sourceAddress}: ${err}`);
+            sourceNode.client?._unpause();
+            if ("pubSub" in sourceNode) {
+              sourceNode.pubSub?.client._unpause();
+            }
+            this.#emit("error", err);
+          }
+        }
+      };
+      async #getShards(rootNode) {
+        const options = this.#clientOptionsDefaults(rootNode);
+        options.socket ??= {};
+        options.socket.reconnectStrategy = false;
+        options.RESP = this.#options.RESP;
+        options.commandOptions = void 0;
+        options.maintNotifications = "disabled";
+        const client = await this.#clientFactory(options).on("error", (err) => this.#emit("error", err)).connect();
+        try {
+          return await client.clusterSlots();
+        } finally {
+          client.destroy();
+        }
+      }
+      #getNodeAddress(address) {
+        switch (typeof this.#options.nodeAddressMap) {
+          case "object":
+            return this.#options.nodeAddressMap[address];
+          case "function":
+            return this.#options.nodeAddressMap(address);
+        }
+      }
+      #clientOptionsDefaults(options) {
+        if (!this.#options.defaults)
+          return options;
+        let socket;
+        if (this.#options.defaults.socket) {
+          socket = {
+            ...this.#options.defaults.socket,
+            ...options?.socket
+          };
+        } else {
+          socket = options?.socket;
+        }
+        return {
+          ...this.#options.defaults,
+          ...options,
+          socket
+        };
+      }
+      #initiateSlotNode(shard, readonly2, eagerConnent, addressesInUse, promises) {
+        const address = `${shard.host}:${shard.port}`;
+        let node = this.nodeByAddress.get(address);
+        if (!node) {
+          node = {
+            ...shard,
+            address,
+            readonly: readonly2,
+            client: void 0,
+            connectPromise: void 0
+          };
+          if (eagerConnent) {
+            promises.push(this.#createNodeClient(node));
+          }
+          this.nodeByAddress.set(address, node);
+        }
+        if (!addressesInUse.has(address)) {
+          addressesInUse.add(address);
+          (readonly2 ? this.replicas : this.masters).push(node);
+        }
+        return node;
+      }
+      #createClient(node, readonly2 = node.readonly) {
+        const socket = this.#getNodeAddress(node.address) ?? { host: node.host, port: node.port };
+        const clientInfo = Object.freeze({
+          host: socket.host,
+          port: socket.port
+        });
+        const emit = this.#emit;
+        const client = this.#clientFactory(this.#clientOptionsDefaults({
+          clientSideCache: this.clientSideCache,
+          RESP: this.#options.RESP,
+          socket,
+          readonly: readonly2
+        }));
+        client._setIdentity(identity_1.ClientRole.CLUSTER_NODE, this.#clusterClientId);
+        client.on("error", (error2) => emit("node-error", error2, clientInfo)).on("reconnecting", () => emit("node-reconnecting", clientInfo)).once("ready", () => emit("node-ready", clientInfo)).once("connect", () => emit("node-connect", clientInfo)).once("end", () => emit("node-disconnect", clientInfo)).on(enterprise_maintenance_manager_1.SMIGRATED_EVENT, this.#handleSmigrated).on("__MOVED", async (allPubSubListeners) => {
+          await this.rediscover(client);
+          this.#emit(exports.RESUBSCRIBE_LISTENERS_EVENT, allPubSubListeners);
+        });
+        return client;
+      }
+      #createNodeClient(node, readonly2) {
+        const client = node.client = this.#createClient(node, readonly2);
+        return node.connectPromise = client.connect().finally(() => node.connectPromise = void 0);
+      }
+      nodeClient(node) {
+        if (node.connectPromise)
+          return node.connectPromise;
+        if (node.client)
+          return Promise.resolve(node.client);
+        return this.#createNodeClient(node);
+      }
+      #runningRediscoverPromise;
+      async rediscover(startWith) {
+        this.#runningRediscoverPromise ??= this.#rediscover(startWith).finally(() => {
+          this.#runningRediscoverPromise = void 0;
+        });
+        return this.#runningRediscoverPromise;
+      }
+      async #rediscover(startWith) {
+        if (await this.#discover(startWith.options))
+          return;
+        return this.#discoverWithRootNodes();
+      }
+      /**
+       * @deprecated Use `close` instead.
+       */
+      quit() {
+        return this.#destroy((client) => client.quit());
+      }
+      /**
+       * @deprecated Use `destroy` instead.
+       */
+      disconnect() {
+        return this.#destroy((client) => client.disconnect());
+      }
+      close() {
+        return this.#destroy((client) => client.close());
+      }
+      destroy() {
+        this.#isOpen = false;
+        for (const client of this.#clients()) {
+          client.destroy();
+        }
+        if (this.pubSubNode) {
+          this.pubSubNode.client.destroy();
+          this.pubSubNode = void 0;
+        }
+        this.#resetSlots();
+        this.nodeByAddress.clear();
+        this.#emit("disconnect");
+      }
+      *#clients() {
+        for (const master of this.masters) {
+          if (master.client) {
+            yield master.client;
+          }
+          if (master.pubSub) {
+            yield master.pubSub.client;
+          }
+        }
+        for (const replica of this.replicas) {
+          if (replica.client) {
+            yield replica.client;
+          }
+        }
+      }
+      async #destroy(fn) {
+        this.#isOpen = false;
+        const promises = [];
+        for (const client of this.#clients()) {
+          promises.push(fn(client));
+        }
+        if (this.pubSubNode) {
+          promises.push(fn(this.pubSubNode.client));
+          this.pubSubNode = void 0;
+        }
+        this.#resetSlots();
+        this.nodeByAddress.clear();
+        await Promise.allSettled(promises);
+        this.#emit("disconnect");
+      }
+      async getClientAndSlotNumber(firstKey, isReadonly) {
+        if (!firstKey) {
+          return {
+            client: await this.nodeClient(this.getRandomNode())
+          };
+        }
+        const slotNumber = (0, cluster_key_slot_1.default)(firstKey);
+        if (!isReadonly) {
+          return {
+            client: await this.nodeClient(this.slots[slotNumber].master),
+            slotNumber
+          };
+        }
+        return {
+          client: await this.nodeClient(this.getSlotRandomNode(slotNumber)),
+          slotNumber
+        };
+      }
+      *#iterateAllNodes() {
+        if (this.masters.length + this.replicas.length === 0)
+          return;
+        let i = Math.floor(Math.random() * (this.masters.length + this.replicas.length));
+        if (i < this.masters.length) {
+          do {
+            yield this.masters[i];
+          } while (++i < this.masters.length);
+          for (const replica of this.replicas) {
+            yield replica;
+          }
+        } else {
+          i -= this.masters.length;
+          do {
+            yield this.replicas[i];
+          } while (++i < this.replicas.length);
+        }
+        while (true) {
+          for (const master of this.masters) {
+            yield master;
+          }
+          for (const replica of this.replicas) {
+            yield replica;
+          }
+        }
+      }
+      _randomNodeIterator;
+      getRandomNode() {
+        this._randomNodeIterator ??= this.#iterateAllNodes();
+        return this._randomNodeIterator.next().value;
+      }
+      *#slotNodesIterator(slot) {
+        let i = Math.floor(Math.random() * (1 + slot.replicas.length));
+        if (i < slot.replicas.length) {
+          do {
+            yield slot.replicas[i];
+          } while (++i < slot.replicas.length);
+        }
+        while (true) {
+          yield slot.master;
+          for (const replica of slot.replicas) {
+            yield replica;
+          }
+        }
+      }
+      getSlotRandomNode(slotNumber) {
+        const slot = this.slots[slotNumber];
+        if (!slot.replicas?.length) {
+          return slot.master;
+        }
+        slot.nodesIterator ??= this.#slotNodesIterator(slot);
+        return slot.nodesIterator.next().value;
+      }
+      getMasterByAddress(address) {
+        const master = this.nodeByAddress.get(address);
+        if (!master)
+          return;
+        return this.nodeClient(master);
+      }
+      getPubSubClient() {
+        if (!this.pubSubNode)
+          return this.#initiatePubSubClient();
+        return this.pubSubNode.connectPromise ?? Promise.resolve(this.pubSubNode.client);
+      }
+      async #initiatePubSubClient(toResubscribe) {
+        const index = Math.floor(Math.random() * (this.masters.length + this.replicas.length)), node = index < this.masters.length ? this.masters[index] : this.replicas[index - this.masters.length], client = this.#createClient(node, false);
+        this.pubSubNode = {
+          address: node.address,
+          client,
+          connectPromise: client.connect().then(async (client2) => {
+            if (toResubscribe) {
+              await Promise.all([
+                client2.extendPubSubListeners(pub_sub_1.PUBSUB_TYPE.CHANNELS, toResubscribe[pub_sub_1.PUBSUB_TYPE.CHANNELS]),
+                client2.extendPubSubListeners(pub_sub_1.PUBSUB_TYPE.PATTERNS, toResubscribe[pub_sub_1.PUBSUB_TYPE.PATTERNS])
+              ]);
+            }
+            this.pubSubNode.connectPromise = void 0;
+            return client2;
+          }).catch((err) => {
+            this.pubSubNode = void 0;
+            throw err;
+          })
+        };
+        return this.pubSubNode.connectPromise;
+      }
+      async executeUnsubscribeCommand(unsubscribe) {
+        const client = await this.getPubSubClient();
+        await unsubscribe(client);
+        if (!client.isPubSubActive) {
+          client.destroy();
+          this.pubSubNode = void 0;
+        }
+      }
+      getShardedPubSubClient(channel) {
+        const { master } = this.slots[(0, cluster_key_slot_1.default)(channel)];
+        if (!master.pubSub)
+          return this.#initiateShardedPubSubClient(master);
+        return master.pubSub.connectPromise ?? Promise.resolve(master.pubSub.client);
+      }
+      async #initiateShardedPubSubClient(master) {
+        const client = this.#createClient(master, false).on("server-sunsubscribe", async (channel, listeners) => {
+          try {
+            await this.rediscover(client);
+            const redirectTo = await this.getShardedPubSubClient(channel);
+            await redirectTo.extendPubSubChannelListeners(pub_sub_1.PUBSUB_TYPE.SHARDED, channel, listeners);
+          } catch (err) {
+            this.#emit("sharded-shannel-moved-error", err, channel, listeners);
+          }
+        });
+        master.pubSub = {
+          client,
+          connectPromise: client.connect().then((client2) => {
+            master.pubSub.connectPromise = void 0;
+            return client2;
+          }).catch((err) => {
+            master.pubSub = void 0;
+            throw err;
+          })
+        };
+        return master.pubSub.connectPromise;
+      }
+      async executeShardedUnsubscribeCommand(channel, unsubscribe) {
+        const { master } = this.slots[(0, cluster_key_slot_1.default)(channel)];
+        if (!master.pubSub)
+          return;
+        const client = master.pubSub.connectPromise ? await master.pubSub.connectPromise : master.pubSub.client;
+        await unsubscribe(client);
+        if (!client.isPubSubActive) {
+          client.destroy();
+          master.pubSub = void 0;
+        }
+      }
+    };
+    _a = RedisClusterSlots;
+    exports.default = RedisClusterSlots;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/cluster/multi-command.js
+var require_multi_command3 = __commonJS({
+  "node_modules/@redis/client/dist/lib/cluster/multi-command.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = require_commands();
+    var multi_command_1 = __importDefault(require_multi_command());
+    var commander_1 = require_commander();
+    var parser_1 = require_parser();
+    var RedisClusterMultiCommand = class _RedisClusterMultiCommand {
+      static #createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          const firstKey = parser.firstKey;
+          return this.addCommand(firstKey, command.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static #createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          const firstKey = parser.firstKey;
+          return this._self.addCommand(firstKey, command.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static #createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          const firstKey = parser.firstKey;
+          return this._self.addCommand(firstKey, fn.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static #createScriptCommand(script, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          script.parseCommand(parser, ...args);
+          const scriptArgs = parser.redisArgs;
+          scriptArgs.preserve = parser.preserve;
+          const firstKey = parser.firstKey;
+          return this.#addScript(firstKey, script.IS_READ_ONLY, script, scriptArgs, transformReply);
+        };
+      }
+      static extend(config2) {
+        return (0, commander_1.attachConfig)({
+          BaseClass: _RedisClusterMultiCommand,
+          commands: commands_1.NON_STICKY_COMMANDS,
+          createCommand: _RedisClusterMultiCommand.#createCommand,
+          createModuleCommand: _RedisClusterMultiCommand.#createModuleCommand,
+          createFunctionCommand: _RedisClusterMultiCommand.#createFunctionCommand,
+          createScriptCommand: _RedisClusterMultiCommand.#createScriptCommand,
+          config: config2
+        });
+      }
+      #multi;
+      #executeMulti;
+      #executePipeline;
+      #firstKey;
+      #isReadonly = true;
+      constructor(executeMulti, executePipeline, routing, typeMapping) {
+        this.#multi = new multi_command_1.default(typeMapping);
+        this.#executeMulti = executeMulti;
+        this.#executePipeline = executePipeline;
+        this.#firstKey = routing;
+      }
+      #setState(firstKey, isReadonly) {
+        this.#firstKey ??= firstKey;
+        this.#isReadonly &&= isReadonly;
+      }
+      addCommand(firstKey, isReadonly, args, transformReply) {
+        this.#setState(firstKey, isReadonly);
+        this.#multi.addCommand(args, transformReply);
+        return this;
+      }
+      #addScript(firstKey, isReadonly, script, args, transformReply) {
+        this.#setState(firstKey, isReadonly);
+        this.#multi.addScript(script, args, transformReply);
+        return this;
+      }
+      async exec(execAsPipeline = false) {
+        if (execAsPipeline)
+          return this.execAsPipeline();
+        return this.#multi.transformReplies(await this.#executeMulti(this.#firstKey, this.#isReadonly, this.#multi.queue));
+      }
+      EXEC = this.exec;
+      execTyped(execAsPipeline = false) {
+        return this.exec(execAsPipeline);
+      }
+      async execAsPipeline() {
+        if (this.#multi.queue.length === 0)
+          return [];
+        return this.#multi.transformReplies(await this.#executePipeline(this.#firstKey, this.#isReadonly, this.#multi.queue));
+      }
+      execAsPipelineTyped() {
+        return this.execAsPipeline();
+      }
+      /**
+       * Adds a raw command to the multi/pipeline queue.
+       *
+       * Note: Using this method breaks the type inference for `execTyped` and
+       * `execAsPipelineTyped`. This is a known limitation and will be addressed
+       * in the future.
+       */
+      sendCommand(args, options) {
+        const redisArgs = args.slice();
+        this.addCommand(options?.firstKey, options?.isReadonly, redisArgs);
+        return this;
+      }
+    };
+    exports.default = RedisClusterMultiCommand;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/cluster/index.js
+var require_cluster = __commonJS({
+  "node_modules/@redis/client/dist/lib/cluster/index.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || function(mod) {
+      if (mod && mod.__esModule) return mod;
+      var result = {};
+      if (mod != null) {
+        for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+      }
+      __setModuleDefault(result, mod);
+      return result;
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = require_commands();
+    var node_events_1 = __require("node:events");
+    var commander_1 = require_commander();
+    var cluster_slots_1 = __importStar(require_cluster_slots());
+    var multi_command_1 = __importDefault(require_multi_command3());
+    var errors_1 = require_errors2();
+    var parser_1 = require_parser();
+    var ASKING_1 = require_ASKING();
+    var single_entry_cache_1 = __importDefault(require_single_entry_cache());
+    var tracing_1 = require_tracing();
+    var identity_1 = require_identity();
+    var RedisCluster = class _RedisCluster extends node_events_1.EventEmitter {
+      static #createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this._self._execute(parser.firstKey, command.IS_READ_ONLY, this._commandOptions, (client, opts) => client._executeCommand(command, parser, opts, transformReply));
+        };
+      }
+      static #createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          return this._self._execute(parser.firstKey, command.IS_READ_ONLY, this._self._commandOptions, (client, opts) => client._executeCommand(command, parser, opts, transformReply));
+        };
+      }
+      static #createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          return this._self._execute(parser.firstKey, fn.IS_READ_ONLY, this._self._commandOptions, (client, opts) => client._executeCommand(fn, parser, opts, transformReply));
+        };
+      }
+      static #createScriptCommand(script, resp) {
+        const prefix = (0, commander_1.scriptArgumentsPrefix)(script);
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return async function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          script.parseCommand(parser, ...args);
+          return this._self._execute(parser.firstKey, script.IS_READ_ONLY, this._commandOptions, (client, opts) => client._executeScript(script, parser, opts, transformReply));
+        };
+      }
+      static #SingleEntryCache = new single_entry_cache_1.default();
+      static factory(config2) {
+        let Cluster = _RedisCluster.#SingleEntryCache.get(config2);
+        if (!Cluster) {
+          Cluster = (0, commander_1.attachConfig)({
+            BaseClass: _RedisCluster,
+            commands: commands_1.NON_STICKY_COMMANDS,
+            createCommand: _RedisCluster.#createCommand,
+            createModuleCommand: _RedisCluster.#createModuleCommand,
+            createFunctionCommand: _RedisCluster.#createFunctionCommand,
+            createScriptCommand: _RedisCluster.#createScriptCommand,
+            config: config2
+          });
+          Cluster.prototype.Multi = multi_command_1.default.extend(config2);
+          _RedisCluster.#SingleEntryCache.set(config2, Cluster);
+        }
+        return (options) => {
+          return Object.create(new Cluster(options));
+        };
+      }
+      static create(options) {
+        return _RedisCluster.factory(options)(options);
+      }
+      _options;
+      _slots;
+      #identity;
+      _self = this;
+      _commandOptions;
+      /**
+       * An array of the cluster slots, each slot contain its `master` and `replicas`.
+       * Use with {@link RedisCluster.prototype.nodeClient} to get the client for a specific node (master or replica).
+       */
+      get slots() {
+        return this._self._slots.slots;
+      }
+      get clientSideCache() {
+        return this._self._slots.clientSideCache;
+      }
+      /**
+       * An array of the cluster masters.
+       * Use with {@link RedisCluster.prototype.nodeClient} to get the client for a specific master node.
+       */
+      get masters() {
+        return this._self._slots.masters;
+      }
+      /**
+       * An array of the cluster replicas.
+       * Use with {@link RedisCluster.prototype.nodeClient} to get the client for a specific replica node.
+       */
+      get replicas() {
+        return this._self._slots.replicas;
+      }
+      /**
+       * A map form a node address (`<host>:<port>`) to its shard, each shard contain its `master` and `replicas`.
+       * Use with {@link RedisCluster.prototype.nodeClient} to get the client for a specific node (master or replica).
+       */
+      get nodeByAddress() {
+        return this._self._slots.nodeByAddress;
+      }
+      /**
+       * The current pub/sub node.
+       */
+      get pubSubNode() {
+        return this._self._slots.pubSubNode;
+      }
+      get isOpen() {
+        return this._self._slots.isOpen;
+      }
+      /**
+       * @internal
+       * Returns the cluster identity for tracking in metrics.
+       */
+      get identity() {
+        return this._self.#identity;
+      }
+      constructor(options) {
+        super();
+        this.#identity = {
+          id: (0, identity_1.generateClusterClientId)(options.rootNodes),
+          role: identity_1.ClientRole.CLUSTER
+        };
+        this._options = options;
+        this._slots = new cluster_slots_1.default(options, this.emit.bind(this), this.#identity.id);
+        this.on(cluster_slots_1.RESUBSCRIBE_LISTENERS_EVENT, this.resubscribeAllPubSubListeners.bind(this));
+        if (options?.commandOptions) {
+          this._commandOptions = options.commandOptions;
+        }
+      }
+      duplicate(overrides) {
+        return new (Object.getPrototypeOf(this)).constructor({
+          ...this._self._options,
+          commandOptions: this._commandOptions,
+          ...overrides
+        });
+      }
+      async connect() {
+        await this._self._slots.connect();
+        return this;
+      }
+      withCommandOptions(options) {
+        const proxy = Object.create(this);
+        proxy._commandOptions = options;
+        return proxy;
+      }
+      _commandOptionsProxy(key, value) {
+        const proxy = Object.create(this);
+        proxy._commandOptions = Object.create(this._commandOptions ?? null);
+        proxy._commandOptions[key] = value;
+        return proxy;
+      }
+      /**
+       * Override the `typeMapping` command option
+       */
+      withTypeMapping(typeMapping) {
+        return this._commandOptionsProxy("typeMapping", typeMapping);
+      }
+      // /**
+      //  * Override the `policies` command option
+      //  * TODO
+      //  */
+      // withPolicies<POLICIES extends CommandPolicies> (policies: POLICIES) {
+      //   return this._commandOptionsProxy('policies', policies);
+      // }
+      _handleAsk(fn) {
+        return async (client, options) => {
+          const chainId = Symbol("asking chain");
+          const opts = options ? { ...options } : {};
+          opts.chainId = chainId;
+          const ret = await Promise.all([
+            client.sendCommand([ASKING_1.ASKING_CMD], { chainId }),
+            fn(client, opts)
+          ]);
+          return ret[1];
+        };
+      }
+      async _execute(firstKey, isReadonly, options, fn) {
+        const maxCommandRedirections = this._options.maxCommandRedirections ?? 16;
+        let { client, slotNumber } = await this._slots.getClientAndSlotNumber(firstKey, isReadonly);
+        let i = 0;
+        let myFn = fn;
+        while (true) {
+          try {
+            const opts = options ?? {};
+            opts.slotNumber = slotNumber;
+            return await myFn(client, opts);
+          } catch (_err) {
+            const err = _err;
+            myFn = fn;
+            if (++i > maxCommandRedirections || !(err instanceof Error)) {
+              if (err instanceof Error) {
+                (0, tracing_1.publish)(tracing_1.CHANNELS.ERROR, () => ({
+                  error: err,
+                  origin: "cluster",
+                  internal: false,
+                  clientId: client._clientId,
+                  retryCount: i
+                }));
+              }
+              throw err;
+            }
+            if (err.message.startsWith("ASK")) {
+              (0, tracing_1.publish)(tracing_1.CHANNELS.ERROR, () => ({
+                error: err,
+                origin: "cluster",
+                internal: true,
+                clientId: client._clientId,
+                retryCount: i
+              }));
+              const address = err.message.substring(err.message.lastIndexOf(" ") + 1);
+              let redirectTo = await this._slots.getMasterByAddress(address);
+              if (!redirectTo) {
+                await this._slots.rediscover(client);
+                redirectTo = await this._slots.getMasterByAddress(address);
+              }
+              if (!redirectTo) {
+                throw new Error(`Cannot find node ${address}`);
+              }
+              client = redirectTo;
+              myFn = this._handleAsk(fn);
+              continue;
+            }
+            if (err.message.startsWith("MOVED")) {
+              (0, tracing_1.publish)(tracing_1.CHANNELS.ERROR, () => ({
+                error: err,
+                origin: "cluster",
+                internal: true,
+                clientId: client._clientId,
+                retryCount: i
+              }));
+              await this._slots.rediscover(client);
+              const clientAndSlot = await this._slots.getClientAndSlotNumber(firstKey, isReadonly);
+              client = clientAndSlot.client;
+              slotNumber = clientAndSlot.slotNumber;
+              continue;
+            }
+            throw err;
+          }
+        }
+      }
+      async sendCommand(firstKey, isReadonly, args, options) {
+        const opts = {
+          ...this._self._commandOptions,
+          ...options
+        };
+        return this._self._execute(firstKey, isReadonly, opts, (client, opts2) => client.sendCommand(args, opts2));
+      }
+      MULTI(routing) {
+        return new this.Multi(async (firstKey, isReadonly, commands) => {
+          const { client } = await this._self._slots.getClientAndSlotNumber(firstKey, isReadonly);
+          return client._executeMulti(commands);
+        }, async (firstKey, isReadonly, commands) => {
+          const { client } = await this._self._slots.getClientAndSlotNumber(firstKey, isReadonly);
+          return client._executePipeline(commands);
+        }, routing, this._commandOptions?.typeMapping);
+      }
+      multi = this.MULTI;
+      async SUBSCRIBE(channels, listener, bufferMode) {
+        return (await this._self._slots.getPubSubClient()).SUBSCRIBE(channels, listener, bufferMode);
+      }
+      subscribe = this.SUBSCRIBE;
+      async UNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self._slots.executeUnsubscribeCommand((client) => client.UNSUBSCRIBE(channels, listener, bufferMode));
+      }
+      unsubscribe = this.UNSUBSCRIBE;
+      async PSUBSCRIBE(patterns, listener, bufferMode) {
+        return (await this._self._slots.getPubSubClient()).PSUBSCRIBE(patterns, listener, bufferMode);
+      }
+      pSubscribe = this.PSUBSCRIBE;
+      async PUNSUBSCRIBE(patterns, listener, bufferMode) {
+        return this._self._slots.executeUnsubscribeCommand((client) => client.PUNSUBSCRIBE(patterns, listener, bufferMode));
+      }
+      pUnsubscribe = this.PUNSUBSCRIBE;
+      async SSUBSCRIBE(channels, listener, bufferMode) {
+        const maxCommandRedirections = this._self._options.maxCommandRedirections ?? 16, firstChannel = Array.isArray(channels) ? channels[0] : channels;
+        let client = await this._self._slots.getShardedPubSubClient(firstChannel);
+        for (let i = 0; ; i++) {
+          try {
+            return await client.SSUBSCRIBE(channels, listener, bufferMode);
+          } catch (err) {
+            if (++i > maxCommandRedirections || !(err instanceof errors_1.ErrorReply)) {
+              throw err;
+            }
+            if (err.message.startsWith("MOVED")) {
+              await this._self._slots.rediscover(client);
+              client = await this._self._slots.getShardedPubSubClient(firstChannel);
+              continue;
+            }
+            throw err;
+          }
+        }
+      }
+      sSubscribe = this.SSUBSCRIBE;
+      SUNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self._slots.executeShardedUnsubscribeCommand(Array.isArray(channels) ? channels[0] : channels, (client) => client.SUNSUBSCRIBE(channels, listener, bufferMode));
+      }
+      resubscribeAllPubSubListeners(allListeners) {
+        if (allListeners.CHANNELS) {
+          for (const [channel, listeners] of allListeners.CHANNELS) {
+            listeners.buffers.forEach((bufListener) => {
+              this.subscribe(channel, bufListener, true);
+            });
+            listeners.strings.forEach((strListener) => {
+              this.subscribe(channel, strListener);
+            });
+          }
+        }
+        if (allListeners.PATTERNS) {
+          for (const [channel, listeners] of allListeners.PATTERNS) {
+            listeners.buffers.forEach((bufListener) => {
+              this.pSubscribe(channel, bufListener, true);
+            });
+            listeners.strings.forEach((strListener) => {
+              this.pSubscribe(channel, strListener);
+            });
+          }
+        }
+        if (allListeners.SHARDED) {
+          for (const [channel, listeners] of allListeners.SHARDED) {
+            listeners.buffers.forEach((bufListener) => {
+              this.sSubscribe(channel, bufListener, true);
+            });
+            listeners.strings.forEach((strListener) => {
+              this.sSubscribe(channel, strListener);
+            });
+          }
+        }
+      }
+      sUnsubscribe = this.SUNSUBSCRIBE;
+      /**
+       * @deprecated Use `close` instead.
+       */
+      quit() {
+        return this._self._slots.quit();
+      }
+      /**
+       * @deprecated Use `destroy` instead.
+       */
+      disconnect() {
+        return this._self._slots.disconnect();
+      }
+      close() {
+        this._self._slots.clientSideCache?.onPoolClose();
+        return this._self._slots.close();
+      }
+      destroy() {
+        this._self._slots.clientSideCache?.onPoolClose();
+        return this._self._slots.destroy();
+      }
+      nodeClient(node) {
+        return this._self._slots.nodeClient(node);
+      }
+      /**
+       * Returns a random node from the cluster.
+       * Userful for running "forward" commands (like PUBLISH) on a random node.
+       */
+      getRandomNode() {
+        return this._self._slots.getRandomNode();
+      }
+      /**
+       * Get a random node from a slot.
+       * Useful for running readonly commands on a slot.
+       */
+      getSlotRandomNode(slot) {
+        return this._self._slots.getSlotRandomNode(slot);
+      }
+      /**
+       * @deprecated use `.masters` instead
+       * TODO
+       */
+      getMasters() {
+        return this.masters;
+      }
+      /**
+       * @deprecated use `.slots[<SLOT>]` instead
+       * TODO
+       */
+      getSlotMaster(slot) {
+        return this.slots[slot].master;
+      }
+    };
+    exports.default = RedisCluster;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/utils.js
+var require_utils3 = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMappedNode = exports.createScriptCommand = exports.createModuleCommand = exports.createFunctionCommand = exports.createCommand = exports.clientSocketToNode = exports.createNodeList = exports.parseNode = void 0;
+    var parser_1 = require_parser();
+    var commander_1 = require_commander();
+    function parseNode(node) {
+      if (node.flags.includes("s_down") || node.flags.includes("disconnected") || node.flags.includes("failover_in_progress")) {
+        return void 0;
+      }
+      return { host: node.ip, port: Number(node.port) };
+    }
+    exports.parseNode = parseNode;
+    function createNodeList(nodes) {
+      var nodeList = [];
+      for (const nodeData of nodes) {
+        const node = parseNode(nodeData);
+        if (node === void 0) {
+          continue;
+        }
+        nodeList.push(node);
+      }
+      return nodeList;
+    }
+    exports.createNodeList = createNodeList;
+    function clientSocketToNode(socket) {
+      const s = socket;
+      return {
+        host: s.host,
+        port: s.port
+      };
+    }
+    exports.clientSocketToNode = clientSocketToNode;
+    function createCommand(command, resp) {
+      const transformReply = (0, commander_1.getTransformReply)(command, resp);
+      return async function(...args) {
+        const parser = new parser_1.BasicCommandParser();
+        command.parseCommand(parser, ...args);
+        return this._self._execute(command.IS_READ_ONLY, (client) => client._executeCommand(command, parser, this.commandOptions, transformReply));
+      };
+    }
+    exports.createCommand = createCommand;
+    function createFunctionCommand(name, fn, resp) {
+      const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+      const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+      return async function(...args) {
+        const parser = new parser_1.BasicCommandParser();
+        parser.push(...prefix);
+        fn.parseCommand(parser, ...args);
+        return this._self._execute(fn.IS_READ_ONLY, (client) => client._executeCommand(fn, parser, this._self.commandOptions, transformReply));
+      };
+    }
+    exports.createFunctionCommand = createFunctionCommand;
+    function createModuleCommand(command, resp) {
+      const transformReply = (0, commander_1.getTransformReply)(command, resp);
+      return async function(...args) {
+        const parser = new parser_1.BasicCommandParser();
+        command.parseCommand(parser, ...args);
+        return this._self._execute(command.IS_READ_ONLY, (client) => client._executeCommand(command, parser, this._self.commandOptions, transformReply));
+      };
+    }
+    exports.createModuleCommand = createModuleCommand;
+    function createScriptCommand(script, resp) {
+      const prefix = (0, commander_1.scriptArgumentsPrefix)(script);
+      const transformReply = (0, commander_1.getTransformReply)(script, resp);
+      return async function(...args) {
+        const parser = new parser_1.BasicCommandParser();
+        parser.push(...prefix);
+        script.parseCommand(parser, ...args);
+        return this._self._execute(script.IS_READ_ONLY, (client) => client._executeScript(script, parser, this.commandOptions, transformReply));
+      };
+    }
+    exports.createScriptCommand = createScriptCommand;
+    function getMappedNode(host, port, nodeAddressMap) {
+      if (nodeAddressMap === void 0) {
+        return { host, port };
+      }
+      const address = `${host}:${port}`;
+      switch (typeof nodeAddressMap) {
+        case "object":
+          return nodeAddressMap[address] ?? { host, port };
+        case "function":
+          return nodeAddressMap(address) ?? { host, port };
+      }
+    }
+    exports.getMappedNode = getMappedNode;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/multi-commands.js
+var require_multi_commands = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/multi-commands.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = require_commands();
+    var multi_command_1 = __importDefault(require_multi_command());
+    var commander_1 = require_commander();
+    var parser_1 = require_parser();
+    var RedisSentinelMultiCommand = class _RedisSentinelMultiCommand {
+      static _createCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this.addCommand(command.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static _createModuleCommand(command, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(command, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          command.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this._self.addCommand(command.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static _createFunctionCommand(name, fn, resp) {
+        const prefix = (0, commander_1.functionArgumentsPrefix)(name, fn);
+        const transformReply = (0, commander_1.getTransformReply)(fn, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          parser.push(...prefix);
+          fn.parseCommand(parser, ...args);
+          const redisArgs = parser.redisArgs;
+          redisArgs.preserve = parser.preserve;
+          return this._self.addCommand(fn.IS_READ_ONLY, redisArgs, transformReply);
+        };
+      }
+      static _createScriptCommand(script, resp) {
+        const transformReply = (0, commander_1.getTransformReply)(script, resp);
+        return function(...args) {
+          const parser = new parser_1.BasicCommandParser();
+          script.parseCommand(parser, ...args);
+          const scriptArgs = parser.redisArgs;
+          scriptArgs.preserve = parser.preserve;
+          return this.#addScript(script.IS_READ_ONLY, script, scriptArgs, transformReply);
+        };
+      }
+      static extend(config2) {
+        return (0, commander_1.attachConfig)({
+          BaseClass: _RedisSentinelMultiCommand,
+          commands: commands_1.NON_STICKY_COMMANDS,
+          createCommand: _RedisSentinelMultiCommand._createCommand,
+          createModuleCommand: _RedisSentinelMultiCommand._createModuleCommand,
+          createFunctionCommand: _RedisSentinelMultiCommand._createFunctionCommand,
+          createScriptCommand: _RedisSentinelMultiCommand._createScriptCommand,
+          config: config2
+        });
+      }
+      #multi = new multi_command_1.default();
+      #sentinel;
+      #isReadonly = true;
+      constructor(sentinel, typeMapping) {
+        this.#multi = new multi_command_1.default(typeMapping);
+        this.#sentinel = sentinel;
+      }
+      #setState(isReadonly) {
+        this.#isReadonly &&= isReadonly;
+      }
+      addCommand(isReadonly, args, transformReply) {
+        this.#setState(isReadonly);
+        this.#multi.addCommand(args, transformReply);
+        return this;
+      }
+      #addScript(isReadonly, script, args, transformReply) {
+        this.#setState(isReadonly);
+        this.#multi.addScript(script, args, transformReply);
+        return this;
+      }
+      async exec(execAsPipeline = false) {
+        if (execAsPipeline)
+          return this.execAsPipeline();
+        return this.#multi.transformReplies(await this.#sentinel._executeMulti(this.#isReadonly, this.#multi.queue));
+      }
+      EXEC = this.exec;
+      execTyped(execAsPipeline = false) {
+        return this.exec(execAsPipeline);
+      }
+      async execAsPipeline() {
+        if (this.#multi.queue.length === 0)
+          return [];
+        return this.#multi.transformReplies(await this.#sentinel._executePipeline(this.#isReadonly, this.#multi.queue));
+      }
+      execAsPipelineTyped() {
+        return this.execAsPipeline();
+      }
+      /**
+       * Adds a raw command to the multi/pipeline queue.
+       *
+       * Note: Using this method breaks the type inference for `execTyped` and
+       * `execAsPipelineTyped`. This is a known limitation and will be addressed
+       * in the future.
+       */
+      sendCommand(args, options) {
+        const redisArgs = args.slice();
+        this.addCommand(options?.isReadonly, redisArgs);
+        return this;
+      }
+    };
+    exports.default = RedisSentinelMultiCommand;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/pub-sub-proxy.js
+var require_pub_sub_proxy = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/pub-sub-proxy.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PubSubProxy = void 0;
+    var node_events_1 = __importDefault(__require("node:events"));
+    var pub_sub_1 = require_pub_sub();
+    var client_1 = __importDefault(require_client());
+    var PubSubProxy = class extends node_events_1.default {
+      #clientOptions;
+      #onError;
+      #node;
+      #state;
+      #subscriptions;
+      constructor(clientOptions, onError) {
+        super();
+        this.#clientOptions = clientOptions;
+        this.#onError = onError;
+      }
+      #createClient() {
+        if (this.#node === void 0) {
+          throw new Error("pubSubProxy: didn't define node to do pubsub against");
+        }
+        return new client_1.default({
+          ...this.#clientOptions,
+          socket: {
+            ...this.#clientOptions.socket,
+            host: this.#node.host,
+            port: this.#node.port
+          }
+        });
+      }
+      async #initiatePubSubClient(withSubscriptions = false) {
+        const client = this.#createClient().on("error", this.#onError);
+        const connectPromise = client.connect().then(async (client2) => {
+          if (this.#state?.client !== client2) {
+            client2.destroy();
+            return this.#state?.connectPromise;
+          }
+          if (withSubscriptions && this.#subscriptions) {
+            await Promise.all([
+              client2.extendPubSubListeners(pub_sub_1.PUBSUB_TYPE.CHANNELS, this.#subscriptions[pub_sub_1.PUBSUB_TYPE.CHANNELS]),
+              client2.extendPubSubListeners(pub_sub_1.PUBSUB_TYPE.PATTERNS, this.#subscriptions[pub_sub_1.PUBSUB_TYPE.PATTERNS]),
+              client2.extendPubSubListeners(pub_sub_1.PUBSUB_TYPE.SHARDED, this.#subscriptions[pub_sub_1.PUBSUB_TYPE.SHARDED])
+            ]);
+          }
+          if (this.#state.client !== client2) {
+            client2.destroy();
+            return this.#state?.connectPromise;
+          }
+          this.#state.connectPromise = void 0;
+          return client2;
+        }).catch((err) => {
+          this.#state = void 0;
+          throw err;
+        });
+        this.#state = {
+          client,
+          connectPromise
+        };
+        return connectPromise;
+      }
+      #getPubSubClient() {
+        if (!this.#state)
+          return this.#initiatePubSubClient();
+        return this.#state.connectPromise ?? this.#state.client;
+      }
+      async changeNode(node) {
+        this.#node = node;
+        if (!this.#state)
+          return;
+        if (this.#state.connectPromise === void 0) {
+          this.#subscriptions = {
+            [pub_sub_1.PUBSUB_TYPE.CHANNELS]: this.#state.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.CHANNELS),
+            [pub_sub_1.PUBSUB_TYPE.PATTERNS]: this.#state.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.PATTERNS),
+            [pub_sub_1.PUBSUB_TYPE.SHARDED]: this.#state.client.getPubSubListeners(pub_sub_1.PUBSUB_TYPE.SHARDED)
+          };
+          this.#state.client.destroy();
+        }
+        await this.#initiatePubSubClient(true);
+      }
+      #executeCommand(fn) {
+        const client = this.#getPubSubClient();
+        if (client instanceof client_1.default) {
+          return fn(client);
+        }
+        return client.then((client2) => {
+          if (client2 === void 0)
+            return;
+          return fn(client2);
+        }).catch((err) => {
+          if (this.#state?.client.isPubSubActive) {
+            this.#state.client.destroy();
+            this.#state = void 0;
+          }
+          throw err;
+        });
+      }
+      subscribe(channels, listener, bufferMode) {
+        return this.#executeCommand((client) => client.SUBSCRIBE(channels, listener, bufferMode));
+      }
+      #unsubscribe(fn) {
+        return this.#executeCommand(async (client) => {
+          const reply = await fn(client);
+          if (!client.isPubSubActive) {
+            client.destroy();
+            this.#state = void 0;
+          }
+          return reply;
+        });
+      }
+      async unsubscribe(channels, listener, bufferMode) {
+        return this.#unsubscribe((client) => client.UNSUBSCRIBE(channels, listener, bufferMode));
+      }
+      async pSubscribe(patterns, listener, bufferMode) {
+        return this.#executeCommand((client) => client.PSUBSCRIBE(patterns, listener, bufferMode));
+      }
+      async pUnsubscribe(patterns, listener, bufferMode) {
+        return this.#unsubscribe((client) => client.PUNSUBSCRIBE(patterns, listener, bufferMode));
+      }
+      sSubscribe(channels, listener, bufferMode) {
+        return this.#executeCommand((client) => client.SSUBSCRIBE(channels, listener, bufferMode));
+      }
+      async sUnsubscribe(channels, listener, bufferMode) {
+        return this.#unsubscribe((client) => client.SUNSUBSCRIBE(channels, listener, bufferMode));
+      }
+      destroy() {
+        this.#subscriptions = void 0;
+        if (this.#state === void 0)
+          return;
+        if (!this.#state.connectPromise) {
+          this.#state.client.destroy();
+        }
+        this.#state = void 0;
+      }
+    };
+    exports.PubSubProxy = PubSubProxy;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_MASTER.js
+var require_SENTINEL_MASTER = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_MASTER.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Returns information about the specified master.
+       * @param parser - The Redis command parser.
+       * @param dbname - Name of the master.
+       */
+      parseCommand(parser, dbname) {
+        parser.push("SENTINEL", "MASTER", dbname);
+      },
+      transformReply: {
+        2: generic_transformers_1.transformTuplesReply,
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_MONITOR.js
+var require_SENTINEL_MONITOR = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_MONITOR.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Instructs a Sentinel to monitor a new master with the specified parameters.
+       * @param parser - The Redis command parser.
+       * @param dbname - Name that identifies the master.
+       * @param host - Host of the master.
+       * @param port - Port of the master.
+       * @param quorum - Number of Sentinels that need to agree to trigger a failover.
+       */
+      parseCommand(parser, dbname, host, port, quorum) {
+        parser.push("SENTINEL", "MONITOR", dbname, host, port, quorum);
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_REPLICAS.js
+var require_SENTINEL_REPLICAS = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_REPLICAS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Returns a list of replicas for the specified master.
+       * @param parser - The Redis command parser.
+       * @param dbname - Name of the master.
+       */
+      parseCommand(parser, dbname) {
+        parser.push("SENTINEL", "REPLICAS", dbname);
+      },
+      transformReply: {
+        2: (reply, preserve, typeMapping) => {
+          const inferred = reply;
+          const initial = [];
+          return inferred.reduce((sentinels, x) => {
+            sentinels.push((0, generic_transformers_1.transformTuplesReply)(x, void 0, typeMapping));
+            return sentinels;
+          }, initial);
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_SENTINELS.js
+var require_SENTINEL_SENTINELS = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_SENTINELS.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var generic_transformers_1 = require_generic_transformers();
+    exports.default = {
+      /**
+       * Returns a list of Sentinel instances for the specified master.
+       * @param parser - The Redis command parser.
+       * @param dbname - Name of the master.
+       */
+      parseCommand(parser, dbname) {
+        parser.push("SENTINEL", "SENTINELS", dbname);
+      },
+      transformReply: {
+        2: (reply, preserve, typeMapping) => {
+          const inferred = reply;
+          const initial = [];
+          return inferred.reduce((sentinels, x) => {
+            sentinels.push((0, generic_transformers_1.transformTuplesReply)(x, void 0, typeMapping));
+            return sentinels;
+          }, initial);
+        },
+        3: void 0
+      }
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_SET.js
+var require_SENTINEL_SET = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/SENTINEL_SET.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = {
+      /**
+       * Sets configuration parameters for a specific master.
+       * @param parser - The Redis command parser.
+       * @param dbname - Name of the master.
+       * @param options - Configuration options to set as option-value pairs.
+       */
+      parseCommand(parser, dbname, options) {
+        parser.push("SENTINEL", "SET", dbname);
+        for (const option of options) {
+          parser.push(option.option, option.value);
+        }
+      },
+      transformReply: void 0
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/commands/index.js
+var require_commands2 = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/commands/index.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var SENTINEL_MASTER_1 = __importDefault(require_SENTINEL_MASTER());
+    var SENTINEL_MONITOR_1 = __importDefault(require_SENTINEL_MONITOR());
+    var SENTINEL_REPLICAS_1 = __importDefault(require_SENTINEL_REPLICAS());
+    var SENTINEL_SENTINELS_1 = __importDefault(require_SENTINEL_SENTINELS());
+    var SENTINEL_SET_1 = __importDefault(require_SENTINEL_SET());
+    exports.default = {
+      SENTINEL_SENTINELS: SENTINEL_SENTINELS_1.default,
+      sentinelSentinels: SENTINEL_SENTINELS_1.default,
+      SENTINEL_MASTER: SENTINEL_MASTER_1.default,
+      sentinelMaster: SENTINEL_MASTER_1.default,
+      SENTINEL_REPLICAS: SENTINEL_REPLICAS_1.default,
+      sentinelReplicas: SENTINEL_REPLICAS_1.default,
+      SENTINEL_MONITOR: SENTINEL_MONITOR_1.default,
+      sentinelMonitor: SENTINEL_MONITOR_1.default,
+      SENTINEL_SET: SENTINEL_SET_1.default,
+      sentinelSet: SENTINEL_SET_1.default
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/module.js
+var require_module = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/module.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var commands_1 = __importDefault(require_commands2());
+    exports.default = {
+      sentinel: commands_1.default
+    };
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/wait-queue.js
+var require_wait_queue = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/wait-queue.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.WaitQueue = void 0;
+    var linked_list_1 = require_linked_list();
+    var WaitQueue = class {
+      #list = new linked_list_1.SinglyLinkedList();
+      #queue = new linked_list_1.SinglyLinkedList();
+      push(value) {
+        const resolve3 = this.#queue.shift();
+        if (resolve3 !== void 0) {
+          resolve3(value);
+          return;
+        }
+        this.#list.push(value);
+      }
+      shift() {
+        return this.#list.shift();
+      }
+      wait() {
+        return new Promise((resolve3) => this.#queue.push(resolve3));
+      }
+    };
+    exports.WaitQueue = WaitQueue;
+  }
+});
+
+// node_modules/@redis/client/dist/lib/sentinel/index.js
+var require_sentinel = __commonJS({
+  "node_modules/@redis/client/dist/lib/sentinel/index.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RedisSentinelFactory = exports.RedisSentinelClient = void 0;
+    var node_events_1 = __require("node:events");
+    var client_1 = __importDefault(require_client());
+    var commander_1 = require_commander();
+    var commands_1 = require_commands();
+    var utils_1 = require_utils3();
+    var multi_commands_1 = __importDefault(require_multi_commands());
+    var pub_sub_proxy_1 = require_pub_sub_proxy();
+    var promises_1 = __require("node:timers/promises");
+    var module_1 = __importDefault(require_module());
+    var wait_queue_1 = require_wait_queue();
+    var cache_1 = require_cache();
+    var identity_1 = require_identity();
+    var RedisSentinelClient = class _RedisSentinelClient {
+      #clientInfo;
+      #internal;
+      _self;
+      /**
+       * Indicates if the client connection is open
+       *
+       * @returns `true` if the client connection is open, `false` otherwise
+       */
+      get isOpen() {
+        return this._self.#internal.isOpen;
+      }
+      /**
+       * Indicates if the client connection is ready to accept commands
+       *
+       * @returns `true` if the client connection is ready, `false` otherwise
+       */
+      get isReady() {
+        return this._self.#internal.isReady;
+      }
+      /**
+       * Gets the command options configured for this client
+       *
+       * @returns The command options for this client or `undefined` if none were set
+       */
+      get commandOptions() {
+        return this._self.#commandOptions;
+      }
+      #commandOptions;
+      constructor(internal, clientInfo, commandOptions) {
+        this._self = this;
+        this.#internal = internal;
+        this.#clientInfo = clientInfo;
+        this.#commandOptions = commandOptions;
+      }
+      static factory(config2) {
+        const SentinelClient = (0, commander_1.attachConfig)({
+          BaseClass: _RedisSentinelClient,
+          commands: commands_1.NON_STICKY_COMMANDS,
+          createCommand: utils_1.createCommand,
+          createModuleCommand: utils_1.createModuleCommand,
+          createFunctionCommand: utils_1.createFunctionCommand,
+          createScriptCommand: utils_1.createScriptCommand,
+          config: config2
+        });
+        SentinelClient.prototype.Multi = multi_commands_1.default.extend(config2);
+        return (internal, clientInfo, commandOptions) => {
+          return Object.create(new SentinelClient(internal, clientInfo, commandOptions));
+        };
+      }
+      static create(options, internal, clientInfo, commandOptions) {
+        return _RedisSentinelClient.factory(options)(internal, clientInfo, commandOptions);
+      }
+      withCommandOptions(options) {
+        const proxy = Object.create(this);
+        proxy._commandOptions = options;
+        return proxy;
+      }
+      _commandOptionsProxy(key, value) {
+        const proxy = Object.create(this);
+        proxy._commandOptions = Object.create(this._self.#commandOptions ?? null);
+        proxy._commandOptions[key] = value;
+        return proxy;
+      }
+      /**
+       * Override the `typeMapping` command option
+       */
+      withTypeMapping(typeMapping) {
+        return this._commandOptionsProxy("typeMapping", typeMapping);
+      }
+      async _execute(isReadonly, fn) {
+        if (this._self.#clientInfo === void 0) {
+          throw new Error("Attempted execution on released RedisSentinelClient lease");
+        }
+        return await this._self.#internal.execute(fn, this._self.#clientInfo);
+      }
+      async sendCommand(isReadonly, args, options) {
+        return this._execute(isReadonly, (client) => client.sendCommand(args, options));
+      }
+      /**
+       * @internal
+       */
+      async _executePipeline(isReadonly, commands) {
+        return this._execute(isReadonly, (client) => client._executePipeline(commands));
+      }
+      /**f
+        * @internal
+        */
+      async _executeMulti(isReadonly, commands) {
+        return this._execute(isReadonly, (client) => client._executeMulti(commands));
+      }
+      MULTI() {
+        return new this.Multi(this);
+      }
+      multi = this.MULTI;
+      WATCH(key) {
+        if (this._self.#clientInfo === void 0) {
+          throw new Error("Attempted execution on released RedisSentinelClient lease");
+        }
+        return this._execute(false, (client) => client.watch(key));
+      }
+      watch = this.WATCH;
+      UNWATCH() {
+        if (this._self.#clientInfo === void 0) {
+          throw new Error("Attempted execution on released RedisSentinelClient lease");
+        }
+        return this._execute(false, (client) => client.unwatch());
+      }
+      unwatch = this.UNWATCH;
+      /**
+       * Releases the client lease back to the pool
+       *
+       * After calling this method, the client instance should no longer be used as it
+       * will be returned to the client pool and may be given to other operations.
+       *
+       * @returns A promise that resolves when the client is ready to be reused, or undefined
+       *          if the client was immediately ready
+       * @throws Error if the lease has already been released
+       */
+      release() {
+        if (this._self.#clientInfo === void 0) {
+          throw new Error("RedisSentinelClient lease already released");
+        }
+        const result = this._self.#internal.releaseClientLease(this._self.#clientInfo);
+        this._self.#clientInfo = void 0;
+        return result;
+      }
+    };
+    exports.RedisSentinelClient = RedisSentinelClient;
+    var RedisSentinel = class _RedisSentinel extends node_events_1.EventEmitter {
+      _self;
+      #internal;
+      #options;
+      #identity;
+      /**
+       * Indicates if the sentinel connection is open
+       *
+       * @returns `true` if the sentinel connection is open, `false` otherwise
+       */
+      get isOpen() {
+        return this._self.#internal.isOpen;
+      }
+      /**
+       * Indicates if the sentinel connection is ready to accept commands
+       *
+       * @returns `true` if the sentinel connection is ready, `false` otherwise
+       */
+      get isReady() {
+        return this._self.#internal.isReady;
+      }
+      get commandOptions() {
+        return this._self.#commandOptions;
+      }
+      /**
+       * @internal
+       * Returns the sentinel identity for tracking in metrics.
+       */
+      get identity() {
+        return this._self.#identity;
+      }
+      #commandOptions;
+      #trace = () => {
+      };
+      #reservedClientInfo;
+      #masterClientCount = 0;
+      #masterClientInfo;
+      get clientSideCache() {
+        return this._self.#internal.clientSideCache;
+      }
+      constructor(options) {
+        super();
+        this._self = this;
+        const firstSentinel = options.sentinelRootNodes[0];
+        this.#identity = {
+          id: (0, identity_1.generateClientId)(firstSentinel?.host, firstSentinel?.port, void 0),
+          role: identity_1.ClientRole.SENTINEL
+        };
+        this.#options = options;
+        if (options.commandOptions) {
+          this.#commandOptions = options.commandOptions;
+        }
+        this.#internal = new RedisSentinelInternal(options, this.#identity.id);
+        this.#internal.on("error", (err) => this.emit("error", err));
+        this.#internal.on("topology-change", (event) => {
+          if (!this.emit("topology-change", event)) {
+            this._self.#trace(`RedisSentinel: re-emit for topology-change for ${event.type} event returned false`);
+          }
+        });
+      }
+      static factory(config2) {
+        const Sentinel = (0, commander_1.attachConfig)({
+          BaseClass: _RedisSentinel,
+          commands: commands_1.NON_STICKY_COMMANDS,
+          createCommand: utils_1.createCommand,
+          createModuleCommand: utils_1.createModuleCommand,
+          createFunctionCommand: utils_1.createFunctionCommand,
+          createScriptCommand: utils_1.createScriptCommand,
+          config: config2
+        });
+        Sentinel.prototype.Multi = multi_commands_1.default.extend(config2);
+        return (options) => {
+          return Object.create(new Sentinel(options));
+        };
+      }
+      static create(options) {
+        return _RedisSentinel.factory(options)(options);
+      }
+      withCommandOptions(options) {
+        const proxy = Object.create(this);
+        proxy._commandOptions = options;
+        return proxy;
+      }
+      _commandOptionsProxy(key, value) {
+        const proxy = Object.create(this);
+        proxy._self.#commandOptions = {
+          ...this._self.#commandOptions || {},
+          [key]: value
+        };
+        return proxy;
+      }
+      /**
+       * Override the `typeMapping` command option
+       */
+      withTypeMapping(typeMapping) {
+        return this._commandOptionsProxy("typeMapping", typeMapping);
+      }
+      async connect() {
+        await this._self.#internal.connect();
+        if (this._self.#options.reserveClient) {
+          this._self.#reservedClientInfo = await this._self.#internal.getClientLease();
+        }
+        return this;
+      }
+      async _execute(isReadonly, fn) {
+        let clientInfo;
+        if (!isReadonly || !this._self.#internal.useReplicas) {
+          if (this._self.#reservedClientInfo) {
+            clientInfo = this._self.#reservedClientInfo;
+          } else {
+            this._self.#masterClientInfo ??= await this._self.#internal.getClientLease();
+            clientInfo = this._self.#masterClientInfo;
+            this._self.#masterClientCount++;
+          }
+        }
+        try {
+          return await this._self.#internal.execute(fn, clientInfo);
+        } finally {
+          if (clientInfo !== void 0 && clientInfo === this._self.#masterClientInfo && --this._self.#masterClientCount === 0) {
+            const promise = this._self.#internal.releaseClientLease(clientInfo);
+            this._self.#masterClientInfo = void 0;
+            if (promise)
+              await promise;
+          }
+        }
+      }
+      async use(fn) {
+        const clientInfo = await this._self.#internal.getClientLease();
+        try {
+          return await fn(RedisSentinelClient.create(this._self.#options, this._self.#internal, clientInfo, this._self.#commandOptions));
+        } finally {
+          const promise = this._self.#internal.releaseClientLease(clientInfo);
+          if (promise)
+            await promise;
+        }
+      }
+      async sendCommand(isReadonly, args, options) {
+        return this._execute(isReadonly, (client) => client.sendCommand(args, options));
+      }
+      /**
+       * @internal
+       */
+      async _executePipeline(isReadonly, commands) {
+        return this._execute(isReadonly, (client) => client._executePipeline(commands));
+      }
+      /**f
+        * @internal
+        */
+      async _executeMulti(isReadonly, commands) {
+        return this._execute(isReadonly, (client) => client._executeMulti(commands));
+      }
+      MULTI() {
+        return new this.Multi(this);
+      }
+      multi = this.MULTI;
+      async close() {
+        return this._self.#internal.close();
+      }
+      destroy() {
+        return this._self.#internal.destroy();
+      }
+      async SUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#internal.subscribe(channels, listener, bufferMode);
+      }
+      subscribe = this.SUBSCRIBE;
+      async UNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#internal.unsubscribe(channels, listener, bufferMode);
+      }
+      unsubscribe = this.UNSUBSCRIBE;
+      async PSUBSCRIBE(patterns, listener, bufferMode) {
+        return this._self.#internal.pSubscribe(patterns, listener, bufferMode);
+      }
+      pSubscribe = this.PSUBSCRIBE;
+      async PUNSUBSCRIBE(patterns, listener, bufferMode) {
+        return this._self.#internal.pUnsubscribe(patterns, listener, bufferMode);
+      }
+      pUnsubscribe = this.PUNSUBSCRIBE;
+      async SSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#internal.sSubscribe(channels, listener, bufferMode);
+      }
+      sSubscribe = this.SSUBSCRIBE;
+      async SUNSUBSCRIBE(channels, listener, bufferMode) {
+        return this._self.#internal.sUnsubscribe(channels, listener, bufferMode);
+      }
+      sUnsubscribe = this.SUNSUBSCRIBE;
+      /**
+       * Acquires a master client lease for exclusive operations
+       *
+       * Used when multiple commands need to run on an exclusive client (for example, using `WATCH/MULTI/EXEC`).
+       * The returned client must be released after use with the `release()` method.
+       *
+       * @returns A promise that resolves to a Redis client connected to the master node
+       * @example
+       * ```javascript
+       * const clientLease = await sentinel.acquire();
+       *
+       * try {
+       *   await clientLease.watch('key');
+       *   const resp = await clientLease.multi()
+       *     .get('key')
+       *     .exec();
+       * } finally {
+       *   clientLease.release();
+       * }
+       * ```
+       */
+      async acquire() {
+        const clientInfo = await this._self.#internal.getClientLease();
+        return RedisSentinelClient.create(this._self.#options, this._self.#internal, clientInfo, this._self.#commandOptions);
+      }
+      getSentinelNode() {
+        return this._self.#internal.getSentinelNode();
+      }
+      getMasterNode() {
+        return this._self.#internal.getMasterNode();
+      }
+      getReplicaNodes() {
+        return this._self.#internal.getReplicaNodes();
+      }
+      setTracer(tracer) {
+        if (tracer) {
+          this._self.#trace = (msg) => {
+            tracer.push(msg);
+          };
+        } else {
+          this._self.#trace = () => {
+          };
+        }
+        this._self.#internal.setTracer(tracer);
+      }
+    };
+    exports.default = RedisSentinel;
+    var RedisSentinelInternal = class extends node_events_1.EventEmitter {
+      #isOpen = false;
+      get isOpen() {
+        return this.#isOpen;
+      }
+      #isReady = false;
+      get isReady() {
+        return this.#isReady;
+      }
+      #name;
+      #sentinelClientId;
+      #nodeClientOptions;
+      #sentinelClientOptions;
+      #nodeAddressMap;
+      #scanInterval;
+      #passthroughClientErrorEvents;
+      #RESP;
+      #anotherReset = false;
+      #configEpoch = 0;
+      #sentinelSeedNodes;
+      #sentinelRootNodes;
+      #sentinelClient;
+      #masterClients = [];
+      #masterClientQueue;
+      #masterPoolSize;
+      #replicaClients = [];
+      #replicaClientsIdx = 0;
+      #replicaPoolSize;
+      get useReplicas() {
+        return this.#replicaPoolSize > 0;
+      }
+      #connectPromise;
+      #maxCommandRediscovers;
+      #pubSubProxy;
+      #scanTimer;
+      #destroy = false;
+      #trace = () => {
+      };
+      #clientSideCache;
+      get clientSideCache() {
+        return this.#clientSideCache;
+      }
+      #validateOptions(options) {
+        if (options?.clientSideCache && options?.RESP !== 3) {
+          throw new Error("Client Side Caching is only supported with RESP3");
+        }
+      }
+      constructor(options, sentinelClientId) {
+        super();
+        this.#validateOptions(options);
+        this.#name = options.name;
+        this.#sentinelClientId = sentinelClientId;
+        this.#RESP = options.RESP;
+        this.#sentinelSeedNodes = Array.from(options.sentinelRootNodes);
+        this.#sentinelRootNodes = Array.from(this.#sentinelSeedNodes);
+        this.#maxCommandRediscovers = options.maxCommandRediscovers ?? 16;
+        this.#masterPoolSize = options.masterPoolSize ?? 1;
+        this.#replicaPoolSize = options.replicaPoolSize ?? 0;
+        this.#nodeAddressMap = options.nodeAddressMap;
+        this.#scanInterval = options.scanInterval ?? 0;
+        this.#passthroughClientErrorEvents = options.passthroughClientErrorEvents ?? false;
+        this.#nodeClientOptions = options.nodeClientOptions ? { ...options.nodeClientOptions } : {};
+        if (this.#nodeClientOptions.url !== void 0) {
+          throw new Error("invalid nodeClientOptions for Sentinel");
+        }
+        if (options.clientSideCache) {
+          if (options.clientSideCache instanceof cache_1.PooledClientSideCacheProvider) {
+            this.#clientSideCache = this.#nodeClientOptions.clientSideCache = options.clientSideCache;
+          } else {
+            const cscConfig = options.clientSideCache;
+            this.#clientSideCache = this.#nodeClientOptions.clientSideCache = new cache_1.BasicPooledClientSideCache(cscConfig);
+          }
+        }
+        this.#sentinelClientOptions = options.sentinelClientOptions ? Object.assign({}, options.sentinelClientOptions) : {};
+        this.#sentinelClientOptions.modules = module_1.default;
+        if (this.#sentinelClientOptions.url !== void 0) {
+          throw new Error("invalid sentinelClientOptions for Sentinel");
+        }
+        this.#masterClientQueue = new wait_queue_1.WaitQueue();
+        for (let i = 0; i < this.#masterPoolSize; i++) {
+          this.#masterClientQueue.push(i);
+        }
+        this.#pubSubProxy = new pub_sub_proxy_1.PubSubProxy(this.#nodeClientOptions, (err) => this.emit("error", err));
+      }
+      #createClient(node, clientOptions, reconnectStrategy) {
+        const socket = (0, utils_1.getMappedNode)(node.host, node.port, this.#nodeAddressMap);
+        const client = client_1.default.create({
+          //first take the globally set RESP
+          RESP: this.#RESP,
+          //then take the client options, which can in theory overwrite it
+          ...clientOptions,
+          socket: {
+            ...clientOptions.socket,
+            host: socket.host,
+            port: socket.port,
+            ...reconnectStrategy !== void 0 && { reconnectStrategy }
+          }
+        });
+        client._setIdentity(identity_1.ClientRole.SENTINEL_CLIENT, this.#sentinelClientId);
+        return client;
+      }
+      /**
+       * Gets a client lease from the master client pool
+       *
+       * @returns A client info object or a promise that resolves to a client info object
+       *          when a client becomes available
+       */
+      getClientLease() {
+        const id = this.#masterClientQueue.shift();
+        if (id !== void 0) {
+          return Promise.resolve({ id });
+        }
+        return this.#masterClientQueue.wait().then((id2) => ({ id: id2 }));
+      }
+      /**
+       * Releases a client lease back to the pool
+       *
+       * If the client was used for a transaction that might have left it in a dirty state,
+       * it will be reset before being returned to the pool.
+       *
+       * @param clientInfo The client info object representing the client to release
+       * @returns A promise that resolves when the client is ready to be reused, or undefined
+       *          if the client was immediately ready or no longer exists
+       */
+      releaseClientLease(clientInfo) {
+        const client = this.#masterClients[clientInfo.id];
+        if (client !== void 0) {
+          const dirtyPromise = client.resetIfDirty();
+          if (dirtyPromise) {
+            return dirtyPromise.then(() => this.#masterClientQueue.push(clientInfo.id));
+          }
+        }
+        this.#masterClientQueue.push(clientInfo.id);
+      }
+      async connect() {
+        if (this.#isOpen) {
+          throw new Error("already attempting to open");
+        }
+        try {
+          this.#isOpen = true;
+          this.#connectPromise = this.#connect();
+          await this.#connectPromise;
+          this.#isReady = true;
+        } finally {
+          this.#connectPromise = void 0;
+          if (this.#scanInterval > 0) {
+            this.#scanTimer = setInterval(this.#reset.bind(this), this.#scanInterval);
+          }
+        }
+      }
+      async #connect() {
+        let count = 0;
+        while (true) {
+          this.#trace("starting connect loop");
+          count += 1;
+          if (this.#destroy) {
+            this.#trace("in #connect and want to destroy");
+            return;
+          }
+          try {
+            this.#anotherReset = false;
+            await this.transform(this.analyze(await this.observe()));
+            if (this.#anotherReset) {
+              this.#trace("#connect: anotherReset is true, so continuing");
+              continue;
+            }
+            this.#trace("#connect: returning");
+            return;
+          } catch (e) {
+            this.#trace(`#connect: exception ${e.message}`);
+            if (!this.#isReady && count > this.#maxCommandRediscovers) {
+              throw e;
+            }
+            if (e.message !== "no valid master node") {
+              console.log(e);
+            }
+            await (0, promises_1.setTimeout)(1e3);
+          } finally {
+            this.#trace("finished connect");
+          }
+        }
+      }
+      async execute(fn, clientInfo) {
+        let iter = 0;
+        while (true) {
+          if (this.#connectPromise !== void 0) {
+            await this.#connectPromise;
+          }
+          const client = this.#getClient(clientInfo);
+          if (!client.isReady) {
+            await this.#reset();
+            continue;
+          }
+          const sockOpts = client.options?.socket;
+          this.#trace("attemping to send command to " + sockOpts?.host + ":" + sockOpts?.port);
+          try {
+            return await fn(client);
+          } catch (err) {
+            if (++iter > this.#maxCommandRediscovers || !(err instanceof Error)) {
+              throw err;
+            }
+            if (clientInfo !== void 0 && (err.message.startsWith("READONLY") || !client.isReady)) {
+              await this.#reset();
+              continue;
+            }
+            throw err;
+          }
+        }
+      }
+      async #createPubSub(client) {
+        await client.pSubscribe(["switch-master", "[-+]sdown", "+slave", "+sentinel", "[-+]odown", "+slave-reconf-done"], (message, channel) => {
+          this.#handlePubSubControlChannel(channel, message);
+        }, true);
+        return client;
+      }
+      async #handlePubSubControlChannel(channel, message) {
+        this.#trace("pubsub control channel message on " + channel);
+        this.#reset();
+      }
+      // if clientInfo is defined, it corresponds to a master client in the #masterClients array, otherwise loop around replicaClients
+      #getClient(clientInfo) {
+        if (clientInfo !== void 0) {
+          return this.#masterClients[clientInfo.id];
+        }
+        if (this.#replicaClientsIdx >= this.#replicaClients.length) {
+          this.#replicaClientsIdx = 0;
+        }
+        if (this.#replicaClients.length == 0) {
+          throw new Error("no replicas available for read");
+        }
+        return this.#replicaClients[this.#replicaClientsIdx++];
+      }
+      async #reset() {
+        if (this.#isReady == false || this.#destroy == true) {
+          return;
+        }
+        if (this.#connectPromise !== void 0) {
+          this.#anotherReset = true;
+          return await this.#connectPromise;
+        }
+        try {
+          this.#connectPromise = this.#connect();
+          return await this.#connectPromise;
+        } finally {
+          this.#trace("finished reconfgure");
+          this.#connectPromise = void 0;
+        }
+      }
+      #sentinelNodeListKey(nodes) {
+        return nodes.map((node) => `${node.host}:${node.port}`).sort().join("|");
+      }
+      #restoreSentinelRootNodesIfEmpty() {
+        if (this.#sentinelRootNodes.length !== 0) {
+          return;
+        }
+        this.#trace("restoring sentinel roots from seed nodes");
+        this.#sentinelRootNodes = Array.from(this.#sentinelSeedNodes);
+      }
+      #handleSentinelFailure(node) {
+        const found = this.#sentinelRootNodes.findIndex((rootNode) => rootNode.host === node.host && rootNode.port === node.port);
+        if (found !== -1) {
+          this.#sentinelRootNodes.splice(found, 1);
+        }
+        this.#restoreSentinelRootNodesIfEmpty();
+        this.#reset();
+      }
+      async close() {
+        this.#destroy = true;
+        if (this.#connectPromise != void 0) {
+          await this.#connectPromise;
+        }
+        this.#isReady = false;
+        this.#clientSideCache?.onPoolClose();
+        if (this.#scanTimer) {
+          clearInterval(this.#scanTimer);
+          this.#scanTimer = void 0;
+        }
+        const promises = [];
+        if (this.#sentinelClient !== void 0) {
+          if (this.#sentinelClient.isOpen) {
+            promises.push(this.#sentinelClient.close());
+          }
+          this.#sentinelClient = void 0;
+        }
+        for (const client of this.#masterClients) {
+          if (client.isOpen) {
+            promises.push(client.close());
+          }
+        }
+        this.#masterClients = [];
+        for (const client of this.#replicaClients) {
+          if (client.isOpen) {
+            promises.push(client.close());
+          }
+        }
+        this.#replicaClients = [];
+        await Promise.all(promises);
+        this.#pubSubProxy.destroy();
+        this.#isOpen = false;
+      }
+      // destroy has to be async because its stopping others async events, timers and the like
+      // and shouldn't return until its finished.
+      async destroy() {
+        this.#destroy = true;
+        if (this.#connectPromise != void 0) {
+          await this.#connectPromise;
+        }
+        this.#isReady = false;
+        this.#clientSideCache?.onPoolClose();
+        if (this.#scanTimer) {
+          clearInterval(this.#scanTimer);
+          this.#scanTimer = void 0;
+        }
+        if (this.#sentinelClient !== void 0) {
+          if (this.#sentinelClient.isOpen) {
+            this.#sentinelClient.destroy();
+          }
+          this.#sentinelClient = void 0;
+        }
+        for (const client of this.#masterClients) {
+          if (client.isOpen) {
+            client.destroy();
+          }
+        }
+        this.#masterClients = [];
+        for (const client of this.#replicaClients) {
+          if (client.isOpen) {
+            client.destroy();
+          }
+        }
+        this.#replicaClients = [];
+        this.#pubSubProxy.destroy();
+        this.#isOpen = false;
+        this.#destroy = false;
+      }
+      async subscribe(channels, listener, bufferMode) {
+        return this.#pubSubProxy.subscribe(channels, listener, bufferMode);
+      }
+      async unsubscribe(channels, listener, bufferMode) {
+        return this.#pubSubProxy.unsubscribe(channels, listener, bufferMode);
+      }
+      async pSubscribe(patterns, listener, bufferMode) {
+        return this.#pubSubProxy.pSubscribe(patterns, listener, bufferMode);
+      }
+      async pUnsubscribe(patterns, listener, bufferMode) {
+        return this.#pubSubProxy.pUnsubscribe(patterns, listener, bufferMode);
+      }
+      async sSubscribe(channels, listener, bufferMode) {
+        return this.#pubSubProxy.sSubscribe(channels, listener, bufferMode);
+      }
+      async sUnsubscribe(channels, listener, bufferMode) {
+        return this.#pubSubProxy.sUnsubscribe(channels, listener, bufferMode);
+      }
+      // observe/analyze/transform remediation functions
+      async observe() {
+        this.#restoreSentinelRootNodesIfEmpty();
+        for (const node of this.#sentinelRootNodes) {
+          let client;
+          try {
+            this.#trace(`observe: trying to connect to sentinel: ${node.host}:${node.port}`);
+            client = this.#createClient(node, this.#sentinelClientOptions, false);
+            client.on("error", (err) => this.emit("error", `obseve client error: ${err}`));
+            await client.connect();
+            this.#trace(`observe: connected to sentinel`);
+            const [sentinelData, masterData, replicaData] = await Promise.all([
+              client.sentinel.sentinelSentinels(this.#name),
+              client.sentinel.sentinelMaster(this.#name),
+              client.sentinel.sentinelReplicas(this.#name)
+            ]);
+            this.#trace("observe: got all sentinel data");
+            const ret = {
+              sentinelConnected: node,
+              sentinelData,
+              masterData,
+              replicaData,
+              currentMaster: this.getMasterNode(),
+              currentReplicas: this.getReplicaNodes(),
+              currentSentinel: this.getSentinelNode(),
+              replicaPoolSize: this.#replicaPoolSize,
+              useReplicas: this.useReplicas
+            };
+            return ret;
+          } catch (err) {
+            this.#trace(`observe: error ${err}`);
+            this.emit("error", err);
+          } finally {
+            if (client !== void 0 && client.isOpen) {
+              this.#trace(`observe: destroying sentinel client`);
+              client.destroy();
+            }
+          }
+        }
+        this.#trace(`observe: none of the sentinels are available`);
+        throw new Error("None of the sentinels are available");
+      }
+      analyze(observed) {
+        let master = (0, utils_1.parseNode)(observed.masterData);
+        if (master === void 0) {
+          this.#trace(`analyze: no valid master node because ${observed.masterData.flags}`);
+          throw new Error("no valid master node");
+        }
+        if (master.host === observed.currentMaster?.host && master.port === observed.currentMaster?.port) {
+          this.#trace(`analyze: master node hasn't changed from ${observed.currentMaster?.host}:${observed.currentMaster?.port}`);
+          master = void 0;
+        } else {
+          this.#trace(`analyze: master node has changed to ${master.host}:${master.port} from ${observed.currentMaster?.host}:${observed.currentMaster?.port}`);
+        }
+        let sentinel = observed.sentinelConnected;
+        if (sentinel.host === observed.currentSentinel?.host && sentinel.port === observed.currentSentinel.port) {
+          this.#trace(`analyze: sentinel node hasn't changed`);
+          sentinel = void 0;
+        } else {
+          this.#trace(`analyze: sentinel node has changed to ${sentinel.host}:${sentinel.port}`);
+        }
+        const replicasToClose = [];
+        const replicasToOpen = /* @__PURE__ */ new Map();
+        const desiredSet = /* @__PURE__ */ new Set();
+        const seen = /* @__PURE__ */ new Set();
+        if (observed.useReplicas) {
+          const replicaList = (0, utils_1.createNodeList)(observed.replicaData);
+          for (const node of replicaList) {
+            desiredSet.add(JSON.stringify(node));
+          }
+          for (const [node, value] of observed.currentReplicas) {
+            if (!desiredSet.has(JSON.stringify(node))) {
+              replicasToClose.push(node);
+              this.#trace(`analyze: adding ${node.host}:${node.port} to replicsToClose`);
+            } else {
+              seen.add(JSON.stringify(node));
+              if (value != observed.replicaPoolSize) {
+                replicasToOpen.set(node, observed.replicaPoolSize - value);
+                this.#trace(`analyze: adding ${node.host}:${node.port} to replicsToOpen`);
+              }
+            }
+          }
+          for (const node of replicaList) {
+            if (!seen.has(JSON.stringify(node))) {
+              replicasToOpen.set(node, observed.replicaPoolSize);
+              this.#trace(`analyze: adding ${node.host}:${node.port} to replicsToOpen`);
+            }
+          }
+        }
+        const ret = {
+          sentinelList: [observed.sentinelConnected].concat((0, utils_1.createNodeList)(observed.sentinelData)),
+          epoch: Number(observed.masterData["config-epoch"]),
+          sentinelToOpen: sentinel,
+          masterToOpen: master,
+          replicasToClose,
+          replicasToOpen
+        };
+        return ret;
+      }
+      async transform(analyzed) {
+        this.#trace("transform: enter");
+        let promises = [];
+        if (analyzed.sentinelToOpen) {
+          this.#trace(`transform: opening a new sentinel`);
+          if (this.#sentinelClient !== void 0 && this.#sentinelClient.isOpen) {
+            this.#trace(`transform: destroying old sentinel as open`);
+            this.#sentinelClient.destroy();
+            this.#sentinelClient = void 0;
+          } else {
+            this.#trace(`transform: not destroying old sentinel as not open`);
+          }
+          this.#trace(`transform: creating new sentinel to ${analyzed.sentinelToOpen.host}:${analyzed.sentinelToOpen.port}`);
+          const node = analyzed.sentinelToOpen;
+          const client = this.#createClient(analyzed.sentinelToOpen, this.#sentinelClientOptions, false);
+          client.on("error", (err) => {
+            if (this.#passthroughClientErrorEvents) {
+              this.emit("error", new Error(`Sentinel Client (${node.host}:${node.port}): ${err.message}`, { cause: err }));
+            }
+            const event2 = {
+              type: "SENTINEL",
+              node: (0, utils_1.clientSocketToNode)(client.options.socket),
+              error: err
+            };
+            this.emit("client-error", event2);
+            this.#handleSentinelFailure(node);
+          });
+          this.#sentinelClient = client;
+          this.#trace(`transform: adding sentinel client connect() to promise list`);
+          const promise = this.#sentinelClient.connect().then((client2) => {
+            return this.#createPubSub(client2);
+          });
+          promises.push(promise);
+          this.#trace(`created sentinel client to ${analyzed.sentinelToOpen.host}:${analyzed.sentinelToOpen.port}`);
+          const event = {
+            type: "SENTINEL_CHANGE",
+            node: analyzed.sentinelToOpen
+          };
+          this.#trace(`transform: emiting topology-change event for sentinel_change`);
+          if (!this.emit("topology-change", event)) {
+            this.#trace(`transform: emit for topology-change for sentinel_change returned false`);
+          }
+        }
+        if (analyzed.masterToOpen) {
+          this.#trace(`transform: opening a new master`);
+          const masterPromises = [];
+          const masterWatches = [];
+          this.#trace(`transform: destroying old masters if open`);
+          for (const client of this.#masterClients) {
+            masterWatches.push(client.isWatching || client.isDirtyWatch);
+            if (client.isOpen) {
+              client.destroy();
+            }
+          }
+          this.#masterClients = [];
+          this.#trace(`transform: creating all master clients and adding connect promises`);
+          for (let i = 0; i < this.#masterPoolSize; i++) {
+            const node = analyzed.masterToOpen;
+            const client = this.#createClient(analyzed.masterToOpen, this.#nodeClientOptions);
+            client.on("error", (err) => {
+              if (this.#passthroughClientErrorEvents) {
+                this.emit("error", new Error(`Master Client (${node.host}:${node.port}): ${err.message}`, { cause: err }));
+              }
+              const event2 = {
+                type: "MASTER",
+                node: (0, utils_1.clientSocketToNode)(client.options.socket),
+                error: err
+              };
+              this.emit("client-error", event2);
+            });
+            if (masterWatches[i]) {
+              client.setDirtyWatch("sentinel config changed in middle of a WATCH Transaction");
+            }
+            this.#masterClients.push(client);
+            masterPromises.push(client.connect());
+            this.#trace(`created master client to ${analyzed.masterToOpen.host}:${analyzed.masterToOpen.port}`);
+          }
+          this.#trace(`transform: adding promise to change #pubSubProxy node`);
+          masterPromises.push(this.#pubSubProxy.changeNode(analyzed.masterToOpen));
+          promises.push(...masterPromises);
+          const event = {
+            type: "MASTER_CHANGE",
+            node: analyzed.masterToOpen
+          };
+          this.#trace(`transform: emiting topology-change event for master_change`);
+          if (!this.emit("topology-change", event)) {
+            this.#trace(`transform: emit for topology-change for master_change returned false`);
+          }
+          this.#configEpoch++;
+        }
+        const replicaCloseSet = /* @__PURE__ */ new Set();
+        for (const node of analyzed.replicasToClose) {
+          const str = JSON.stringify(node);
+          replicaCloseSet.add(str);
+        }
+        const newClientList = [];
+        const removedSet = /* @__PURE__ */ new Set();
+        for (const replica of this.#replicaClients) {
+          const node = (0, utils_1.clientSocketToNode)(replica.options.socket);
+          const str = JSON.stringify(node);
+          if (replicaCloseSet.has(str) || !replica.isOpen) {
+            if (replica.isOpen) {
+              const sockOpts = replica.options?.socket;
+              this.#trace(`destroying replica client to ${sockOpts?.host}:${sockOpts?.port}`);
+              replica.destroy();
+            }
+            if (!removedSet.has(str)) {
+              const event = {
+                type: "REPLICA_REMOVE",
+                node
+              };
+              this.emit("topology-change", event);
+              removedSet.add(str);
+            }
+          } else {
+            newClientList.push(replica);
+          }
+        }
+        this.#replicaClients = newClientList;
+        if (analyzed.replicasToOpen.size != 0) {
+          for (const [node, size] of analyzed.replicasToOpen) {
+            for (let i = 0; i < size; i++) {
+              const client = this.#createClient(node, this.#nodeClientOptions);
+              client.on("error", (err) => {
+                if (this.#passthroughClientErrorEvents) {
+                  this.emit("error", new Error(`Replica Client (${node.host}:${node.port}): ${err.message}`, { cause: err }));
+                }
+                const event2 = {
+                  type: "REPLICA",
+                  node: (0, utils_1.clientSocketToNode)(client.options.socket),
+                  error: err
+                };
+                this.emit("client-error", event2);
+              });
+              this.#replicaClients.push(client);
+              promises.push(client.connect());
+              this.#trace(`created replica client to ${node.host}:${node.port}`);
+            }
+            const event = {
+              type: "REPLICA_ADD",
+              node
+            };
+            this.emit("topology-change", event);
+          }
+        }
+        if (this.#sentinelNodeListKey(analyzed.sentinelList) !== this.#sentinelNodeListKey(this.#sentinelRootNodes)) {
+          this.#sentinelRootNodes = analyzed.sentinelList;
+          const event = {
+            type: "SENTINE_LIST_CHANGE",
+            size: analyzed.sentinelList.length
+          };
+          this.emit("topology-change", event);
+        }
+        await Promise.all(promises);
+        this.#trace("transform: exit");
+      }
+      // introspection functions
+      getMasterNode() {
+        if (this.#masterClients.length == 0) {
+          return void 0;
+        }
+        for (const master of this.#masterClients) {
+          if (master.isReady) {
+            return (0, utils_1.clientSocketToNode)(master.options.socket);
+          }
+        }
+        return void 0;
+      }
+      getSentinelNode() {
+        if (this.#sentinelClient === void 0) {
+          return void 0;
+        }
+        return (0, utils_1.clientSocketToNode)(this.#sentinelClient.options.socket);
+      }
+      getReplicaNodes() {
+        const ret = /* @__PURE__ */ new Map();
+        const initialMap = /* @__PURE__ */ new Map();
+        for (const replica of this.#replicaClients) {
+          const node = (0, utils_1.clientSocketToNode)(replica.options.socket);
+          const hash = JSON.stringify(node);
+          if (replica.isReady) {
+            initialMap.set(hash, (initialMap.get(hash) ?? 0) + 1);
+          } else {
+            if (!initialMap.has(hash)) {
+              initialMap.set(hash, 0);
+            }
+          }
+        }
+        for (const [key, value] of initialMap) {
+          ret.set(JSON.parse(key), value);
+        }
+        return ret;
+      }
+      setTracer(tracer) {
+        if (tracer) {
+          this.#trace = (msg) => {
+            tracer.push(msg);
+          };
+        } else {
+          this.#trace = () => {
+          };
+        }
+      }
+    };
+    var RedisSentinelFactory = class extends node_events_1.EventEmitter {
+      options;
+      #sentinelRootNodes;
+      #replicaIdx = -1;
+      constructor(options) {
+        super();
+        this.options = options;
+        this.#sentinelRootNodes = options.sentinelRootNodes;
+      }
+      async updateSentinelRootNodes() {
+        for (const node of this.#sentinelRootNodes) {
+          const client = client_1.default.create({
+            ...this.options.sentinelClientOptions,
+            socket: {
+              ...this.options.sentinelClientOptions?.socket,
+              host: node.host,
+              port: node.port,
+              reconnectStrategy: false
+            },
+            modules: module_1.default
+          }).on("error", (err) => this.emit(`updateSentinelRootNodes: ${err}`));
+          try {
+            await client.connect();
+          } catch {
+            if (client.isOpen) {
+              client.destroy();
+            }
+            continue;
+          }
+          try {
+            const sentinelData = await client.sentinel.sentinelSentinels(this.options.name);
+            this.#sentinelRootNodes = [node].concat((0, utils_1.createNodeList)(sentinelData));
+            return;
+          } finally {
+            client.destroy();
+          }
+        }
+        throw new Error("Couldn't connect to any sentinel node");
+      }
+      async getMasterNode() {
+        let connected = false;
+        for (const node of this.#sentinelRootNodes) {
+          const client = client_1.default.create({
+            ...this.options.sentinelClientOptions,
+            socket: {
+              ...this.options.sentinelClientOptions?.socket,
+              host: node.host,
+              port: node.port,
+              reconnectStrategy: false
+            },
+            modules: module_1.default
+          }).on("error", (err) => this.emit(`getMasterNode: ${err}`));
+          try {
+            await client.connect();
+          } catch {
+            if (client.isOpen) {
+              client.destroy();
+            }
+            continue;
+          }
+          connected = true;
+          try {
+            const masterData = await client.sentinel.sentinelMaster(this.options.name);
+            let master = (0, utils_1.parseNode)(masterData);
+            if (master === void 0) {
+              continue;
+            }
+            return master;
+          } finally {
+            client.destroy();
+          }
+        }
+        if (connected) {
+          throw new Error("Master Node Not Enumerated");
+        }
+        throw new Error("couldn't connect to any sentinels");
+      }
+      async getMasterClient() {
+        const master = await this.getMasterNode();
+        const socket = (0, utils_1.getMappedNode)(master.host, master.port, this.options.nodeAddressMap);
+        return client_1.default.create({
+          ...this.options.nodeClientOptions,
+          socket: {
+            ...this.options.nodeClientOptions?.socket,
+            host: socket.host,
+            port: socket.port
+          }
+        });
+      }
+      async getReplicaNodes() {
+        let connected = false;
+        for (const node of this.#sentinelRootNodes) {
+          const client = client_1.default.create({
+            ...this.options.sentinelClientOptions,
+            socket: {
+              ...this.options.sentinelClientOptions?.socket,
+              host: node.host,
+              port: node.port,
+              reconnectStrategy: false
+            },
+            modules: module_1.default
+          }).on("error", (err) => this.emit(`getReplicaNodes: ${err}`));
+          try {
+            await client.connect();
+          } catch {
+            if (client.isOpen) {
+              client.destroy();
+            }
+            continue;
+          }
+          connected = true;
+          try {
+            const replicaData = await client.sentinel.sentinelReplicas(this.options.name);
+            const replicas = (0, utils_1.createNodeList)(replicaData);
+            if (replicas.length == 0) {
+              continue;
+            }
+            return replicas;
+          } finally {
+            client.destroy();
+          }
+        }
+        if (connected) {
+          throw new Error("No Replicas Nodes Enumerated");
+        }
+        throw new Error("couldn't connect to any sentinels");
+      }
+      async getReplicaClient() {
+        const replicas = await this.getReplicaNodes();
+        if (replicas.length == 0) {
+          throw new Error("no available replicas");
+        }
+        this.#replicaIdx++;
+        if (this.#replicaIdx >= replicas.length) {
+          this.#replicaIdx = 0;
+        }
+        const replica = replicas[this.#replicaIdx];
+        const socket = (0, utils_1.getMappedNode)(replica.host, replica.port, this.options.nodeAddressMap);
+        return client_1.default.create({
+          ...this.options.nodeClientOptions,
+          socket: {
+            ...this.options.nodeClientOptions?.socket,
+            host: socket.host,
+            port: socket.port
+          }
+        });
+      }
+    };
+    exports.RedisSentinelFactory = RedisSentinelFactory;
+  }
+});
+
+// node_modules/@redis/client/dist/index.js
+var require_dist2 = __commonJS({
+  "node_modules/@redis/client/dist/index.js"(exports) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __exportStar = exports && exports.__exportStar || function(m, exports2) {
+      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+    };
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CHANNELS = exports.OpenTelemetry = exports.BasicPooledClientSideCache = exports.BasicClientSideCache = exports.REDIS_FLUSH_MODES = exports.COMMAND_LIST_FILTER_BY = exports.CLUSTER_SLOT_STATES = exports.FAILOVER_MODES = exports.CLIENT_KILL_FILTERS = exports.GEO_REPLY_WITH = exports.createSentinel = exports.createCluster = exports.createClientPool = exports.createClient = exports.digest = exports.defineScript = exports.VerbatimString = exports.RESP_TYPES = void 0;
+    var decoder_1 = require_decoder();
+    Object.defineProperty(exports, "RESP_TYPES", { enumerable: true, get: function() {
+      return decoder_1.RESP_TYPES;
+    } });
+    var verbatim_string_1 = require_verbatim_string();
+    Object.defineProperty(exports, "VerbatimString", { enumerable: true, get: function() {
+      return verbatim_string_1.VerbatimString;
+    } });
+    var lua_script_1 = require_lua_script();
+    Object.defineProperty(exports, "defineScript", { enumerable: true, get: function() {
+      return lua_script_1.defineScript;
+    } });
+    var digest_1 = require_digest();
+    Object.defineProperty(exports, "digest", { enumerable: true, get: function() {
+      return digest_1.digest;
+    } });
+    __exportStar(require_errors2(), exports);
+    var client_1 = __importDefault(require_client());
+    exports.createClient = client_1.default.create;
+    var pool_1 = require_pool();
+    exports.createClientPool = pool_1.RedisClientPool.create;
+    var cluster_1 = __importDefault(require_cluster());
+    exports.createCluster = cluster_1.default.create;
+    var sentinel_1 = __importDefault(require_sentinel());
+    exports.createSentinel = sentinel_1.default.create;
+    var GEOSEARCH_WITH_1 = require_GEOSEARCH_WITH();
+    Object.defineProperty(exports, "GEO_REPLY_WITH", { enumerable: true, get: function() {
+      return GEOSEARCH_WITH_1.GEO_REPLY_WITH;
+    } });
+    var commands_1 = require_commands();
+    Object.defineProperty(exports, "CLIENT_KILL_FILTERS", { enumerable: true, get: function() {
+      return commands_1.CLIENT_KILL_FILTERS;
+    } });
+    Object.defineProperty(exports, "FAILOVER_MODES", { enumerable: true, get: function() {
+      return commands_1.FAILOVER_MODES;
+    } });
+    Object.defineProperty(exports, "CLUSTER_SLOT_STATES", { enumerable: true, get: function() {
+      return commands_1.CLUSTER_SLOT_STATES;
+    } });
+    Object.defineProperty(exports, "COMMAND_LIST_FILTER_BY", { enumerable: true, get: function() {
+      return commands_1.COMMAND_LIST_FILTER_BY;
+    } });
+    Object.defineProperty(exports, "REDIS_FLUSH_MODES", { enumerable: true, get: function() {
+      return commands_1.REDIS_FLUSH_MODES;
+    } });
+    var cache_1 = require_cache();
+    Object.defineProperty(exports, "BasicClientSideCache", { enumerable: true, get: function() {
+      return cache_1.BasicClientSideCache;
+    } });
+    Object.defineProperty(exports, "BasicPooledClientSideCache", { enumerable: true, get: function() {
+      return cache_1.BasicPooledClientSideCache;
+    } });
+    var opentelemetry_1 = require_opentelemetry();
+    Object.defineProperty(exports, "OpenTelemetry", { enumerable: true, get: function() {
+      return opentelemetry_1.OpenTelemetry;
+    } });
+    var tracing_1 = require_tracing();
+    Object.defineProperty(exports, "CHANNELS", { enumerable: true, get: function() {
+      return tracing_1.CHANNELS;
+    } });
+  }
+});
+
+// src/relay-protocol.ts
+import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+function requireRelayToken(value, field) {
+  if (!value || value.length < MIN_RELAY_TOKEN_LENGTH) {
+    throw new ConcordiaException(
+      "INVALID_INPUT",
+      `${field} must contain at least ${MIN_RELAY_TOKEN_LENGTH} characters`
+    );
+  }
+  return value;
+}
+function validateRelayNamespace(value) {
+  const namespace = value ?? DEFAULT_RELAY_NAMESPACE;
+  if (!/^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$/.test(namespace)) {
+    throw new ConcordiaException(
+      "INVALID_INPUT",
+      "CONCORDIA_RELAY_NAMESPACE must contain 1-64 letters, digits, colons, underscores, or hyphens"
+    );
+  }
+  return namespace;
+}
+function signRelayPayload(payload, token) {
+  return createHmac("sha256", token).update(payload).digest("base64url");
+}
+function verifyRelaySignature(payload, signature, token) {
+  const expected = Buffer.from(signRelayPayload(payload, token), "utf8");
+  const actual = Buffer.from(signature, "utf8");
+  return expected.length === actual.length && timingSafeEqual2(expected, actual);
+}
+function encodeSignedRelayMessage(value, token) {
+  const payload = JSON.stringify(value);
+  return { payload, signature: signRelayPayload(payload, token) };
+}
+function assertFreshRelayTimestamp(issuedAt, now, maxClockSkewMs) {
+  if (!Number.isSafeInteger(issuedAt) || Math.abs(now - issuedAt) > maxClockSkewMs) {
+    throw new ConcordiaException("INVALID_INPUT", "Relay message timestamp is outside the accepted clock-skew window");
+  }
+}
+function assertSafeRelayIdentifier(value, field) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(value)) {
+    throw new ConcordiaException("INVALID_INPUT", `${field} is invalid`);
+  }
+  return value;
+}
+function parseRelayResponse(payload) {
+  let value;
+  try {
+    value = JSON.parse(payload);
+  } catch {
+    throw new ConcordiaException("INTERNAL_ERROR", "Relay response payload is not valid JSON", true);
+  }
+  if (!value || typeof value !== "object") {
+    throw new ConcordiaException("INTERNAL_ERROR", "Relay response payload must be an object", true);
+  }
+  const candidate = value;
+  if (candidate.version !== 1 || typeof candidate.ok !== "boolean" || !Number.isSafeInteger(candidate.issuedAt)) {
+    throw new ConcordiaException("INTERNAL_ERROR", "Relay response envelope is invalid", true);
+  }
+  assertSafeRelayIdentifier(candidate.requestId, "requestId");
+  return candidate;
+}
+function validateRedisUrl(value, allowInsecure) {
+  if (!value) throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_REDIS_URL is required for Redis transport");
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_REDIS_URL must be a valid Redis URL");
+  }
+  if (parsed.protocol !== "redis:" && parsed.protocol !== "rediss:") {
+    throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_REDIS_URL must use redis:// or rediss://");
+  }
+  const loopback = parsed.hostname === "localhost" || parsed.hostname === "::1" || parsed.hostname.startsWith("127.");
+  if (parsed.protocol !== "rediss:" && !loopback && !allowInsecure) {
+    throw new ConcordiaException(
+      "INVALID_INPUT",
+      "Remote Redis must use TLS (rediss://); set CONCORDIA_RELAY_ALLOW_INSECURE=true only for a trusted development network"
+    );
+  }
+  return value;
+}
+var MIN_RELAY_TOKEN_LENGTH, DEFAULT_RELAY_NAMESPACE, DEFAULT_RELAY_MAX_CLOCK_SKEW_MS;
+var init_relay_protocol = __esm({
+  "src/relay-protocol.ts"() {
+    "use strict";
+    init_protocol();
+    MIN_RELAY_TOKEN_LENGTH = 32;
+    DEFAULT_RELAY_NAMESPACE = "concordia";
+    DEFAULT_RELAY_MAX_CLOCK_SKEW_MS = 6e4;
+  }
+});
+
+// src/relay-client.ts
+var relay_client_exports = {};
+__export(relay_client_exports, {
+  RedisRelayService: () => RedisRelayService,
+  createRedisRelayServiceFromEnv: () => createRedisRelayServiceFromEnv
+});
+import { randomUUID } from "node:crypto";
+function positiveInteger(value, fallback, field) {
+  const result = value ?? fallback;
+  if (!Number.isSafeInteger(result) || result < 1) {
+    throw new ConcordiaException("INVALID_INPUT", `${field} must be a positive integer`);
+  }
+  return result;
+}
+function envInteger(name, fallback) {
+  const raw = process.env[name];
+  if (raw === void 0 || raw === "") return fallback;
+  const value = Number(raw);
+  return positiveInteger(value, fallback, name);
+}
+function envBoolean(name) {
+  return /^(?:1|true|yes)$/i.test(process.env[name] ?? "");
+}
+function byteLength(message) {
+  return Buffer.byteLength(message.payload) + Buffer.byteLength(message.signature);
+}
+function delay(milliseconds) {
+  return new Promise((resolve3) => setTimeout(resolve3, milliseconds));
+}
+function createRedisRelayServiceFromEnv(role) {
+  const tokenName = role === "codex" ? "CONCORDIA_RELAY_CODEX_TOKEN" : "CONCORDIA_RELAY_ZCODE_TOKEN";
+  return new RedisRelayService({
+    role,
+    redisUrl: validateRedisUrl(process.env.CONCORDIA_REDIS_URL, envBoolean("CONCORDIA_RELAY_ALLOW_INSECURE")),
+    token: requireRelayToken(process.env[tokenName], tokenName),
+    namespace: process.env.CONCORDIA_RELAY_NAMESPACE,
+    requestTimeoutMs: envInteger("CONCORDIA_RELAY_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
+    responsePollMs: envInteger("CONCORDIA_RELAY_RESPONSE_POLL_MS", DEFAULT_RESPONSE_POLL_MS),
+    maxMessageBytes: envInteger("CONCORDIA_RELAY_MAX_MESSAGE_BYTES", DEFAULT_MAX_MESSAGE_BYTES),
+    maxClockSkewMs: envInteger("CONCORDIA_RELAY_CLOCK_SKEW_MS", DEFAULT_RELAY_MAX_CLOCK_SKEW_MS),
+    allowInsecure: envBoolean("CONCORDIA_RELAY_ALLOW_INSECURE")
+  });
+}
+var import_client, DEFAULT_REQUEST_TIMEOUT_MS, DEFAULT_RESPONSE_POLL_MS, DEFAULT_MAX_MESSAGE_BYTES, RedisRelayService;
+var init_relay_client = __esm({
+  "src/relay-client.ts"() {
+    "use strict";
+    import_client = __toESM(require_dist2(), 1);
+    init_protocol();
+    init_relay_protocol();
+    DEFAULT_REQUEST_TIMEOUT_MS = 75e3;
+    DEFAULT_RESPONSE_POLL_MS = 100;
+    DEFAULT_MAX_MESSAGE_BYTES = 1048576;
+    RedisRelayService = class {
+      role;
+      clientId = randomUUID();
+      namespace;
+      requestTimeoutMs;
+      responsePollMs;
+      maxMessageBytes;
+      maxClockSkewMs;
+      token;
+      client;
+      connected = false;
+      constructor(options) {
+        this.role = options.role;
+        const redisUrl = validateRedisUrl(options.redisUrl, options.allowInsecure ?? false);
+        this.token = requireRelayToken(options.token, `CONCORDIA_RELAY_${this.role.toUpperCase()}_TOKEN`);
+        this.namespace = validateRelayNamespace(options.namespace);
+        this.requestTimeoutMs = positiveInteger(options.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS, "requestTimeoutMs");
+        this.responsePollMs = positiveInteger(options.responsePollMs, DEFAULT_RESPONSE_POLL_MS, "responsePollMs");
+        this.maxMessageBytes = positiveInteger(options.maxMessageBytes, DEFAULT_MAX_MESSAGE_BYTES, "maxMessageBytes");
+        this.maxClockSkewMs = positiveInteger(options.maxClockSkewMs, DEFAULT_RELAY_MAX_CLOCK_SKEW_MS, "maxClockSkewMs");
+        this.client = (0, import_client.createClient)({ url: redisUrl });
+        this.client.on("error", () => {
+        });
+      }
+      async connect() {
+        if (this.connected) return;
+        await this.client.connect();
+        this.connected = true;
+      }
+      async close() {
+        if (!this.connected) return;
+        this.connected = false;
+        await this.client.quit().catch(() => this.client.destroy());
+      }
+      async createTask(spec, idempotencyKey) {
+        return this.request("create_task", { spec, idempotencyKey });
+      }
+      async claimTask(input) {
+        return this.request("claim_task", input);
+      }
+      async getTask(taskId, recentEventLimit) {
+        return this.request("get_task", { taskId, eventLimit: recentEventLimit });
+      }
+      async listTasks(input = {}) {
+        return this.request("list_tasks", input);
+      }
+      async sendEvent(input) {
+        return this.request("send_event", input);
+      }
+      async waitEvents(input) {
+        return this.request("wait_events", input);
+      }
+      async submitTask(submission, expectedVersion) {
+        return this.request("submit_task", { submission, expectedVersion });
+      }
+      async reviewTask(input) {
+        return this.request("review_task", input);
+      }
+      async request(method, params) {
+        await this.connect();
+        const requestId = randomUUID();
+        const request = {
+          version: 1,
+          requestId,
+          clientId: this.clientId,
+          role: this.role,
+          method,
+          params,
+          issuedAt: Date.now(),
+          nonce: randomUUID()
+        };
+        const message = encodeSignedRelayMessage(request, this.token);
+        if (byteLength(message) > this.maxMessageBytes) {
+          throw new ConcordiaException("INVALID_INPUT", "Relay request exceeds the configured message-size limit");
+        }
+        const requestStream = `${this.namespace}:requests`;
+        const responseKey = `${this.namespace}:response:${this.clientId}:${requestId}`;
+        try {
+          await this.client.sendCommand([
+            "XADD",
+            requestStream,
+            "MAXLEN",
+            "~",
+            "10000",
+            "*",
+            "payload",
+            message.payload,
+            "signature",
+            message.signature
+          ]);
+        } catch {
+          throw new ConcordiaException("INTERNAL_ERROR", "Unable to publish the Redis relay request", true);
+        }
+        const deadline = Date.now() + this.requestTimeoutMs;
+        while (Date.now() < deadline) {
+          let raw;
+          try {
+            raw = await this.client.get(responseKey);
+          } catch {
+            throw new ConcordiaException("INTERNAL_ERROR", "Unable to read the Redis relay response", true);
+          }
+          if (raw !== null) {
+            void this.client.del(responseKey).catch(() => void 0);
+            return this.decodeResponse(raw, requestId);
+          }
+          await delay(Math.min(this.responsePollMs, Math.max(1, deadline - Date.now())));
+        }
+        throw new ConcordiaException("INTERNAL_ERROR", "Redis relay request timed out", true, { method });
+      }
+      decodeResponse(raw, requestId) {
+        let message;
+        try {
+          message = JSON.parse(raw);
+        } catch {
+          throw new ConcordiaException("INTERNAL_ERROR", "Redis relay returned an invalid response", true);
+        }
+        if (typeof message.payload !== "string" || typeof message.signature !== "string") {
+          throw new ConcordiaException("INTERNAL_ERROR", "Redis relay returned an invalid signed response", true);
+        }
+        if (byteLength(message) > this.maxMessageBytes) {
+          throw new ConcordiaException("INTERNAL_ERROR", "Redis relay response exceeds the configured message-size limit");
+        }
+        if (!verifyRelaySignature(message.payload, message.signature, this.token)) {
+          throw new ConcordiaException("INTERNAL_ERROR", "Redis relay response signature is invalid");
+        }
+        const response = parseRelayResponse(message.payload);
+        if (response.requestId !== requestId) {
+          throw new ConcordiaException("INTERNAL_ERROR", "Redis relay response does not match the request");
+        }
+        assertFreshRelayTimestamp(response.issuedAt, Date.now(), this.maxClockSkewMs);
+        if (response.ok) return response.result;
+        const error2 = response.error;
+        if (!error2) throw new ConcordiaException("INTERNAL_ERROR", "Redis relay response omitted its error");
+        throw new ConcordiaException(error2.code, error2.message, error2.retryable, error2.details);
+      }
+    };
   }
 });
 
@@ -21436,117 +44894,10 @@ import { realpathSync as realpathSync2 } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // src/database.ts
+init_protocol();
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-
-// src/protocol.ts
-var TASK_STATUSES = [
-  "DRAFT",
-  "READY",
-  "CLAIMED",
-  "RUNNING",
-  "WAITING_INPUT",
-  "REVIEW",
-  "APPROVED",
-  "FAILED",
-  "CANCELLED"
-];
-var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
-  "APPROVED",
-  "FAILED",
-  "CANCELLED"
-]);
-var EVENT_TYPES = [
-  "TASK_CREATED",
-  "TASK_CLAIMED",
-  "PROGRESS",
-  "QUESTION",
-  "ANSWER",
-  "AGENT_STATUS",
-  "HEARTBEAT",
-  "COMPLETED",
-  "CHANGES_REQUESTED",
-  "APPROVED",
-  "FAILED",
-  "CANCELLED"
-];
-var ConcordiaException = class extends Error {
-  code;
-  retryable;
-  details;
-  constructor(code, message, retryable = false, details) {
-    super(message);
-    this.name = "ConcordiaException";
-    this.code = code;
-    this.retryable = retryable;
-    this.details = details;
-  }
-  toJSON() {
-    return {
-      code: this.code,
-      message: this.message,
-      retryable: this.retryable,
-      ...this.details === void 0 ? {} : { details: this.details }
-    };
-  }
-};
-function requireNonEmptyString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new ConcordiaException("INVALID_INPUT", `${field} must be a non-empty string`);
-  }
-  return value;
-}
-function validateIdempotencyKey(value) {
-  const key = requireNonEmptyString(value, "idempotencyKey");
-  if (key.length > 256) {
-    throw new ConcordiaException("INVALID_INPUT", "idempotencyKey must not exceed 256 characters");
-  }
-  return key;
-}
-function validateTaskSpec(spec) {
-  if (spec === null || typeof spec !== "object") {
-    throw new ConcordiaException("INVALID_INPUT", "spec must be an object");
-  }
-  requireNonEmptyString(spec.id, "spec.id");
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(spec.id)) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.id must be a safe identifier of at most 128 characters");
-  }
-  requireNonEmptyString(spec.objective, "spec.objective");
-  requireNonEmptyString(spec.workspace, "spec.workspace");
-  if (!Array.isArray(spec.ownedPaths) || spec.ownedPaths.length === 0) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.ownedPaths must contain at least one path");
-  }
-  spec.ownedPaths.forEach((value, index) => requireNonEmptyString(value, `spec.ownedPaths[${index}]`));
-  if (!Array.isArray(spec.acceptance) || spec.acceptance.length === 0) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.acceptance must contain at least one condition");
-  }
-  spec.acceptance.forEach((value, index) => requireNonEmptyString(value, `spec.acceptance[${index}]`));
-  if (!Array.isArray(spec.constraints) || !Array.isArray(spec.deliverables)) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.constraints and spec.deliverables must be arrays");
-  }
-  spec.constraints.forEach((value, index) => requireNonEmptyString(value, `spec.constraints[${index}]`));
-  if (spec.excludedPaths !== void 0 && !Array.isArray(spec.excludedPaths)) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.excludedPaths must be an array when provided");
-  }
-  const deliverables = /* @__PURE__ */ new Set(["commit", "changed_files", "checks", "risks"]);
-  if (spec.deliverables.some((value) => !deliverables.has(value))) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.deliverables contains an unsupported value");
-  }
-  if (!spec.delegation || !["auto", "disabled"].includes(spec.delegation.mode) || !Number.isInteger(spec.delegation.maxConcurrency) || spec.delegation.maxConcurrency < 1 || spec.delegation.maxDepth !== 1) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.delegation is invalid; maxDepth must equal 1");
-  }
-  if (!Number.isInteger(spec.timeoutSeconds) || spec.timeoutSeconds < 1) {
-    throw new ConcordiaException("INVALID_INPUT", "spec.timeoutSeconds must be a positive integer");
-  }
-  return spec;
-}
-function asConcordiaError(error2) {
-  if (error2 instanceof ConcordiaException) return error2;
-  return new ConcordiaException("INTERNAL_ERROR", "An internal Concordia error occurred", false);
-}
-
-// src/database.ts
 var SCHEMA_VERSION = 2;
 var INITIALIZATION_RETRIES = 12;
 var ConcordiaDatabase = class {
@@ -21682,10 +45033,14 @@ var ConcordiaDatabase = class {
   }
 };
 
+// src/index.ts
+init_protocol();
+
 // src/tasks.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
 // src/events.ts
+init_protocol();
 function serializePayload(payload) {
   let serialized;
   try {
@@ -21813,7 +45168,11 @@ var EventService = class {
   }
 };
 
+// src/tasks.ts
+init_protocol();
+
 // src/workspace.ts
+init_protocol();
 import { existsSync, lstatSync, mkdirSync as mkdirSync2, realpathSync } from "node:fs";
 import { delimiter, dirname as dirname2, isAbsolute, relative, resolve as resolve2, sep } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -22461,7 +45820,7 @@ var TaskService = class {
         status: "REVIEW",
         leaseOwner: null,
         leaseUntil: null,
-        leaseToken: row.lease_token,
+        leaseToken: null,
         updatedAt: now
       });
       this.events.appendEvent({
@@ -22535,10 +45894,10 @@ var TaskService = class {
         }, now);
       } else {
         this.updateTask(row, {
-          status: "RUNNING",
-          leaseOwner: row.assignee,
-          leaseUntil: leaseUntil(DEFAULT_LEASE_SECONDS),
-          leaseToken: row.lease_token,
+          status: "READY",
+          leaseOwner: null,
+          leaseUntil: null,
+          leaseToken: null,
           updatedAt: now
         });
         this.events.appendEvent({
@@ -22683,7 +46042,7 @@ async function invoke(operation) {
   }
 }
 function createMcpServer(service, configuredRole) {
-  const server = new McpServer({ name: "concordia", version: "0.1.0" });
+  const server = new McpServer({ name: "concordia", version: "0.2.0" });
   const requireRole = (role) => {
     if (configuredRole !== role) {
       throw new ConcordiaException("INVALID_INPUT", `The configured ${configuredRole} client cannot call this ${role} tool`);
@@ -22813,18 +46172,31 @@ async function run() {
   if (configuredRole !== "codex" && configuredRole !== "zcode") {
     throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_AGENT_ID is required and must be codex or zcode");
   }
-  const database = new ConcordiaDatabase();
-  const workspaces = new WorkspaceManager();
-  const service = new TaskService(database, workspaces);
+  const transport = process.env.CONCORDIA_TRANSPORT ?? "stdio";
+  let database;
+  let relay;
+  let service;
+  if (transport === "stdio") {
+    database = new ConcordiaDatabase();
+    service = new TaskService(database, new WorkspaceManager());
+  } else if (transport === "redis") {
+    const { createRedisRelayServiceFromEnv: createRedisRelayServiceFromEnv2 } = await Promise.resolve().then(() => (init_relay_client(), relay_client_exports));
+    relay = createRedisRelayServiceFromEnv2(configuredRole);
+    await relay.connect();
+    service = relay;
+  } else {
+    throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_TRANSPORT must be stdio or redis");
+  }
   const server = createMcpServer(service, configuredRole);
   const close = async () => {
     await server.close();
-    database.close();
+    await relay?.close();
+    database?.close();
   };
   process.once("SIGINT", () => void close().finally(() => process.exit(0)));
   process.once("SIGTERM", () => void close().finally(() => process.exit(0)));
   await server.connect(new StdioServerTransport());
-  console.error(JSON.stringify({ level: "info", event: "server.started" }));
+  console.error(JSON.stringify({ level: "info", event: "server.started", transport }));
 }
 if (process.argv[1] && realpathSync2(process.argv[1]) === realpathSync2(fileURLToPath(import.meta.url))) {
   run().catch((error2) => {

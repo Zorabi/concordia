@@ -7,9 +7,39 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 import { ConcordiaDatabase } from "./database.js";
-import { asConcordiaError, ConcordiaException, TASK_STATUSES, type ActorRole } from "./protocol.js";
+import {
+  asConcordiaError,
+  ConcordiaException,
+  TASK_STATUSES,
+  type ActorRole,
+  type ClaimTaskInput,
+  type ClaimTaskResult,
+  type CreateTaskResult,
+  type ListTasksInput,
+  type ReviewTaskInput,
+  type SendEventInput,
+  type TaskDetail,
+  type TaskEvent,
+  type TaskRecord,
+  type TaskSpec,
+  type TaskSubmission,
+  type WaitEventsInput,
+} from "./protocol.js";
 import { TaskService } from "./tasks.js";
 import { WorkspaceManager } from "./workspace.js";
+
+type Awaitable<T> = T | Promise<T>;
+
+export interface ConcordiaService {
+  createTask(spec: TaskSpec, idempotencyKey: string): Awaitable<CreateTaskResult>;
+  claimTask(input: ClaimTaskInput): Awaitable<ClaimTaskResult>;
+  getTask(taskId: string, recentEventLimit?: number): Awaitable<TaskDetail>;
+  listTasks(input?: ListTasksInput): Awaitable<TaskRecord[]>;
+  sendEvent<T>(input: SendEventInput<T>): Awaitable<TaskEvent<T>>;
+  waitEvents(input: WaitEventsInput): Awaitable<TaskEvent[]>;
+  submitTask(submission: TaskSubmission, expectedVersion?: number): Awaitable<TaskDetail>;
+  reviewTask(input: ReviewTaskInput): Awaitable<TaskDetail>;
+}
 
 const taskSpecSchema = z.object({
   id: z.string().min(1),
@@ -67,10 +97,10 @@ async function invoke(operation: () => unknown | Promise<unknown>) {
 }
 
 export function createMcpServer(
-  service: TaskService,
+  service: ConcordiaService,
   configuredRole: ActorRole,
 ): McpServer {
-  const server = new McpServer({ name: "concordia", version: "0.1.0" });
+  const server = new McpServer({ name: "concordia", version: "0.2.0" });
 
   const requireRole = (role: ActorRole) => {
     if (configuredRole !== role) {
@@ -205,20 +235,33 @@ export async function run(): Promise<void> {
   if (configuredRole !== "codex" && configuredRole !== "zcode") {
     throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_AGENT_ID is required and must be codex or zcode");
   }
-  const database = new ConcordiaDatabase();
-  const workspaces = new WorkspaceManager();
-  const service = new TaskService(database, workspaces);
+  const transport = process.env.CONCORDIA_TRANSPORT ?? "stdio";
+  let database: ConcordiaDatabase | undefined;
+  let relay: (ConcordiaService & { connect(): Promise<void>; close(): Promise<void> }) | undefined;
+  let service: ConcordiaService;
+  if (transport === "stdio") {
+    database = new ConcordiaDatabase();
+    service = new TaskService(database, new WorkspaceManager());
+  } else if (transport === "redis") {
+    const { createRedisRelayServiceFromEnv } = await import("./relay-client.js");
+    relay = createRedisRelayServiceFromEnv(configuredRole);
+    await relay.connect();
+    service = relay;
+  } else {
+    throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_TRANSPORT must be stdio or redis");
+  }
   const server = createMcpServer(service, configuredRole);
 
   const close = async () => {
     await server.close();
-    database.close();
+    await relay?.close();
+    database?.close();
   };
   process.once("SIGINT", () => void close().finally(() => process.exit(0)));
   process.once("SIGTERM", () => void close().finally(() => process.exit(0)));
 
   await server.connect(new StdioServerTransport());
-  console.error(JSON.stringify({ level: "info", event: "server.started" }));
+  console.error(JSON.stringify({ level: "info", event: "server.started", transport }));
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

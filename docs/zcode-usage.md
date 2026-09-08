@@ -8,7 +8,7 @@
 
 1. **Settings → Plugins** 中的 `concordia` 插件已安装并启用。
 2. **Settings → MCP Servers → Plugin MCP servers** 中的 `plugin:concordia:concordia` 已启用。
-3. ZCode 和 Codex 的 `CONCORDIA_DB` 指向同一个绝对路径，通常为 `<目标仓库>/.concordia/state.db`。
+3. 单机模式下 ZCode 和 Codex 的 `CONCORDIA_DB` 指向同一个绝对路径；跨机器模式下两端 Redis URL 与 namespace 一致，并分别使用自己的角色 token。
 4. 当前工作区是任务契约中的 Git 仓库根目录，而不是 Concordia 源码目录。
 
 插件或配置变化只保证对新会话生效。检查完成后，建议新建一个 ZCode 会话再开始操作。
@@ -87,7 +87,7 @@ Concordia 的任务列表显示在当前 ZCode 会话中，不会写入 ZCode �
 
 ```text
 READY → CLAIMED → RUNNING → REVIEW → APPROVED
-                      │          └→ RUNNING（Codex 要求返工）
+                      │          └→ READY（Codex 要求返工，需重新领取）
                       └→ WAITING_INPUT（ZCode 提问）
 ```
 
@@ -157,7 +157,7 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 核对当前 attempt worktree 的 HEAD、baseCommit..HEAD 的精确 changedFiles、检查结果和风险，然后调用 Concordia submit_task。使用当前 leaseToken 和新的 idempotencyKey，不要执行合并或推送。
 ```
 
-提交成功后任务进入 `REVIEW`。Codex 可以批准或要求返工；批准不会自动合并、cherry-pick 或推送分支。
+提交成功后任务进入 `REVIEW`，当前租约立即失效。Codex 可以批准或要求返工；返工后任务回到 `READY`，必须重新领取新的 attempt 和 `leaseToken`。批准不会自动合并、cherry-pick 或推送分支。
 
 ## 9. ZCode 端权限
 
@@ -173,7 +173,7 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 ## 10. 原生待办同步与通知
 
-截至 Concordia `0.1.0`：
+截至 Concordia `0.2.0`：
 
 - 可以通过 `/tasks` 在 ZCode 会话中查看同步后的 Concordia 任务。
 - 不能把每个 Concordia 任务写入 ZCode 原生任务侧边栏。
@@ -182,12 +182,28 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 若需要实时桌面通知，应增加独立的 Concordia 后台监听器，由它读取 `TASK_CREATED` 事件并调用 macOS、Windows 或 Linux 的系统通知接口。该能力应与 ZCode 会话解耦；ZCode 插件继续负责 `/tasks`、任务详情和执行工作流。
 
-## 11. 常见问题
+## 11. 跨机器 Redis 模式
+
+跨机器时，`/tasks`、`/task` 和 `/watch` 的用法完全不变，差别只在 MCP server 环境变量：
+
+```json
+{
+  "CONCORDIA_AGENT_ID": "zcode",
+  "CONCORDIA_TRANSPORT": "redis",
+  "CONCORDIA_REDIS_URL": "rediss://user:password@redis.example.com:6379/0",
+  "CONCORDIA_RELAY_NAMESPACE": "team-a",
+  "CONCORDIA_RELAY_ZCODE_TOKEN": "<zcode-token>"
+}
+```
+
+协调器仍须运行在这台 ZCode/Git 机器上。若 ZCode 与协调器同机，也可以保留 `CONCORDIA_TRANSPORT=stdio` 并共享协调器本机的 SQLite。具体完整 JSON 和启动命令见 [跨机器协调指南](remote-coordination.md)。
+
+## 12. 常见问题
 
 | 现象 | 处理方式 |
 | --- | --- |
 | `/tasks READY` 没有结果 | 确认 Codex 已创建任务，任务 `workspace` 是当前 Git 根目录，并核对双方数据库路径。 |
-| ZCode 看不到 Codex 刚创建的任务 | 两端 `CONCORDIA_DB` 必须逐字符一致；重启两端 MCP server 后重试。 |
+| ZCode 看不到 Codex 刚创建的任务 | 单机核对 `CONCORDIA_DB`；跨机核对 Redis URL、数据库编号、namespace 和协调器状态。 |
 | 找不到 `/tasks` | 确认安装的是完整插件而不是仅手动配置 MCP，并在新会话中重试。 |
 | `/watch` 看不到新任务 | `/watch` 只观察已知任务；使用 `/tasks READY` 或全局 `wait_events`。 |
 | `claim_task` 返回 `task: null` | 当前没有可领取的 `READY` 任务，或任务不属于该工作区。 |

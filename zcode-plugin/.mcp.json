@@ -6,6 +6,7 @@
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.mjs"],
       "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {
+        "CONCORDIA_TRANSPORT": "stdio",
         "CONCORDIA_ROOTS": "${CLAUDE_PROJECT_DIR}",
         "CONCORDIA_DB": "${CLAUDE_PROJECT_DIR}/.concordia/state.db",
         "CONCORDIA_AGENT_ID": "zcode"

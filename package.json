@@ -1,8 +1,8 @@
 {
   "name": "concordia",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local MCP coordination runtime for Codex and ZCode",
+  "description": "Local-first MCP coordination runtime for Codex and ZCode with an optional Redis relay",
   "type": "module",
   "main": "dist/src/index.js",
   "scripts": {
@@ -10,13 +10,15 @@
     "build:plugin": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22.13 --outfile=zcode-plugin/dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "start:relay": "node dist/src/relay.js"
   },
   "engines": {
     "node": ">=22.13"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@redis/client": "^5.12.1",
     "zod": "^3.25.0"
   },
   "devDependencies": {

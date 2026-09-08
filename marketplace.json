@@ -1,14 +1,14 @@
 {
   "name": "concordia-local",
-  "description": "Concordia local multi-agent coordination tools for ZCode",
+  "description": "Concordia local-first multi-agent coordination tools for ZCode",
   "plugins": [
     {
       "name": "concordia",
       "source": "./zcode-plugin",
-      "description": "Local Concordia task coordination commands and MCP server for ZCode",
-      "version": "0.1.0",
+      "description": "Concordia task coordination commands with local and Redis relay modes",
+      "version": "0.2.0",
       "category": "developer-tools",
-      "tags": ["coordination", "mcp", "tasks", "local"],
+      "tags": ["coordination", "mcp", "tasks", "local", "redis"],
       "strict": true
     }
   ]

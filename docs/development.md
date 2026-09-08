@@ -2,7 +2,7 @@
 
 ## 1. 开发目标
 
-实现一个纯本机 TypeScript 工具，使 Codex 能发布结构化任务、ZCode 能领取并执行任务，双方能交换进度和审查事件，用户能在 ZCode 中查询执行状态。
+实现一个 local-first TypeScript 工具，使 Codex 能发布结构化任务、ZCode 能领取并执行任务，双方能交换进度和审查事件，用户能在 ZCode 中查询执行状态；按需通过 Redis relay 跨机器连接。
 
 第一版以可靠完成一条端到端任务为标准，不建设通用工作流平台。
 
@@ -13,9 +13,10 @@
 - MCP：`@modelcontextprotocol/sdk`。
 - SQLite：优先使用当前 Node 运行时稳定可用的 SQLite 能力；不满足时再增加一个驱动。
 - 测试：Node 内置 `node:test`。
-- Git：通过非交互式子进程调用本地 `git`。
+- Git：通过非交互式子进程调用协调主机本地 `git`。
+- 跨机器：Redis Streams request queue 与短期 response key。
 
-第一版不引入 Web 框架、ORM、依赖注入容器、消息队列或前端框架。
+不引入 Web 框架、ORM、依赖注入容器或前端框架。Redis 是可选传输依赖，本机模式不要求运行 Redis 服务。
 
 ## 3. 预期目录
 
@@ -30,9 +31,13 @@ concordia/
 │   ├── database.ts          # SQLite 初始化与事务
 │   ├── tasks.ts             # 状态机和任务服务
 │   ├── events.ts            # 事件追加、查询和等待
-│   └── workspace.ts         # Git/worktree 与路径验证
+│   ├── workspace.ts         # Git/worktree 与路径验证
+│   ├── relay-protocol.ts    # 签名信封与安全校验
+│   ├── relay-client.ts      # Redis MCP relay client
+│   └── relay.ts             # Redis relay coordinator
 ├── tests/
-│   └── concordia.test.ts    # 核心端到端协议测试
+│   ├── concordia.test.ts    # 核心端到端协议测试
+│   └── relay.test.ts        # relay 安全与分发测试
 ├── zcode-plugin/
 │   ├── .zcode-plugin/
 │   │   └── plugin.json
@@ -52,12 +57,16 @@ concordia/
 
 | 环境变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
+| `CONCORDIA_TRANSPORT` | 否 | `stdio` | MCP 连接本机服务或 Redis relay |
 | `CONCORDIA_DB` | 否 | `<cwd>/.concordia/state.db` | SQLite 路径 |
-| `CONCORDIA_ROOTS` | 是 | 无 | 允许的项目根目录列表 |
+| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 允许的项目根目录列表 |
 | `CONCORDIA_AGENT_ID` | 是 | 无 | `codex` 或 `zcode`；缺失时拒绝启动 |
-| `CONCORDIA_LOG_LEVEL` | 否 | `info` | `error`、`info`、`debug` |
+| `CONCORDIA_REDIS_URL` | Redis | 无 | 远程使用 `rediss://` |
+| `CONCORDIA_RELAY_NAMESPACE` | 否 | `concordia` | Redis 键命名空间 |
+| `CONCORDIA_RELAY_CODEX_TOKEN` | Codex/协调器 | 无 | Codex HMAC token |
+| `CONCORDIA_RELAY_ZCODE_TOKEN` | ZCode/协调器 | 无 | ZCode HMAC token |
 
-第一版不提供通用配置文件。允许执行的检查命令采用固定白名单 ID，不接受来自任务 payload 的任意 shell 字符串。
+不提供通用配置文件。允许执行的检查命令采用固定白名单 ID，不接受来自任务 payload 的任意 shell 字符串。完整 relay 调优变量见 `.env.relay.example`。
 
 ## 5. 开发阶段
 
@@ -132,9 +141,17 @@ concordia/
 5. ZCode 修改代码、执行检查并提交。
 6. Codex 获取结果并审查 diff。
 7. Codex 请求一次修改。
-8. ZCode 修正并重新提交。
+8. ZCode 重新领取新 attempt，修正并重新提交。
 9. Codex 批准任务。
 10. 重启 MCP Server，确认完整事件仍可查询。
+
+### 阶段 6：Redis 跨机器 relay
+
+- `CONCORDIA_TRANSPORT=stdio|redis` 显式切换；默认行为不变。
+- 协调器独占 Redis namespace，持有本机 SQLite 和 Git 工作区。
+- request/response 使用角色 token HMAC 签名、时间戳和 nonce 防重放。
+- consumer group 保存未确认请求，协调器重启后回收 pending entry。
+- 远程默认强制 TLS，限制消息大小、并发数和响应 TTL。
 
 ## 6. MCP 工具契约
 
@@ -338,7 +355,7 @@ T-1025  WAITING_INPUT  zcode     14:35    更新缓存失效策略
 | --- | --- |
 | 本地 Web Dashboard | `/tasks` 和 `/watch` 无法满足观察需求 |
 | Unix Domain Socket | 500ms 轮询产生可测性能问题 |
-| Redis/NATS | 需要跨机器或大量并发执行者 |
+| PostgreSQL/Redis/NATS | 需要多协调节点、高可用或大量并发执行者 |
 | ORM | migration 和查询复杂度显著增长 |
 | 多用户权限 | Concordia 开始作为共享服务运行 |
 | 子代理详细追踪 | ZCode 提供稳定生命周期事件且确有需求 |

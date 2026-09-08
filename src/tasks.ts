@@ -436,7 +436,7 @@ export class TaskService {
         status: "REVIEW",
         leaseOwner: null,
         leaseUntil: null,
-        leaseToken: row.lease_token,
+        leaseToken: null,
         updatedAt: now,
       });
       this.events.appendEvent({
@@ -512,10 +512,10 @@ export class TaskService {
         }, now);
       } else {
         this.updateTask(row, {
-          status: "RUNNING",
-          leaseOwner: row.assignee,
-          leaseUntil: leaseUntil(DEFAULT_LEASE_SECONDS),
-          leaseToken: row.lease_token,
+          status: "READY",
+          leaseOwner: null,
+          leaseUntil: null,
+          leaseToken: null,
           updatedAt: now,
         });
         this.events.appendEvent({
