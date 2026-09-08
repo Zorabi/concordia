@@ -607,6 +607,10 @@ concordia/                         # Concordia 源码目录
 
 本仓库 `.gitignore` 忽略 `node_modules/`、`dist/`、`.concordia/`、`.worktrees/` 和 TypeScript 构建缓存。
 
+## 开源协议
+
+Concordia 使用 [MIT License](LICENSE) 开源。你可以自由使用、复制、修改、合并、发布和分发本软件，但必须保留原始版权与许可声明。本软件按“原样”提供，不附带任何明示或默示担保。
+
 ## 故障排查
 
 | 现象 | 处理 |
