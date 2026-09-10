@@ -101,9 +101,31 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 /tasks READY
 ```
 
-发现任务后再调用 `claim_task`。`claim_task` 是原子操作；多个执行者同时领取时，只有一个执行者会成功获得同一任务。
+发现任务后再调用 `claim_task`。从 `zcode-waker` 的事件启动时传入该事件的 `taskId`，以精确领取对应任务；手动领取时可省略 `taskId` 让服务按工作区选择最早待办。`claim_task` 是原子操作；多个执行者同时领取时，只有一个执行者会成功获得同一任务。
 
-### 5.2 在当前会话持续监听
+### 5.2 使用 `zcode-waker` 持续监听（推荐）
+
+`zcode-waker` 是运行在 ZCode CLI 所在机器的外置 Node.js 守护进程。它监听发给 `zcode` 的持久事件，只在需要工作时调用 ZCode CLI：
+
+| 事件 | 行为 |
+| --- | --- |
+| `TASK_CREATED` | waker 用事件的 `taskId` 精确领取仍可操作的任务，再创建 ZCode 会话实施。 |
+| `ANSWER` | 恢复该任务会话，由 ZCode 读取回答并继续等待或实施。 |
+| `CHANGES_REQUESTED` | waker 用事件的 `taskId` 精确重新领取新 attempt，再恢复该任务会话读取 findings 并修正。 |
+
+启动后空闲阶段只有 Node.js 长轮询，不调用 ZCode 模型。waker 先精确领取并将 CLI 工作目录绑定到返回的 worktree；首次事件使用 ZCode CLI 的 `--prompt --json --surface terminal --mode build` 创建会话，同一任务后续事件使用保存的 `sess_*` ID 和 `--resume` 恢复。Concordia 自身不调用 Computer Use，也不向 CLI 注入工具允许或禁用列表；是否使用 Computer Use 由 ZCode agent 的自身策略和配置决定。CLI 子进程不会继承 waker 的 Redis/API 凭据。
+
+```sh
+CONCORDIA_TRANSPORT=stdio \
+CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
+CONCORDIA_ZCODE_WAKER_DB=/absolute/path/to/example-app/.concordia/zcode-waker.db \
+npm run start:zcode-waker
+```
+
+完整的单机/Redis 配置、可靠性语义和故障排查见 [ZCode 事件唤醒器指南](zcode-waker.md)。
+
+### 5.3 在当前会话持续监听
 
 `create_task` 会生成发给 `zcode` 的 `TASK_CREATED` 事件。可在一个保持运行的 ZCode 会话中输入：
 
@@ -116,7 +138,7 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 - timeoutMs: 60000
 - limit: 100
 
-收到 TASK_CREATED 后，调用 get_task；任务仍为 READY 时调用 claim_task。
+收到 TASK_CREATED 后，调用 get_task；任务仍为 READY 时以该事件 taskId 调用 claim_task。
 对历史事件或已经不处于 READY 的任务不要重复处理。
 每次响应后更新 afterEventId。wait_events 正常超时返回空数组时继续等待，不要视为错误。
 领取后只在返回的 worktreePath 中实施，并保存 leaseToken。
@@ -127,7 +149,9 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 - `wait_events` 单次最长等待 60 秒，需要调用方用最新游标继续调用。
 - 监听只在当前 ZCode 会话保持运行时有效。
 - 关闭 ZCode、结束会话或电脑休眠后，不会继续监听。
-- 当前插件没有常驻后台监听进程，也不会弹出操作系统通知。
+- 插件本身没有常驻后台监听进程，也不会弹出操作系统通知；该职责由可选的外置 `zcode-waker` 承担。
+
+这里的限制只针对交互式 ZCode 插件会话。部署 `zcode-waker` 后，新任务、回答和返工由模型外的守护进程监听并按需启动或恢复 ZCode turn；ZCode 提交、提问或失败后则可由 [Codex 事件唤醒器](codex-waker.md) 处理。两个 waker 都不通过 Computer Use 操控客户端界面；被唤醒的 agent 仍按自身工具策略工作。
 
 ## 6. 监听已知任务的进度
 
@@ -173,14 +197,14 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 ## 10. 原生待办同步与通知
 
-截至 Concordia `0.2.0`：
+截至 Concordia `0.4.0`：
 
 - 可以通过 `/tasks` 在 ZCode 会话中查看同步后的 Concordia 任务。
 - 不能把每个 Concordia 任务写入 ZCode 原生任务侧边栏。
 - 不提供操作系统弹窗通知。
-- 不提供 ZCode 关闭后的后台监听。
+- 可选 `zcode-waker` 可在 ZCode 交互界面关闭后继续监听，并在需要时使用 ZCode CLI 创建或恢复任务会话。
 
-若需要实时桌面通知，应增加独立的 Concordia 后台监听器，由它读取 `TASK_CREATED` 事件并调用 macOS、Windows 或 Linux 的系统通知接口。该能力应与 ZCode 会话解耦；ZCode 插件继续负责 `/tasks`、任务详情和执行工作流。
+`zcode-waker` 默认不显示操作系统通知，也不写入 ZCode 原生任务侧边栏；它负责可靠地恢复实施会话。若还需要桌面提醒，可在它之外接入 macOS、Windows 或 Linux 系统通知接口，插件仍只负责 `/tasks`、任务详情和交互式工作流。
 
 ## 11. 跨机器 Redis 模式
 
@@ -206,6 +230,8 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 | ZCode 看不到 Codex 刚创建的任务 | 单机核对 `CONCORDIA_DB`；跨机核对 Redis URL、数据库编号、namespace 和协调器状态。 |
 | 找不到 `/tasks` | 确认安装的是完整插件而不是仅手动配置 MCP，并在新会话中重试。 |
 | `/watch` 看不到新任务 | `/watch` 只观察已知任务；使用 `/tasks READY` 或全局 `wait_events`。 |
+| `zcode-waker` 无法创建会话 | 确认 `zcode --version` 可运行、运行用户已登录 ZCode，并检查 CLI 是否支持 `--prompt --json --surface terminal --mode build`。 |
+| `zcode-waker` 重复处理事件 | 检查 `CONCORDIA_ZCODE_WAKER_DB` 是否为稳定的本机绝对路径；删除前先停止 waker 并确认无待处理投递。 |
 | `claim_task` 返回 `task: null` | 当前没有可领取的 `READY` 任务，或任务不属于该工作区。 |
 | 收到 `LEASE_CONFLICT` | 租约已过期或任务被重新领取；重新调用 `claim_task`，不要复用旧 token。 |
 | 提交被路径校验拒绝 | 确认在返回的 worktree 中工作，并核对任务的允许与排除路径。 |

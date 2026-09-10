@@ -150,6 +150,27 @@ test("only one concurrent claimant receives a ready task", async (t) => {
   assert.equal(fixture.service.getTask("concurrent").attempt, 1);
 });
 
+test("a claimant can target one ready task by id", (t) => {
+  const fixture = createFixture(t);
+  fixture.service.createTask(spec(fixture.repository, "first-ready"), "first-ready:create");
+  fixture.service.createTask(spec(fixture.repository, "target-ready"), "target-ready:create");
+
+  const claim = fixture.service.claimTask({ agentId: "zcode", taskId: "target-ready" });
+
+  assert.equal(claim.task?.id, "target-ready");
+  assert.equal(fixture.service.getTask("first-ready").status, "READY");
+});
+
+test("an unavailable targeted task never falls back to another ready task", (t) => {
+  const fixture = createFixture(t);
+  fixture.service.createTask(spec(fixture.repository, "only-ready"), "only-ready:create");
+
+  const claim = fixture.service.claimTask({ agentId: "zcode", taskId: "missing-task" });
+
+  assert.equal(claim.task, null);
+  assert.equal(fixture.service.getTask("only-ready").status, "READY");
+});
+
 test("event idempotency returns the original event without a duplicate write", (t) => {
   const fixture = createFixture(t);
   fixture.service.createTask(spec(fixture.repository, "idempotency"), "idempotency:create");

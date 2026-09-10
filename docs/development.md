@@ -34,10 +34,19 @@ concordia/
 │   ├── workspace.ts         # Git/worktree 与路径验证
 │   ├── relay-protocol.ts    # 签名信封与安全校验
 │   ├── relay-client.ts      # Redis MCP relay client
-│   └── relay.ts             # Redis relay coordinator
+│   ├── relay.ts             # Redis relay coordinator
+│   ├── codex-app-server.ts  # App Server JSONL 客户端
+│   ├── zcode-cli.ts         # ZCode headless CLI 客户端
+│   ├── waker-source.ts      # SQLite/Redis 共享事件源
+│   ├── codex-waker.ts       # Codex 事件唤醒循环
+│   ├── zcode-waker.ts       # ZCode CLI 事件唤醒循环
+│   └── waker-state.ts       # 唤醒游标与会话映射
 ├── tests/
 │   ├── concordia.test.ts    # 核心端到端协议测试
-│   └── relay.test.ts        # relay 安全与分发测试
+│   ├── relay.test.ts        # relay 安全与分发测试
+│   ├── codex-waker.test.ts  # Codex waker 与 App Server 协议测试
+│   ├── zcode-cli.test.ts    # ZCode CLI 参数、安全与生命周期测试
+│   └── zcode-waker.test.ts  # ZCode waker 事件与恢复测试
 ├── zcode-plugin/
 │   ├── .zcode-plugin/
 │   │   └── plugin.json
@@ -63,6 +72,16 @@ concordia/
 | `CONCORDIA_AGENT_ID` | 是 | 无 | `codex` 或 `zcode`；缺失时拒绝启动 |
 | `CONCORDIA_REDIS_URL` | Redis | 无 | 远程使用 `rediss://` |
 | `CONCORDIA_RELAY_NAMESPACE` | 否 | `concordia` | Redis 键命名空间 |
+| `CONCORDIA_WAKER_DB` | waker | `<cwd>/.concordia/waker.db` | waker 独立游标、线程和投递状态 |
+| `CONCORDIA_WAKER_CWD` | 否 | 任务路径或 `<cwd>` | App Server 审查线程本地工作目录 |
+| `CONCORDIA_CODEX_BIN` | 否 | `codex` | Codex CLI 可执行文件 |
+| `CONCORDIA_ZCODE_WAKER_DB` | zcode-waker | `<cwd>/.concordia/zcode-waker.db` | ZCode waker 独立游标、会话和投递状态 |
+| `CONCORDIA_ZCODE_BIN` | 否 | macOS 应用内 CLI，否则 `zcode` | ZCode CLI 可执行文件 |
+| `CONCORDIA_ZCODE_MODE` | 否 | `build` | ZCode headless turn 权限模式 |
+| `CONCORDIA_ZCODE_MAX_TURNS` | 否 | `100` | 单次调用最大模型 turn 数 |
+| `CONCORDIA_ZCODE_TURN_TIMEOUT_MS` | 否 | `3600000` | 单次 ZCode CLI turn 超时 |
+| `CONCORDIA_ZCODE_MAX_OUTPUT_BYTES` | 否 | `4194304` | ZCode CLI JSON stdout 上限 |
+| `CONCORDIA_ZCODE_ENV_ALLOWLIST` | 否 | 空 | 额外传给 CLI 的非敏感环境变量名 |
 | `CONCORDIA_RELAY_CODEX_TOKEN` | Codex/协调器 | 无 | Codex HMAC token |
 | `CONCORDIA_RELAY_ZCODE_TOKEN` | ZCode/协调器 | 无 | ZCode HMAC token |
 
@@ -132,7 +151,26 @@ concordia/
 - `/tasks` 能看到 Codex 发布的任务。
 - `/watch` 能看到执行期间的新事件。
 
-### 阶段 5：端到端验收
+### 阶段 5：Codex 事件唤醒器
+
+新增独立 `codex-waker` 进程：
+
+- stdio 模式直接读取协调 SQLite；Redis 模式作为 `codex` 角色 relay client。
+- 使用独立 `waker.db` 保存全局事件游标、`taskId → Codex threadId` 映射和投递状态。
+- 仅处理 `COMPLETED`、`QUESTION`、`FAILED`，其他事件不调用模型。
+- 首次事件通过 App Server `thread/start` 建立任务线程，后续使用 `thread/resume`。
+- 每次操作通过 `turn/start` 触发，等待 `turn/completed` 后提交消费游标。
+- App Server 请求使用 `approvalPolicy=never` 和 `readOnly` sandbox；唤醒提示禁止修改实现文件。
+- 失败保留游标并指数退避，重启后按至少一次语义恢复。
+
+验证：
+
+- 普通进度事件只推进游标，不启动 Codex。
+- 完成、提问和失败事件分别产生正确的唤醒提示。
+- App Server 初始化、线程创建和 `turn/completed` 生命周期可完成。
+- Codex turn 失败时不推进游标，后续重试复用任务线程。
+
+### 阶段 6：端到端验收
 
 1. 在临时 Git 仓库创建一个简单变更任务。
 2. Codex 发布任务。
@@ -145,7 +183,25 @@ concordia/
 9. Codex 批准任务。
 10. 重启 MCP Server，确认完整事件仍可查询。
 
-### 阶段 6：Redis 跨机器 relay
+### 阶段 7：ZCode 事件唤醒器
+
+新增独立 `zcode-waker` 进程：
+
+- stdio 模式直接读取协调 SQLite；Redis 模式作为 `zcode` 角色 relay client。
+- 使用独立 `zcode-waker.db` 保存全局事件游标、`taskId → sess_*` 映射和投递状态。
+- 仅处理 `TASK_CREATED`、`ANSWER`、`CHANGES_REQUESTED`；常规事件不调用模型。
+- 对 `TASK_CREATED` 与 `CHANGES_REQUESTED`，waker 自身仅用事件的 `taskId` 精确调用 `claim_task`，不领取其他 READY 任务，并把 CLI `cwd` 绑定到返回的 worktree。
+- 首次事件通过 ZCode CLI `--prompt --json --surface terminal --mode build` 建立任务会话，后续使用 `--resume sess_*`；CLI 子进程不继承 relay/API 凭据。
+- CLI turn 成功后才提交消费游标；失败保留游标并指数退避，重启后按至少一次语义恢复。
+- 唤醒器自身不调用 Computer Use 或 GUI 自动化，也不覆盖 ZCode agent 的工具策略；路径边界仍强制绑定到领取结果的 worktree。
+
+验证：
+
+- 常规事件只推进游标，不启动 ZCode CLI。
+- 新任务、回答和返工事件创建或恢复正确的任务会话。
+- CLI JSON 输出可读取 `sess_*`；失败时不推进游标，后续重试复用会话。
+
+### 阶段 8：Redis 跨机器 relay
 
 - `CONCORDIA_TRANSPORT=stdio|redis` 显式切换；默认行为不变。
 - 协调器独占 Redis namespace，持有本机 SQLite 和 Git 工作区。
@@ -173,12 +229,13 @@ interface CreateTaskResult {
 ```ts
 interface ClaimTaskInput {
   agentId: string;
+  taskId?: string;
   workspace?: string;
   leaseSeconds?: number;
 }
 ```
 
-领取成功时额外返回仅本次租约有效的 `leaseToken`；没有匹配任务时返回 `{ task: null }`，不返回错误。token 不进入任务详情或事件，重领时自动轮换。
+`taskId` 可选；提供时只原子领取指定的 READY 任务，适合 waker 消费事件时避免误领其他待办。未提供时按 `workspace` 选择最早匹配任务。领取成功时额外返回仅本次租约有效的 `leaseToken`；没有匹配任务时返回 `{ task: null }`，不返回错误。token 不进入任务详情或事件，重领时自动轮换。
 
 ### 6.3 `get_task`
 
@@ -347,6 +404,7 @@ T-1025  WAITING_INPUT  zcode     14:35    更新缓存失效策略
 - 进程重启后可恢复状态和事件游标。
 - ZCode 不能提交 `ownedPaths` 以外的修改。
 - ZCode 提交后必须由 Codex 明确批准。
+- Codex 可由模型外事件监听器按需唤醒，不需要在会话中持续轮询。
 - 自动化测试全部通过。
 
 ## 12. 暂缓项与升级条件

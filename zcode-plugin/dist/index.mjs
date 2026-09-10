@@ -45593,6 +45593,7 @@ var TaskService = class {
   }
   claimTask(input) {
     const agentId = requireNonEmptyString(input.agentId, "agentId");
+    const taskId = input.taskId === void 0 ? void 0 : requireNonEmptyString(input.taskId, "taskId");
     const seconds = validateLeaseSeconds(input.leaseSeconds);
     const workspaceFilter = input.workspace === void 0 ? void 0 : this.workspace.resolveWorkspace(input.workspace);
     const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -45601,6 +45602,10 @@ var TaskService = class {
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))"
       ];
       const parameters = [now];
+      if (taskId !== void 0) {
+        clauses.push("id = ?");
+        parameters.push(taskId);
+      }
       if (workspaceFilter !== void 0) {
         clauses.push("workspace = ?");
         parameters.push(workspaceFilter);
@@ -46042,7 +46047,7 @@ async function invoke(operation) {
   }
 }
 function createMcpServer(service, configuredRole) {
-  const server = new McpServer({ name: "concordia", version: "0.2.0" });
+  const server = new McpServer({ name: "concordia", version: "0.4.0" });
   const requireRole = (role) => {
     if (configuredRole !== role) {
       throw new ConcordiaException("INVALID_INPUT", `The configured ${configuredRole} client cannot call this ${role} tool`);
@@ -46056,9 +46061,10 @@ function createMcpServer(service, configuredRole) {
     return service.createTask(spec, idempotencyKey);
   }));
   server.registerTool("claim_task", {
-    description: "Atomically claim the oldest matching READY task. Preserve the returned leaseToken for every executor write.",
+    description: "Atomically claim a specific task or the oldest matching READY task. Preserve the returned leaseToken for every executor write.",
     inputSchema: {
       agentId: external_exports.string().min(1),
+      taskId: external_exports.string().min(1).optional(),
       workspace: external_exports.string().min(1).optional(),
       leaseSeconds: external_exports.number().int().positive().max(3600).optional()
     }

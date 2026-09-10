@@ -25,6 +25,7 @@ Concordia 以 local-first 方式协调 Codex 与 ZCode：Codex 负责形成方�
 - 任务租约、心跳、幂等和失败恢复。
 - 单协调节点 Redis Streams relay coordinator。
 - 独立 Codex/ZCode HMAC token 角色认证。
+- 可选 Codex/ZCode 事件唤醒器、独立消费游标和持久会话映射。
 
 暂不包含：
 
@@ -55,6 +56,11 @@ Concordia 以 local-first 方式协调 Codex 与 ZCode：Codex 负责形成方�
 │  ├── 形成实施任务                                                     │
 │  ├── create_task / send_event / review_task                           │
 │  └── 审查本地 diff 与检查结果                                         │
+│       ▲                                                               │
+│       └── Codex App Server <── codex-waker（只在可操作事件启动 turn）  │
+│                         │                                             │
+│                         ▼                                             │
+│  zcode-waker ──> ZCode CLI（只在可操作事件启动或恢复 build turn）       │
 │                         │                                             │
 │                         ▼                                             │
 │                    Concordia MCP Server                              │
@@ -89,6 +95,10 @@ Local ZCode relay client ───┘                                      ├�
 ```
 
 每个 MCP 进程仍通过 stdio 接入其宿主客户端；Redis 模式下，工具调用被封装为签名 request/response。协调器按 token 对应角色复核签名、时钟、nonce 和工具权限，再调用唯一的 `TaskService`。Git 操作仍在协调主机本地执行，因此不会降低现有提交校验强度。ZCode 若与协调器同机，也可保持 `stdio` 模式直接使用同一个本机 SQLite。
+
+可选 `codex-waker` 在 Codex 主机运行。它复用相同的 stdio/Redis 事件源，但不经过模型轮询；`COMPLETED`、`QUESTION`、`FAILED` 才触发 Codex App Server turn。每个任务使用一个持久 Codex 线程，线程 ID、事件游标和投递状态保存在独立 `waker.db`，避免污染协调主机的任务协议数据库。
+
+可选 `zcode-waker` 在 ZCode CLI 与 Git 工作区所在主机运行。它监听 `recipient=zcode`，且仅 `TASK_CREATED`、`ANSWER`、`CHANGES_REQUESTED` 触发 ZCode CLI turn；首次使用 `--prompt --json --surface terminal --mode build`，后续以保存的 `sess_*` 用 `--resume` 恢复。会话 ID、游标和投递状态保存于独立 `zcode-waker.db`。Concordia 自身不调用 Computer Use，也不依赖鼠标、桌面窗口或焦点；ZCode agent 是否使用该工具由其自身策略和配置决定。
 
 ## 5. 角色与责任
 
@@ -126,6 +136,29 @@ Local ZCode relay client ───┘                                      ├�
 - 保证同一任务只有一个有效租约持有者。
 - 保存事件顺序和消费者游标。
 - 提供状态查询，不解释或修改实施计划。
+
+### 5.5 Codex waker
+
+- 使用普通 Node.js 进程按 `eventId` 监听 `recipient=codex` 的事件。
+- 忽略进度和心跳，只对完成、问题和失败事件启动模型。
+- 通过 Codex App Server 恢复每个任务对应的持久线程。
+- 仅在 Codex turn 成功完成且任务离开对应等待状态，或事件已过期后推进消费游标。
+- 对启动、MCP 或 turn 失败采用有上限的指数退避。
+- 不把事件 payload 注入唤醒提示；Codex 通过 `get_task` 读取证据。
+- 使用只读 sandbox，禁止自动审查线程修改实现文件。
+
+### 5.6 ZCode waker
+
+- 使用普通 Node.js 进程按 `eventId` 监听 `recipient=zcode` 的事件。
+- 仅对新任务、Codex 回答和返工事件启动或恢复 ZCode CLI；批准和进度等常规事件只推进游标。
+- 按任务保存一个 ZCode `sess_*` 会话；首次创建、后续使用 `--resume`。
+- 收到新任务或返工后，由 waker 的受信任代码仅以事件的 `taskId` 调用 `claim_task`，不能回退为领取任意 READY 任务；CLI 从返回的 worktree 启动。
+- CLI turn 成功完成且任务进入暂停/审查/终态，或事件已过期后才推进消费游标；CLI 崩溃或状态未改变时保留事件。
+- 每个 waker 状态库使用 SQLite 单实例锁，避免同一事件被两个守护进程并发启动。
+- 对 CLI 启动、JSON 解析或 turn 失败采用有上限的指数退避。
+- 不把事件 payload 直接注入 prompt；ZCode 通过 `get_task` 读取证据并校验当前状态。
+- Concordia 不调用 Computer Use 或操控 GUI，也不向 ZCode 注入允许/禁止工具列表；具体工具由 ZCode agent 自身策略决定。
+- CLI 子进程采用环境 allowlist，不继承 waker 持有的 Redis URL、角色 token或 API key。
 
 ## 6. 子代理策略
 
@@ -261,7 +294,7 @@ export interface TaskEvent<T = unknown> {
 | 工具 | 调用方 | 作用 |
 | --- | --- | --- |
 | `create_task` | Codex | 创建并发布任务 |
-| `claim_task` | ZCode | 原子领取一个 READY 任务 |
+| `claim_task` | ZCode | 原子领取一个 READY 任务；可按 taskId 精确限定 |
 | `get_task` | 双方 | 获取任务、状态和最近事件 |
 | `list_tasks` | 双方 | 按状态、执行者或工作区筛选 |
 | `send_event` | 双方 | 追加问题、回答、进度或失败事件 |
@@ -328,7 +361,7 @@ PRAGMA busy_timeout = 5000;
 
 ### 原子领取
 
-`claim_task` 在一个事务中查找最早的 `READY` 任务，条件更新为 `CLAIMED`，写入租约并追加 `TASK_CLAIMED` 事件。条件更新影响零行时重新查询，避免重复领取。
+未提供 `taskId` 时，`claim_task` 在一个事务中查找最早的 `READY` 任务；提供时只查找指定 ID 的 `READY` 任务。随后条件更新为 `CLAIMED`，写入租约并追加 `TASK_CLAIMED` 事件。条件更新影响零行时重新查询，避免重复领取。
 
 ### 租约和心跳
 

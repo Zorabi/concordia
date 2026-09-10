@@ -13,15 +13,16 @@ Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与
 - **提交是证据**：ZCode 提交的 SHA、变更文件、检查结果和风险进入任务记录，供 Codex 审查。
 - **租约防止双写**：过期重领后旧执行者会被围栏拒绝，不能继续写入事件或提交。
 - **worktree 隔离写入**：每次领取使用独立 Git branch/worktree，避免并发任务互相污染。
+- **事件驱动唤醒代理**：可选 `codex-waker` 与 `zcode-waker` 常驻进程在普通 Node.js 中监听事件；仅在需要审查、回答、领取或返工时启动对应代理 turn。
 
 ## 边界与非目标
 
-当前版本面向**单协调节点、同一可信用户或团队、少量并发任务**。已实现 SQLite 持久化、任务状态机、Git 隔离、幂等写入、租约恢复、ZCode 插件，以及基于 Redis Streams 和角色签名的跨机器 relay。尚不提供：
+当前版本面向**单协调节点、同一可信用户或团队、少量并发任务**。已实现 SQLite 持久化、任务状态机、Git 隔离、幂等写入、租约恢复、ZCode 插件、Codex 事件唤醒器，以及基于 Redis Streams 和角色签名的跨机器 relay。尚不提供：
 
 - 多用户身份、仓库级 ACL 或租户隔离；
 - 多协调节点高可用或 PostgreSQL；
 - 多个独立 ZCode 执行机之间的路径映射和 Git 对象传输；
-- Web Dashboard 或推送订阅；
+- Web Dashboard 或面向第三方的通用推送订阅；
 - 自动合并、推送远程 Git、发布制品或部署；
 - 强制 ZCode 使用某个子代理，或替代理制订实现计划；
 - 映射为 ZCode 原生侧边栏任务。
@@ -36,7 +37,9 @@ Concordia 以结构化任务、事件、租约和 Git worktree，将“规划与
 Codex ── stdio MCP ─┐
                     ├── Concordia ── SQLite（任务、事件、交付物）
 ZCode ── stdio MCP ─┘        │
-                              └── 目标 Git 仓库/.worktrees/<task>-zcode-a<attempt>
+                              ├── 目标 Git 仓库/.worktrees/<task>-zcode-a<attempt>
+                              ├── codex-waker ──> Codex App Server（按事件启动审查 turn）
+                              └── zcode-waker ──> ZCode CLI（按事件启动或恢复实施 turn）
 ```
 
 ### 跨机器 Redis 模式
@@ -105,6 +108,8 @@ npm test
 
 - `dist/src/index.js`：本机 stdio MCP 服务；
 - `dist/src/relay.js`：运行在 ZCode/Git 主机上的 Redis relay coordinator；
+- `dist/src/codex-waker.js`：运行在 Codex 主机上的事件监听与 App Server 唤醒进程；
+- `dist/src/zcode-waker.js`：运行在 ZCode 主机上的事件监听与 ZCode CLI 唤醒进程；
 - `zcode-plugin/dist/index.mjs`：随 ZCode 本地插件分发的单文件 bundle。
 
 服务使用 stdio，通常由 MCP 客户端启动。以下命令只用于验证进程可启动，随后会等待标准输入上的 MCP 客户端：
@@ -116,6 +121,31 @@ npm start
 ```
 
 MCP 协议仅写 stdout；启动与错误日志写 stderr。默认数据库为启动目录的 `.concordia/state.db`。实际同时使用 Codex 和 ZCode 时，应配置同一个绝对 `CONCORDIA_DB`，避免不同 `cwd` 产生两个状态库。
+
+若希望 Codex 在 ZCode 提交、提问或失败时自动恢复审查任务，而不是让模型持续调用 `wait_events`，启动可选事件唤醒器：
+
+```sh
+CONCORDIA_TRANSPORT=stdio \
+CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
+CONCORDIA_WAKER_DB=/absolute/path/to/example-app/.concordia/waker.db \
+npm run start:waker
+```
+
+waker 空闲时只运行 Node.js 事件循环，不调用模型。完整配置、跨机器路径规则、可靠性语义和故障排查见 [Codex 事件唤醒器指南](docs/codex-waker.md)。
+可复制的环境变量起点见 [.env.waker.example](.env.waker.example)。
+
+同样地，如需让 ZCode 在新任务、Codex 回答或要求返工时恢复实施会话，而不依赖会话内反复调用 `wait_events`，在 ZCode CLI 所在机器启动：
+
+```sh
+CONCORDIA_TRANSPORT=stdio \
+CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
+CONCORDIA_ZCODE_WAKER_DB=/absolute/path/to/example-app/.concordia/zcode-waker.db \
+npm run start:zcode-waker
+```
+
+`zcode-waker` 空闲时也不会调用模型。它先按事件 `taskId` 精确领取并把 CLI 目录绑定到返回的 worktree，再用 `--prompt --json --surface terminal --mode build` 创建会话；后续事件用 `--resume sess_*` 恢复同一任务会话。Concordia 不调用 Computer Use，也不干预 ZCode agent 自身的工具选择；CLI 子进程不继承 waker 的 relay/API 凭据。详见 [ZCode 事件唤醒器指南](docs/zcode-waker.md)，可复制配置见 [.env.zcode-waker.example](.env.zcode-waker.example)。
 
 跨机器协调器使用：
 
@@ -373,7 +403,7 @@ ZCode/Git 机器需要另外运行 `npm run start:relay`。ZCode MCP 可设置�
 | 工具 | 角色 | 作用与关键输入 |
 | --- | --- | --- |
 | `create_task` | Codex | 创建并发布 `READY` 任务。输入 `spec` 和 `idempotencyKey`。 |
-| `claim_task` | ZCode | 原子领取最早匹配任务；可按 `workspace` 筛选，`leaseSeconds` 为 1–3600（默认 60）。无任务返回 `{ task: null }`；成功包含 `leaseToken`。 |
+| `claim_task` | ZCode | 原子领取任务；可按 `taskId` 精确领取事件对应任务，或按 `workspace` 筛选最早匹配任务；`leaseSeconds` 为 1–3600（默认 60）。无任务返回 `{ task: null }`；成功包含 `leaseToken`。 |
 | `get_task` | 两者 | 获取任务契约、状态、租约摘要、交付物、提交记录与近期事件；`eventLimit` 默认 20、最大 100。 |
 | `list_tasks` | 两者 | 以 `status`、`assignee`、`workspace`、`updatedAfter`、`limit` 筛选；默认 20、最大 100。 |
 | `send_event` | 两者 | 追加授权事件；可带 `expectedVersion`。ZCode 的写入必须带当前 `leaseToken`。 |
@@ -469,10 +499,10 @@ ZCode/Git 机器需要另外运行 `npm run start:relay`。ZCode MCP 可设置�
    }
    ```
 
-2. ZCode 领取并保存返回的 `task.worktreePath` 与 `leaseToken`：
+2. ZCode 领取并保存返回的 `task.worktreePath` 与 `leaseToken`。由 `zcode-waker` 唤醒时必须传入事件对应的 `taskId`，避免领取另一个 READY 任务：
 
    ```json
-   { "agentId": "zcode", "workspace": "/absolute/path/to/example-app" }
+   { "agentId": "zcode", "taskId": "docs-api-001", "workspace": "/absolute/path/to/example-app" }
    ```
 
 3. 在返回的 attempt worktree 工作，并用 token 上报进度：
@@ -570,9 +600,9 @@ npm test           # build 后运行 Node 内置测试
 CONCORDIA_TEST_REDIS_URL=redis://127.0.0.1:6379 npm test
 ```
 
-测试覆盖完整领取—运行—提交—返工重领—批准流程、并发领取、幂等、租约恢复、fencing token、数据库重启持久化、事件等待、基准提交验证、worktree 恢复、relay 签名/权限/TLS 校验，以及路径/符号链接/提交历史范围校验。
+测试覆盖完整领取—运行—提交—返工重领—批准流程、并发领取、幂等、租约恢复、fencing token、数据库重启持久化、事件等待、两个 waker 的游标与投递恢复、Codex App Server 与 ZCode CLI 生命周期、基准提交验证、worktree 恢复、relay 签名/权限/TLS 校验，以及路径/符号链接/提交历史范围校验。
 
-详见：[系统设计](docs/design.md)、[开发指南](docs/development.md)与 [ZCode 使用指南](docs/zcode-usage.md)。
+详见：[系统设计](docs/design.md)、[开发指南](docs/development.md)、[ZCode 使用指南](docs/zcode-usage.md)、[Codex 事件唤醒器指南](docs/codex-waker.md)与 [ZCode 事件唤醒器指南](docs/zcode-waker.md)。
 
 ## 目录结构
 
@@ -587,8 +617,14 @@ concordia/                         # Concordia 源码目录
 │   ├── workspace.ts               # Git/worktree、路径范围
 │   ├── relay-protocol.ts          # relay 签名信封与安全校验
 │   ├── relay-client.ts            # Redis 模式 MCP client
-│   └── relay.ts                   # Redis Streams coordinator
-├── tests/                         # 核心与 relay 测试
+│   ├── relay.ts                   # Redis Streams coordinator
+│   ├── codex-app-server.ts        # Codex App Server JSONL 客户端
+│   ├── zcode-cli.ts               # ZCode headless CLI 客户端
+│   ├── waker-source.ts            # SQLite/Redis 共享事件源
+│   ├── codex-waker.ts             # 事件过滤、唤醒与重试循环
+│   ├── zcode-waker.ts             # ZCode CLI 事件唤醒与重试循环
+│   └── waker-state.ts             # 独立游标、线程和投递状态库
+├── tests/                         # 核心、relay、CLI 与 waker 测试
 ├── marketplace.json               # ZCode 本地/GitHub marketplace 入口
 ├── zcode-plugin/                  # 可加载的 ZCode 本地插件
 │   ├── .mcp.json
@@ -596,9 +632,13 @@ concordia/                         # Concordia 源码目录
 │   └── commands/                  # /tasks、/task、/watch
 ├── docs/
 │   ├── zcode-usage.md            # ZCode 待办、监听与执行指南
+│   ├── codex-waker.md            # Codex 事件驱动唤醒与部署
+│   ├── zcode-waker.md            # ZCode 事件驱动唤醒与部署
 │   ├── design.md
 │   └── development.md
 ├── package.json
+├── .env.waker.example             # Codex waker 环境变量模板
+├── .env.zcode-waker.example       # ZCode waker 环境变量模板
 └── tsconfig.json
 
 <目标 Git 仓库>/
@@ -628,12 +668,13 @@ Concordia 使用 [MIT License](LICENSE) 开源。你可以自由使用、复制�
 | `PATH_SCOPE_VIOLATION` / 提交被拒绝 | 核对 `ownedPaths`/`excludedPaths`；最终 diff、中间提交与未提交改动必须全部在允许范围内。 |
 | 提交不是当前 HEAD | 在当前 `task.worktreePath` 中提交，并传 `git rev-parse HEAD` 的完整 SHA。 |
 | SQLite 初始化被锁定 | 稍后重试；初始化有有限重试。若持续发生，检查异常进程是否占用同一数据库。 |
+| `waker.event_failed` 反复出现 | 检查 Codex CLI 登录、App Server、Codex 端 Concordia MCP 与 `waker.db` 中的 `last_error`。 |
 
 ## 当前限制
 
-- 当前版本为 `0.2.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
+- 当前版本为 `0.4.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
 - Node 的 `node:sqlite` 在部分 Node 22 发行版可能显示实验性 API 警告；采用前请按自身 Node 策略评估。
 - Redis relay 当前只支持单活动协调器，不提供多协调器高可用、远程备份或自动清理旧 attempt worktree。
 - `timeoutSeconds`、`delegation.maxConcurrency`、`delegation.mode` 不会被运行时强制调度或限流。
-- `wait_events` 是最多 60 秒的轮询等待；调用方维护 `afterEventId` 并决定是否继续观察。
+- `wait_events` 是最多 60 秒的轮询等待；交互会话需自行维护游标。可选 `codex-waker` 与 `zcode-waker` 能在模型外持久监听并按事件启动或恢复对应代理 turn。
 - 提交路径校验不替代人工/自动代码审查、CI、合并策略和发布流程。

@@ -1,6 +1,6 @@
 {
   "name": "concordia",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
   "description": "Local-first MCP coordination runtime for Codex and ZCode with an optional Redis relay",
@@ -12,7 +12,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "start": "node dist/src/index.js",
-    "start:relay": "node dist/src/relay.js"
+    "start:relay": "node dist/src/relay.js",
+    "start:waker": "node dist/src/codex-waker.js",
+    "start:zcode-waker": "node dist/src/zcode-waker.js"
   },
   "engines": {
     "node": ">=22.13"

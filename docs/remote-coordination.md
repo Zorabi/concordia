@@ -1,6 +1,6 @@
 # 使用 Redis 进行跨机器协调
 
-Concordia 0.2 提供可选 Redis relay。它适用于 Codex 与 ZCode 不在同一台机器、双方都没有公网 IP，但都能主动访问同一个 Redis 服务的场景。
+Concordia 0.4 提供可选 Redis relay。它适用于 Codex 与 ZCode 不在同一台机器、双方都没有公网 IP，但都能主动访问同一个 Redis 服务的场景。
 
 是否使用 Redis 由每个 MCP 客户端的 `CONCORDIA_TRANSPORT` 决定：
 
@@ -166,7 +166,32 @@ ZCode 有两种选择。
 5. ZCode 领取后确认 `task.worktreePath` 存在于 ZCode 主机。
 6. ZCode 提交任务，Codex 应能通过 `get_task` 看到 `REVIEW`。
 
-如果需要持续弹出提醒，在 ZCode 保持 `/watch` 对应会话或使用使用指南中的持续监听提示；Concordia 提供 durable event cursor，但是否显示系统通知由 ZCode 客户端的通知设置决定。
+若需要在新任务、回答或返工时按需恢复 ZCode，而不是让 ZCode 会话持续轮询，可在 ZCode/Git 机器额外启动：
+
+```sh
+CONCORDIA_TRANSPORT=redis \
+CONCORDIA_REDIS_URL='rediss://concordia-user:<redis-password>@redis.example.com:6379/0' \
+CONCORDIA_RELAY_NAMESPACE='team-a' \
+CONCORDIA_RELAY_ZCODE_TOKEN='<zcode-token>' \
+CONCORDIA_ZCODE_WAKER_DB='/var/lib/concordia/zcode-waker.db' \
+npm run start:zcode-waker
+```
+
+`zcode-waker` 必须和 ZCode CLI、目标 Git 工作区位于同一台机器。它先精确领取任务并绑定返回的 worktree，再通过 `--prompt --json --surface terminal --mode build` 创建会话，并用 `--resume sess_*` 恢复；空闲不调用模型。Concordia 不调用 Computer Use，也不覆盖 ZCode agent 的工具策略。CLI 子进程不会继承 waker 的 Redis URL、角色 token 或 API key，因此 ZCode 内的 Concordia MCP 需要独立连接配置。完整说明见 [ZCode 事件唤醒器指南](zcode-waker.md)。
+
+若要在 ZCode 提交、提问或失败时按需启动 Codex，而不是让 Codex 会话持续轮询，可在 Codex 机器额外启动：
+
+```sh
+CONCORDIA_TRANSPORT=redis \
+CONCORDIA_REDIS_URL='rediss://concordia-user:<redis-password>@redis.example.com:6379/0' \
+CONCORDIA_RELAY_NAMESPACE='team-a' \
+CONCORDIA_RELAY_CODEX_TOKEN='<codex-token>' \
+CONCORDIA_WAKER_DB='/Users/me/.local/state/concordia/waker.db' \
+CONCORDIA_WAKER_CWD='/Users/me/src/example-app' \
+npm run start:waker
+```
+
+远程任务记录的是 ZCode 主机路径，所以 `CONCORDIA_WAKER_CWD` 必须指向 Codex 机器上实际存在的目录。若需要独立审查完整 diff，还必须把待审 Git commit 同步到该机器。完整说明见 [Codex 事件唤醒器指南](codex-waker.md)。
 
 ## 8. 安全与可靠性
 
@@ -174,7 +199,7 @@ ZCode 有两种选择。
 - 请求包含时间戳和 nonce；默认允许 60 秒时钟偏差，nonce 默认保留 300 秒以拒绝重放。两台机器应启用时间同步。
 - 响应按 request/client ID 隔离并自动过期；默认请求超时 75 秒，覆盖 `wait_events` 的最长 60 秒等待。
 - Redis Streams consumer group 保存未确认请求；协调器重启后会回收闲置 pending entry。所有写操作仍应使用稳定且唯一的 `idempotencyKey`。
-- `claim_task` 本身没有业务幂等键；若领取调用超时，先用 `list_tasks` 按 assignee/workspace 对账，再决定是否再次领取，避免误领下一项任务。
+- `claim_task` 本身没有业务幂等键；若领取调用超时，先用 `get_task` 或 `list_tasks` 对账，再决定是否再次领取。由 `zcode-waker` 处理事件时始终传入事件的 `taskId`，避免误领下一项任务。
 - `rediss://` 是远程默认要求。只有可信开发网络可显式设置 `CONCORDIA_RELAY_ALLOW_INSECURE=true` 使用明文 `redis://`。
 - 日志不会打印 Redis URL、角色令牌或任务 payload。仍应限制日志、进程环境和配置文件的读取权限。
 - `request_changes` 会让任务回到 `READY` 并清除旧租约。ZCode 必须重新 `claim_task` 获取新 attempt 和新 token。

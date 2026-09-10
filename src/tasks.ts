@@ -189,6 +189,7 @@ export class TaskService {
 
   claimTask(input: ClaimTaskInput): ClaimTaskResult {
     const agentId = requireNonEmptyString(input.agentId, "agentId");
+    const taskId = input.taskId === undefined ? undefined : requireNonEmptyString(input.taskId, "taskId");
     const seconds = validateLeaseSeconds(input.leaseSeconds);
     const workspaceFilter = input.workspace === undefined ? undefined : this.workspace.resolveWorkspace(input.workspace);
     const now = new Date().toISOString();
@@ -198,6 +199,10 @@ export class TaskService {
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))",
       ];
       const parameters: Array<string> = [now];
+      if (taskId !== undefined) {
+        clauses.push("id = ?");
+        parameters.push(taskId);
+      }
       if (workspaceFilter !== undefined) {
         clauses.push("workspace = ?");
         parameters.push(workspaceFilter);

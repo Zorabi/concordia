@@ -100,7 +100,7 @@ export function createMcpServer(
   service: ConcordiaService,
   configuredRole: ActorRole,
 ): McpServer {
-  const server = new McpServer({ name: "concordia", version: "0.2.0" });
+  const server = new McpServer({ name: "concordia", version: "0.4.0" });
 
   const requireRole = (role: ActorRole) => {
     if (configuredRole !== role) {
@@ -117,9 +117,10 @@ export function createMcpServer(
   }));
 
   server.registerTool("claim_task", {
-    description: "Atomically claim the oldest matching READY task. Preserve the returned leaseToken for every executor write.",
+    description: "Atomically claim a specific task or the oldest matching READY task. Preserve the returned leaseToken for every executor write.",
     inputSchema: {
       agentId: z.string().min(1),
+      taskId: z.string().min(1).optional(),
       workspace: z.string().min(1).optional(),
       leaseSeconds: z.number().int().positive().max(3600).optional(),
     },

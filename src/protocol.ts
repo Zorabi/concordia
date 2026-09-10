@@ -152,6 +152,7 @@ export interface CreateTaskResult {
 
 export interface ClaimTaskInput {
   agentId: string;
+  taskId?: string;
   workspace?: string;
   leaseSeconds?: number;
 }
