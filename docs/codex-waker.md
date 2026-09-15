@@ -43,7 +43,7 @@ Codex App Server 使用稳定的 `initialize`、`thread/start`、`thread/resume`
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_ROOTS='/Users/me/src/example-app' \
+CONCORDIA_CONFIG_FILE='/Users/me/.config/concordia/roots.json' \
 CONCORDIA_DB='/Users/me/src/example-app/.concordia/state.db' \
 CONCORDIA_WAKER_DB='/Users/me/src/example-app/.concordia/waker.db' \
 npm run start:waker
@@ -82,6 +82,7 @@ npm run start:waker
 | 环境变量 | 默认值 | 作用 |
 | --- | --- | --- |
 | `CONCORDIA_WAKER_DB` | `<cwd>/.concordia/waker.db` | 独立保存事件游标、任务线程映射和投递结果 |
+| `CONCORDIA_CONFIG_FILE` | 无 | stdio 模式共享授权 JSON 的绝对路径；每次工作区授权校验加载，优先于 `CONCORDIA_ROOTS` |
 | `CONCORDIA_WAKER_CWD` | worktree、workspace 或启动目录 | Codex 审查线程的工作目录，必须为存在的绝对路径 |
 | `CONCORDIA_CODEX_BIN` | `codex` | Codex CLI 可执行文件 |
 | `CONCORDIA_WAKER_MODEL` | Codex 默认模型 | 可选模型覆盖 |
@@ -93,6 +94,8 @@ npm run start:waker
 | `CONCORDIA_WAKER_MAX_RETRY_DELAY_MS` | `300000` | 指数退避上限 |
 
 不要把 Redis URL、角色 token 或其他凭据放进命令历史。长期运行时应通过 launchd、systemd、容器 secret 或进程管理器注入环境变量。
+
+单机 waker 应与 Codex MCP、ZCode MCP、`zcode-waker` 和 relay coordinator（如有）指向同一个 `CONCORDIA_CONFIG_FILE`。变更该 JSON 的 `allowedRoots` 在下一次工作区授权校验生效，无需重启 waker；首次设置或更换变量路径时才需要重启。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。文件格式、原子更新与权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
 
 ## 6. 可靠性语义
 

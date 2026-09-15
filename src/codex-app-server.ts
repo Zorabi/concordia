@@ -217,7 +217,7 @@ export class CodexAppServerClient implements CodexAutomationClient {
         clientInfo: {
           name: "concordia_waker",
           title: "Concordia Waker",
-          version: "0.4.0",
+          version: "0.5.0",
         },
         capabilities: {
           experimentalApi: false,

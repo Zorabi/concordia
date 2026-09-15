@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "allowedRoots": [
+    "/absolute/path/to/repositories"
+  ]
+}

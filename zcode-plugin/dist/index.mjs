@@ -44890,7 +44890,7 @@ var StdioServerTransport = class {
 };
 
 // src/index.ts
-import { realpathSync as realpathSync2 } from "node:fs";
+import { realpathSync as realpathSync3 } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // src/database.ts
@@ -44932,6 +44932,24 @@ var ConcordiaDatabase = class {
   transaction(operation) {
     if (this.transactionDepth > 0) return operation();
     this.connection.exec("BEGIN IMMEDIATE");
+    this.transactionDepth += 1;
+    try {
+      const result = operation();
+      this.connection.exec("COMMIT");
+      return result;
+    } catch (error2) {
+      try {
+        this.connection.exec("ROLLBACK");
+      } catch {
+      }
+      throw error2;
+    } finally {
+      this.transactionDepth -= 1;
+    }
+  }
+  readTransaction(operation) {
+    if (this.transactionDepth > 0) return operation();
+    this.connection.exec("BEGIN");
     this.transactionDepth += 1;
     try {
       const result = operation();
@@ -45173,16 +45191,146 @@ init_protocol();
 
 // src/workspace.ts
 init_protocol();
-import { existsSync, lstatSync, mkdirSync as mkdirSync2, realpathSync } from "node:fs";
-import { delimiter, dirname as dirname2, isAbsolute, relative, resolve as resolve2, sep } from "node:path";
+import { existsSync, lstatSync, mkdirSync as mkdirSync2, realpathSync as realpathSync2 } from "node:fs";
+import { delimiter, dirname as dirname2, isAbsolute as isAbsolute2, relative, resolve as resolve2, sep } from "node:path";
 import { execFileSync } from "node:child_process";
+
+// src/workspace-config.ts
+init_protocol();
+import { readFileSync, realpathSync } from "node:fs";
+import { isAbsolute } from "node:path";
+import { performance as performance2 } from "node:perf_hooks";
+var DEFAULT_STALE_GRACE_MS = 5e3;
+var MAX_STALE_GRACE_MS = 6e4;
+function parseWorkspaceConfigStaleGraceMs(value) {
+  if (value === void 0) return DEFAULT_STALE_GRACE_MS;
+  if (!/^\d+$/.test(value)) {
+    throw staleGraceError();
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_STALE_GRACE_MS) {
+    throw staleGraceError();
+  }
+  return parsed;
+}
+function staleGraceError() {
+  return new ConcordiaException(
+    "INVALID_INPUT",
+    `CONCORDIA_CONFIG_STALE_GRACE_MS must be an integer between 0 and ${MAX_STALE_GRACE_MS}`
+  );
+}
+function configError(message) {
+  return new ConcordiaException("INVALID_INPUT", `CONCORDIA_CONFIG_FILE ${message}`);
+}
+function parseConfig(contents) {
+  let value;
+  try {
+    value = JSON.parse(contents);
+  } catch {
+    throw configError("must contain valid JSON");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw configError("must contain a JSON object");
+  }
+  const config2 = value;
+  if (config2.version !== 1) {
+    throw configError("must specify version 1");
+  }
+  if (!Array.isArray(config2.allowedRoots) || config2.allowedRoots.length === 0) {
+    throw configError("must contain at least one allowed root");
+  }
+  if (config2.allowedRoots.some((root) => typeof root !== "string" || root.trim() === "" || !isAbsolute(root))) {
+    throw configError("allowedRoots must contain only non-empty absolute paths");
+  }
+  return { version: 1, allowedRoots: config2.allowedRoots };
+}
+function canonicalizeRoots(roots, source) {
+  const canonical = roots.map((root) => {
+    try {
+      return realpathSync(root);
+    } catch {
+      if (source === "config") throw configError("contains an allowed root that does not exist");
+      throw new ConcordiaException("WORKSPACE_DENIED", "An allowed workspace root does not exist");
+    }
+  });
+  return [...new Set(canonical)];
+}
+var WorkspaceRootsConfig = class _WorkspaceRootsConfig {
+  constructor(configFile, initialRoots, staleGraceMs = DEFAULT_STALE_GRACE_MS, monotonicNow = () => performance2.now()) {
+    this.configFile = configFile;
+    this.staleGraceMs = staleGraceMs;
+    this.monotonicNow = monotonicNow;
+    this.lastKnownGood = initialRoots;
+    this.lastLoadedAt = this.monotonicNow();
+  }
+  lastKnownGood;
+  lastLoadedAt;
+  reloadFailure;
+  static fromFile(configFile, staleGraceMs = DEFAULT_STALE_GRACE_MS, monotonicNow = () => performance2.now()) {
+    if (configFile === "" || !isAbsolute(configFile)) {
+      throw configError("must be a non-empty absolute path");
+    }
+    if (!Number.isInteger(staleGraceMs) || staleGraceMs < 0 || staleGraceMs > MAX_STALE_GRACE_MS) {
+      throw staleGraceError();
+    }
+    const roots = _WorkspaceRootsConfig.readFile(configFile);
+    return new _WorkspaceRootsConfig(configFile, roots, staleGraceMs, monotonicNow);
+  }
+  static fromRoots(roots) {
+    if (roots.length === 0) {
+      throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_ROOTS must contain at least one allowed root");
+    }
+    return new _WorkspaceRootsConfig(void 0, canonicalizeRoots(roots, "environment"));
+  }
+  getAllowedRoots() {
+    if (this.configFile === void 0) return this.lastKnownGood;
+    try {
+      this.lastKnownGood = _WorkspaceRootsConfig.readFile(this.configFile);
+      this.lastLoadedAt = this.monotonicNow();
+      if (this.reloadFailure !== void 0) {
+        this.reloadFailure = void 0;
+        _WorkspaceRootsConfig.log("info", "workspace_config.reloaded");
+      }
+    } catch (error2) {
+      if (this.reloadFailure === void 0) {
+        const failure = error2 instanceof ConcordiaException ? error2 : configError("could not be reloaded");
+        this.reloadFailure = failure;
+        _WorkspaceRootsConfig.log("error", "workspace_config.reload_failed", failure);
+      }
+      if (this.staleGraceMs === 0 || this.monotonicNow() - this.lastLoadedAt > this.staleGraceMs) {
+        throw this.reloadFailure;
+      }
+    }
+    return this.lastKnownGood;
+  }
+  static log(level, event, error2) {
+    const diagnostic = error2 instanceof ConcordiaException ? { code: error2.code, message: error2.message } : { code: "INVALID_INPUT", message: "CONCORDIA_CONFIG_FILE could not be reloaded" };
+    console.error(JSON.stringify({
+      level,
+      event,
+      ...error2 === void 0 ? {} : { error: diagnostic },
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    }));
+  }
+  static readFile(configFile) {
+    let contents;
+    try {
+      contents = readFileSync(configFile, "utf8");
+    } catch {
+      throw configError("does not exist or cannot be read");
+    }
+    return canonicalizeRoots(parseConfig(contents).allowedRoots, "config");
+  }
+};
+
+// src/workspace.ts
 function parseConfiguredRoots(value) {
   if (!value) return [];
   return value.split(delimiter).flatMap((part) => part.split(",")).map((part) => part.trim()).filter(Boolean);
 }
 function isWithin(parent, child) {
   const pathFromParent = relative(parent, child);
-  return pathFromParent === "" || !pathFromParent.startsWith(`..${sep}`) && pathFromParent !== ".." && !isAbsolute(pathFromParent);
+  return pathFromParent === "" || !pathFromParent.startsWith(`..${sep}`) && pathFromParent !== ".." && !isAbsolute2(pathFromParent);
 }
 function normalizeRelativePath(input, field) {
   if (typeof input !== "string" || input.trim() === "" || input.includes("\0")) {
@@ -45205,33 +45353,53 @@ function matchesScope(file, scope) {
   return file === scope || file.startsWith(`${scope}/`);
 }
 var WorkspaceManager = class {
-  allowedRoots;
-  constructor(roots = parseConfiguredRoots(process.env.CONCORDIA_ROOTS)) {
-    if (roots.length === 0) {
-      throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_ROOTS must contain at least one allowed root");
+  rootsConfig;
+  constructor(roots) {
+    if (roots !== void 0) {
+      this.rootsConfig = WorkspaceRootsConfig.fromRoots(roots);
+      return;
     }
-    this.allowedRoots = roots.map((root) => {
-      try {
-        return realpathSync(root);
-      } catch {
-        throw new ConcordiaException("WORKSPACE_DENIED", "An allowed workspace root does not exist");
-      }
-    });
+    const configFile = process.env.CONCORDIA_CONFIG_FILE;
+    this.rootsConfig = configFile === void 0 ? WorkspaceRootsConfig.fromRoots(parseConfiguredRoots(process.env.CONCORDIA_ROOTS)) : WorkspaceRootsConfig.fromFile(
+      configFile.trim(),
+      parseWorkspaceConfigStaleGraceMs(process.env.CONCORDIA_CONFIG_STALE_GRACE_MS)
+    );
+  }
+  get allowedRoots() {
+    return this.rootsConfig.getAllowedRoots();
+  }
+  authorizationSnapshot() {
+    const allowedRoots = this.rootsConfig.getAllowedRoots();
+    return {
+      fingerprint: allowedRoots.join("\0"),
+      assertWorkspaceAllowed: (workspace) => this.assertWorkspaceAllowedWithin(workspace, allowedRoots),
+      resolveWorkspace: (workspace) => this.resolveWorkspaceWithin(workspace, allowedRoots)
+    };
+  }
+  assertWorkspaceAllowed(workspace) {
+    return this.authorizationSnapshot().assertWorkspaceAllowed(workspace);
   }
   resolveWorkspace(workspace) {
+    return this.authorizationSnapshot().resolveWorkspace(workspace);
+  }
+  assertWorkspaceAllowedWithin(workspace, allowedRoots) {
     let canonical;
     try {
-      canonical = realpathSync(workspace);
+      canonical = realpathSync2(workspace);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace does not exist or cannot be accessed");
     }
-    if (!this.allowedRoots.some((root) => isWithin(root, canonical))) {
+    if (!allowedRoots.some((root) => isWithin(root, canonical))) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace is outside the configured roots");
     }
+    return canonical;
+  }
+  resolveWorkspaceWithin(workspace, allowedRoots) {
+    const canonical = this.assertWorkspaceAllowedWithin(workspace, allowedRoots);
     const gitRoot = this.git(canonical, ["rev-parse", "--show-toplevel"], "WORKSPACE_DENIED", "Workspace is not a Git repository");
     let canonicalGitRoot;
     try {
-      canonicalGitRoot = realpathSync(gitRoot);
+      canonicalGitRoot = realpathSync2(gitRoot);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Git workspace cannot be resolved");
     }
@@ -45240,8 +45408,8 @@ var WorkspaceManager = class {
     }
     return canonical;
   }
-  validateSpec(spec) {
-    const workspace = this.resolveWorkspace(spec.workspace);
+  validateSpec(spec, authorization = this.authorizationSnapshot()) {
+    const workspace = authorization.resolveWorkspace(spec.workspace);
     const ownedPaths = this.validateScopes(workspace, spec.ownedPaths, "ownedPaths");
     const excludedPaths = spec.excludedPaths === void 0 ? void 0 : this.validateScopes(workspace, spec.excludedPaths, "excludedPaths");
     const baseCommit = this.resolveCommit(workspace, spec.baseCommit ?? "HEAD", "BASE_COMMIT_MISMATCH");
@@ -45260,8 +45428,8 @@ var WorkspaceManager = class {
     }
     return actual;
   }
-  ensureWorktree(taskId, workspaceInput, baseCommit, attempt, previousWorktreePath) {
-    const workspace = this.resolveWorkspace(workspaceInput);
+  ensureWorktree(taskId, workspaceInput, baseCommit, attempt, previousWorktreePath, authorization = this.authorizationSnapshot()) {
+    const workspace = authorization.resolveWorkspace(workspaceInput);
     this.assertBaseCommit(workspace, baseCommit);
     if (!Number.isInteger(attempt) || attempt < 1) {
       throw new ConcordiaException("INVALID_INPUT", "Worktree attempt must be a positive integer");
@@ -45280,7 +45448,7 @@ var WorkspaceManager = class {
     }
     let worktreesDirectory;
     try {
-      worktreesDirectory = realpathSync(requestedWorktreesDirectory);
+      worktreesDirectory = realpathSync2(requestedWorktreesDirectory);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Worktree directory cannot be resolved");
     }
@@ -45292,12 +45460,12 @@ var WorkspaceManager = class {
       throw new ConcordiaException("WORKSPACE_DENIED", "Worktree path escapes the repository");
     }
     if (existsSync(worktreePath)) {
-      const canonicalWorktree2 = realpathSync(worktreePath);
+      const canonicalWorktree2 = realpathSync2(worktreePath);
       if (!isWithin(workspace, canonicalWorktree2)) {
         throw new ConcordiaException("WORKSPACE_DENIED", "Existing worktree resolves outside the repository");
       }
       const actualRoot = this.git(canonicalWorktree2, ["rev-parse", "--show-toplevel"], "WORKSPACE_DENIED", "Existing worktree is invalid");
-      if (realpathSync(actualRoot) !== canonicalWorktree2) {
+      if (realpathSync2(actualRoot) !== canonicalWorktree2) {
         throw new ConcordiaException("WORKSPACE_DENIED", "Existing worktree is not the expected Git root");
       }
       this.assertAncestor(canonicalWorktree2, baseCommit, "HEAD");
@@ -45312,17 +45480,17 @@ var WorkspaceManager = class {
       this.assertAncestor(workspace, baseCommit, branch);
       this.git(workspace, ["worktree", "add", worktreePath, branch], "INTERNAL_ERROR", "Unable to recover task worktree");
     }
-    const canonicalWorktree = realpathSync(worktreePath);
+    const canonicalWorktree = realpathSync2(worktreePath);
     if (!isWithin(workspace, canonicalWorktree)) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Created worktree resolves outside the repository");
     }
     return { workspace, worktreePath: canonicalWorktree, baseCommit, created: true };
   }
-  verifySubmission(input) {
-    const workspace = this.resolveWorkspace(input.workspace);
+  verifySubmission(input, authorization = this.authorizationSnapshot()) {
+    const workspace = authorization.resolveWorkspace(input.workspace);
     let worktreePath;
     try {
-      worktreePath = realpathSync(input.worktreePath);
+      worktreePath = realpathSync2(input.worktreePath);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Task worktree does not exist");
     }
@@ -45400,12 +45568,12 @@ var WorkspaceManager = class {
         if (parent === existing) break;
         existing = parent;
       }
-      const canonicalParent = realpathSync(existing);
+      const canonicalParent = realpathSync2(existing);
       if (!isWithin(workspace, canonicalParent)) {
         throw new ConcordiaException("PATH_SCOPE_VIOLATION", `${field}[${index}] resolves outside the workspace`);
       }
       if (existsSync(candidate) && lstatSync(candidate).isSymbolicLink()) {
-        const canonical = realpathSync(candidate);
+        const canonical = realpathSync2(candidate);
         if (!isWithin(workspace, canonical)) {
           throw new ConcordiaException("PATH_SCOPE_VIOLATION", `${field}[${index}] is a symlink outside the workspace`);
         }
@@ -45425,7 +45593,7 @@ var WorkspaceManager = class {
     if (previousWorktreePath === void 0 || !existsSync(previousWorktreePath)) return baseCommit;
     let previousWorktree;
     try {
-      previousWorktree = realpathSync(previousWorktreePath);
+      previousWorktree = realpathSync2(previousWorktreePath);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Previous task worktree cannot be resolved");
     }
@@ -45438,7 +45606,7 @@ var WorkspaceManager = class {
       "WORKSPACE_DENIED",
       "Previous task worktree is invalid"
     );
-    if (realpathSync(actualRoot) !== previousWorktree) {
+    if (realpathSync2(actualRoot) !== previousWorktree) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Previous task worktree is not the expected Git root");
     }
     const snapshot = this.resolveCommit(previousWorktree, "HEAD", "BASE_COMMIT_MISMATCH");
@@ -45552,6 +45720,7 @@ var TaskService = class {
     validateIdempotencyKey(idempotencyKey);
     const duplicate = this.events.getByIdempotencyKey(idempotencyKey);
     if (duplicate) {
+      this.assertTaskAllowed(duplicate.taskId);
       if (duplicate.type !== "TASK_CREATED") {
         throw new ConcordiaException("INVALID_INPUT", "idempotencyKey was already used for another operation");
       }
@@ -45560,8 +45729,10 @@ var TaskService = class {
     const spec = this.workspace.validateSpec(validateTaskSpec(specInput));
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return this.database.transaction(() => {
+      const authorization = this.workspace.authorizationSnapshot();
       const duplicateInTransaction = this.events.getByIdempotencyKey(idempotencyKey);
       if (duplicateInTransaction) {
+        this.assertTaskAllowed(duplicateInTransaction.taskId, authorization);
         if (duplicateInTransaction.type !== "TASK_CREATED") {
           throw new ConcordiaException("INVALID_INPUT", "idempotencyKey was already used for another operation");
         }
@@ -45572,6 +45743,7 @@ var TaskService = class {
           created: false
         };
       }
+      authorization.assertWorkspaceAllowed(spec.workspace);
       const existingTask = this.getTaskRow(spec.id);
       if (existingTask) throw new ConcordiaException("INVALID_INPUT", "Task ID already exists");
       this.database.connection.prepare(`
@@ -45592,12 +45764,19 @@ var TaskService = class {
     });
   }
   claimTask(input) {
+    const initialAuthorization = this.workspace.authorizationSnapshot();
     const agentId = requireNonEmptyString(input.agentId, "agentId");
     const taskId = input.taskId === void 0 ? void 0 : requireNonEmptyString(input.taskId, "taskId");
     const seconds = validateLeaseSeconds(input.leaseSeconds);
-    const workspaceFilter = input.workspace === void 0 ? void 0 : this.workspace.resolveWorkspace(input.workspace);
+    const workspaceFilter = input.workspace === void 0 ? void 0 : initialAuthorization.resolveWorkspace(input.workspace);
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return this.database.transaction(() => {
+      const authorization = this.workspace.authorizationSnapshot();
+      if (workspaceFilter !== void 0) authorization.assertWorkspaceAllowed(workspaceFilter);
+      if (taskId !== void 0) {
+        const targetedRow = this.getTaskRow(taskId);
+        if (targetedRow !== void 0) this.assertTaskRowAllowed(targetedRow, authorization);
+      }
       const clauses = [
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))"
       ];
@@ -45610,12 +45789,21 @@ var TaskService = class {
         clauses.push("workspace = ?");
         parameters.push(workspaceFilter);
       }
-      const row = this.database.connection.prepare(`
+      const statement = this.database.connection.prepare(`
         SELECT * FROM tasks
         WHERE ${clauses.join(" AND ")}
         ORDER BY CASE WHEN status = 'READY' THEN 0 ELSE 1 END, created_at ASC
-        LIMIT 1
-      `).get(...parameters);
+        LIMIT ? OFFSET ?
+      `);
+      const batchSize = 100;
+      let offset = 0;
+      let row;
+      do {
+        const rows = statement.all(...parameters, batchSize, offset);
+        row = rows.find((candidate) => this.isTaskRowAllowed(candidate, authorization));
+        if (row !== void 0 || rows.length < batchSize) break;
+        offset += rows.length;
+      } while (true);
       if (!row) return { task: null };
       if (!row.base_commit) {
         throw new ConcordiaException("BASE_COMMIT_MISMATCH", "Task has no resolved base commit");
@@ -45626,8 +45814,10 @@ var TaskService = class {
         row.workspace,
         row.base_commit,
         attempt,
-        row.worktree_path ?? void 0
+        row.worktree_path ?? void 0,
+        authorization
       );
+      this.workspace.assertWorkspaceAllowed(row.workspace);
       const until = leaseUntil(seconds);
       const token = newLeaseToken();
       const result = this.database.connection.prepare(`
@@ -45670,6 +45860,7 @@ var TaskService = class {
     };
   }
   listTasks(input = {}) {
+    const authorization = this.workspace.authorizationSnapshot();
     const limit = input.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new ConcordiaException("INVALID_INPUT", "Task limit must be an integer from 1 to 100");
@@ -45686,7 +45877,7 @@ var TaskService = class {
     }
     if (input.workspace !== void 0) {
       clauses.push("workspace = ?");
-      parameters.push(this.workspace.resolveWorkspace(input.workspace));
+      parameters.push(authorization.resolveWorkspace(input.workspace));
     }
     if (input.updatedAfter !== void 0) {
       if (!Number.isFinite(Date.parse(input.updatedAfter))) {
@@ -45695,14 +45886,30 @@ var TaskService = class {
       clauses.push("updated_at > ?");
       parameters.push(input.updatedAfter);
     }
-    parameters.push(limit);
     const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
-    return this.database.connection.prepare(`
-      SELECT * FROM tasks ${where} ORDER BY updated_at DESC, created_at ASC LIMIT ?
-    `).all(...parameters).map(parseTask);
+    return this.database.readTransaction(() => {
+      const statement = this.database.connection.prepare(`
+        SELECT * FROM tasks ${where} ORDER BY updated_at DESC, created_at ASC, id ASC LIMIT ? OFFSET ?
+      `);
+      const tasks = [];
+      const batchSize = 100;
+      let offset = 0;
+      do {
+        const rows = statement.all(...parameters, batchSize, offset);
+        for (const row of rows) {
+          if (!this.isTaskRowAllowed(row, authorization)) continue;
+          tasks.push(parseTask(row));
+          if (tasks.length === limit) return tasks;
+        }
+        if (rows.length < batchSize) break;
+        offset += rows.length;
+      } while (true);
+      return tasks;
+    });
   }
   sendEvent(input) {
     validateIdempotencyKey(input.idempotencyKey);
+    this.assertTaskAllowed(input.taskId);
     const duplicate = this.events.getByIdempotencyKey(input.idempotencyKey);
     if (duplicate) return this.validateDuplicateEvent(duplicate, input);
     const allowed = input.sender === "codex" ? /* @__PURE__ */ new Set(["ANSWER", "CANCELLED"]) : input.sender === "zcode" ? /* @__PURE__ */ new Set(["PROGRESS", "QUESTION", "AGENT_STATUS", "HEARTBEAT", "FAILED"]) : /* @__PURE__ */ new Set();
@@ -45779,10 +45986,43 @@ var TaskService = class {
     });
   }
   async waitEvents(input) {
-    return this.events.waitEvents(input);
+    if (input.taskId !== void 0) {
+      const row = this.getTaskRow(input.taskId);
+      if (row !== void 0) this.assertTaskRowAllowed(row);
+    }
+    const timeoutMs = input.timeoutMs ?? 3e4;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 6e4) {
+      throw new ConcordiaException("INVALID_INPUT", "timeoutMs must be an integer from 0 to 60000");
+    }
+    const limit = input.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new ConcordiaException("INVALID_INPUT", "Event limit must be an integer from 1 to 100");
+    }
+    if (!Number.isInteger(input.afterEventId) || input.afterEventId < 0) {
+      throw new ConcordiaException("INVALID_INPUT", "afterEventId must be a non-negative integer");
+    }
+    const deadline = Date.now() + timeoutMs;
+    let scanAfterEventId = input.afterEventId;
+    let authorizationFingerprint;
+    do {
+      const authorization = this.workspace.authorizationSnapshot();
+      if (authorizationFingerprint !== authorization.fingerprint) {
+        authorizationFingerprint = authorization.fingerprint;
+        scanAfterEventId = input.afterEventId;
+      }
+      if (input.taskId !== void 0) {
+        const row = this.getTaskRow(input.taskId);
+        if (row !== void 0) this.assertTaskRowAllowed(row, authorization);
+      }
+      const scan = this.listAllowedEvents(input, limit, authorization, scanAfterEventId);
+      scanAfterEventId = scan.scannedThroughEventId;
+      if (scan.events.length > 0 || Date.now() >= deadline) return scan.events;
+      await new Promise((resolve3) => setTimeout(resolve3, Math.min(500, deadline - Date.now())));
+    } while (true);
   }
   submitTask(submission, expectedVersion) {
     validateIdempotencyKey(submission.idempotencyKey);
+    this.assertTaskAllowed(submission.taskId);
     const duplicate = this.events.getByIdempotencyKey(submission.idempotencyKey);
     if (duplicate) {
       this.assertDuplicateSubmission(duplicate, submission);
@@ -45862,6 +46102,7 @@ var TaskService = class {
   }
   reviewTask(input) {
     validateIdempotencyKey(input.idempotencyKey);
+    this.assertTaskAllowed(input.taskId);
     const duplicate = this.events.getByIdempotencyKey(input.idempotencyKey);
     if (duplicate) {
       this.assertDuplicateReview(duplicate, input);
@@ -45990,7 +46231,61 @@ var TaskService = class {
   requireTaskRow(taskId) {
     const row = this.getTaskRow(taskId);
     if (!row) throw new ConcordiaException("TASK_NOT_FOUND", "Task was not found");
+    this.assertTaskRowAllowed(row);
     return row;
+  }
+  assertTaskAllowed(taskId, authorization = this.workspace.authorizationSnapshot()) {
+    this.assertTaskRowAllowed(this.requireExistingTaskRow(taskId), authorization);
+  }
+  requireExistingTaskRow(taskId) {
+    const row = this.getTaskRow(taskId);
+    if (!row) throw new ConcordiaException("TASK_NOT_FOUND", "Task was not found");
+    return row;
+  }
+  assertTaskRowAllowed(row, authorization = this.workspace.authorizationSnapshot()) {
+    authorization.assertWorkspaceAllowed(row.workspace);
+  }
+  isTaskRowAllowed(row, authorization) {
+    try {
+      this.assertTaskRowAllowed(row, authorization);
+      return true;
+    } catch (error2) {
+      if (error2 instanceof ConcordiaException && error2.code === "WORKSPACE_DENIED") return false;
+      throw error2;
+    }
+  }
+  listAllowedEvents(input, limit, authorization, initialAfterEventId) {
+    const events = [];
+    let afterEventId = initialAfterEventId;
+    do {
+      const batch = this.events.listEvents({
+        taskId: input.taskId,
+        recipient: input.recipient,
+        afterEventId,
+        limit: 100
+      });
+      if (batch.length === 0) return { events, scannedThroughEventId: afterEventId };
+      const rowsByTaskId = this.getTaskRows(batch.map((event) => event.taskId));
+      for (const event of batch) {
+        const row = rowsByTaskId.get(event.taskId);
+        if (row !== void 0 && this.isTaskRowAllowed(row, authorization)) {
+          events.push(event);
+          if (events.length === limit) {
+            return { events, scannedThroughEventId: event.eventId };
+          }
+        }
+      }
+      afterEventId = batch.at(-1).eventId;
+      if (batch.length < 100) return { events, scannedThroughEventId: afterEventId };
+    } while (true);
+  }
+  getTaskRows(taskIds) {
+    const uniqueTaskIds = [...new Set(taskIds)];
+    if (uniqueTaskIds.length === 0) return /* @__PURE__ */ new Map();
+    const rows = this.database.connection.prepare(`
+      SELECT * FROM tasks WHERE id IN (${uniqueTaskIds.map(() => "?").join(", ")})
+    `).all(...uniqueTaskIds);
+    return new Map(rows.map((row) => [row.id, row]));
   }
   requireTask(taskId) {
     return parseTask(this.requireTaskRow(taskId));
@@ -46047,7 +46342,7 @@ async function invoke(operation) {
   }
 }
 function createMcpServer(service, configuredRole) {
-  const server = new McpServer({ name: "concordia", version: "0.4.0" });
+  const server = new McpServer({ name: "concordia", version: "0.5.0" });
   const requireRole = (role) => {
     if (configuredRole !== role) {
       throw new ConcordiaException("INVALID_INPUT", `The configured ${configuredRole} client cannot call this ${role} tool`);
@@ -46204,7 +46499,7 @@ async function run() {
   await server.connect(new StdioServerTransport());
   console.error(JSON.stringify({ level: "info", event: "server.started", transport }));
 }
-if (process.argv[1] && realpathSync2(process.argv[1]) === realpathSync2(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && realpathSync3(process.argv[1]) === realpathSync3(fileURLToPath(import.meta.url))) {
   run().catch((error2) => {
     const concordiaError = asConcordiaError(error2);
     console.error(JSON.stringify({ level: "error", event: "server.failed", error: concordiaError.toJSON() }));

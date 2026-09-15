@@ -1,6 +1,6 @@
 # 使用 Redis 进行跨机器协调
 
-Concordia 0.4 提供可选 Redis relay。它适用于 Codex 与 ZCode 不在同一台机器、双方都没有公网 IP，但都能主动访问同一个 Redis 服务的场景。
+Concordia 0.5 提供可选 Redis relay。它适用于 Codex 与 ZCode 不在同一台机器、双方都没有公网 IP，但都能主动访问同一个 Redis 服务的场景。
 
 是否使用 Redis 由每个 MCP 客户端的 `CONCORDIA_TRANSPORT` 决定：
 
@@ -77,7 +77,7 @@ CONCORDIA_REDIS_URL='rediss://concordia-user:<redis-password>@redis.example.com:
 CONCORDIA_RELAY_NAMESPACE='team-a' \
 CONCORDIA_RELAY_CODEX_TOKEN='<codex-token>' \
 CONCORDIA_RELAY_ZCODE_TOKEN='<zcode-token>' \
-CONCORDIA_ROOTS='/srv/git/project-a,/srv/git/project-b' \
+CONCORDIA_CONFIG_FILE='/etc/concordia/roots.json' \
 CONCORDIA_DB='/var/lib/concordia/state.db' \
 npm run start:relay
 ```
@@ -105,7 +105,7 @@ CONCORDIA_RELAY_CODEX_TOKEN = "<codex-token>"
 CONCORDIA_RELAY_REQUEST_TIMEOUT_MS = "75000"
 ```
 
-Redis 模式下不要在 Codex 机器配置 `CONCORDIA_DB` 或 `CONCORDIA_ROOTS`，因为它不会访问本地 SQLite 或 Git。保存后重启 MCP server，并调用 `list_tasks` 验证连接。
+Redis 模式下不要在 Codex 机器配置 `CONCORDIA_DB`、`CONCORDIA_CONFIG_FILE` 或 `CONCORDIA_ROOTS`，因为它不会访问本地 SQLite 或 Git。保存后重启 MCP server，并调用 `list_tasks` 验证连接。
 
 创建任务时必须使用协调主机路径，例如 `"workspace": "/srv/git/project-a"`，不能使用 Codex 机器上的检出路径。
 
@@ -148,12 +148,12 @@ ZCode 有两种选择。
 
 ```json
 "CONCORDIA_TRANSPORT": "stdio",
-"CONCORDIA_ROOTS": "/srv/git/project-a",
+"CONCORDIA_CONFIG_FILE": "/etc/concordia/roots.json",
 "CONCORDIA_DB": "/var/lib/concordia/state.db",
 "CONCORDIA_AGENT_ID": "zcode"
 ```
 
-这会让 ZCode MCP 与协调器在同一主机打开同一个 SQLite WAL，适合少量并发。不能把这种配置复制到另一台机器。
+这会让 ZCode MCP 与协调器在同一主机打开同一个 SQLite WAL，适合少量并发。协调器、ZCode MCP 与本机 waker 应使用同一 `CONCORDIA_CONFIG_FILE`；修改其 `allowedRoots` 在下一次工作区授权校验生效。读取失败仅在 stale grace 内沿用 last-known-good，期满 fail-closed，修复后自动恢复。不能把这种配置复制到另一台机器。
 
 无论使用 A 还是 B，插件提供的 `/tasks READY`、`/task <id>` 和 `/watch <id>` 都可照常使用。传输方式不会改变待办列表和事件语义。
 
@@ -214,6 +214,6 @@ npm run start:waker
 | `Redis relay request timed out` | 检查协调器是否运行、namespace 是否一致、Redis ACL/网络是否允许 Streams 命令。 |
 | 签名无效或一直超时 | 核对 Codex/ZCode token 是否与协调器对应，不能混用。 |
 | `Another relay coordinator already holds this namespace` | 已有活动协调器；停止重复进程或使用另一个 namespace。 |
-| `WORKSPACE_DENIED` | `workspace` 必须是 ZCode 主机上 `CONCORDIA_ROOTS` 内的真实 Git 根目录。 |
+| `WORKSPACE_DENIED` | `workspace` 必须是 ZCode 主机上共享配置 `allowedRoots`（或旧版 `CONCORDIA_ROOTS`）内的真实 Git 根目录。 |
 | ZCode 看不到 Codex 创建的任务 | 核对两端 `CONCORDIA_RELAY_NAMESPACE` 和 Redis DB 编号；再用 `list_tasks` 验证。 |
 | `LEASE_CONFLICT` | 租约已过期、已提交、已返工或已重领；重新领取，不要复用旧 token。 |

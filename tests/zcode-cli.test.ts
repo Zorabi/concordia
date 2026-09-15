@@ -152,6 +152,37 @@ process.stdout.write(JSON.stringify({
   assert.equal(result.response, "missing,missing,missing");
 });
 
+test("ZCode CLI child inherits the shared Concordia config path in stdio mode", async (t) => {
+  const command = fakeZCode(t, `
+process.stdout.write(JSON.stringify({
+  sessionId: "sess_shared_config",
+  response: [
+    process.env.CONCORDIA_CONFIG_FILE,
+    process.env.CONCORDIA_CONFIG_STALE_GRACE_MS,
+  ].map((value) => value ?? "missing").join(","),
+}));
+`);
+  const previous = {
+    configFile: process.env.CONCORDIA_CONFIG_FILE,
+    staleGrace: process.env.CONCORDIA_CONFIG_STALE_GRACE_MS,
+    transport: process.env.CONCORDIA_TRANSPORT,
+  };
+  process.env.CONCORDIA_CONFIG_FILE = "/tmp/concordia-config.json";
+  process.env.CONCORDIA_CONFIG_STALE_GRACE_MS = "5000";
+  process.env.CONCORDIA_TRANSPORT = "stdio";
+  t.after(() => {
+    if (previous.configFile === undefined) delete process.env.CONCORDIA_CONFIG_FILE;
+    else process.env.CONCORDIA_CONFIG_FILE = previous.configFile;
+    if (previous.staleGrace === undefined) delete process.env.CONCORDIA_CONFIG_STALE_GRACE_MS;
+    else process.env.CONCORDIA_CONFIG_STALE_GRACE_MS = previous.staleGrace;
+    if (previous.transport === undefined) delete process.env.CONCORDIA_TRANSPORT;
+    else process.env.CONCORDIA_TRANSPORT = previous.transport;
+  });
+
+  const result = await new ZCodeCliClient({ command }).runTurn(process.cwd(), "Review");
+  assert.equal(result.response, "/tmp/concordia-config.json,5000");
+});
+
 test("ZCode CLI rejects malformed JSON output", async (t) => {
   const command = fakeZCode(t, 'process.stdout.write("not-json");');
   const client = new ZCodeCliClient({ command });

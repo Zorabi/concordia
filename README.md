@@ -115,7 +115,7 @@ npm test
 服务使用 stdio，通常由 MCP 客户端启动。以下命令只用于验证进程可启动，随后会等待标准输入上的 MCP 客户端：
 
 ```sh
-CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
 CONCORDIA_AGENT_ID=codex \
 npm start
 ```
@@ -126,7 +126,7 @@ MCP 协议仅写 stdout；启动与错误日志写 stderr。默认数据库为�
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
 CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
 CONCORDIA_WAKER_DB=/absolute/path/to/example-app/.concordia/waker.db \
 npm run start:waker
@@ -139,7 +139,7 @@ waker 空闲时只运行 Node.js 事件循环，不调用模型。完整配置�
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
 CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
 CONCORDIA_ZCODE_WAKER_DB=/absolute/path/to/example-app/.concordia/zcode-waker.db \
 npm run start:zcode-waker
@@ -150,7 +150,7 @@ npm run start:zcode-waker
 跨机器协调器使用：
 
 ```sh
-CONCORDIA_ROOTS=/absolute/path/to/repositories \
+CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
 CONCORDIA_DB=/absolute/path/to/state.db \
 CONCORDIA_REDIS_URL='rediss://user:password@redis.example.com:6379/0' \
 CONCORDIA_RELAY_NAMESPACE='team-a' \
@@ -167,14 +167,49 @@ npm run start:relay
 | --- | --- | --- | --- |
 | `CONCORDIA_TRANSPORT` | 否 | `stdio` | MCP 客户端传输模式：`stdio` 直接访问本机状态，`redis` 通过中转。 |
 | `CONCORDIA_AGENT_ID` | 是 | 无 | 只允许 `codex` 或 `zcode`；角色不匹配的工具会被拒绝。 |
-| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 允许的目标项目根目录；Redis client 不设置。 |
+| `CONCORDIA_CONFIG_FILE` | stdio/协调器 | 无 | 共享 JSON 配置的绝对路径；设置时优先于 `CONCORDIA_ROOTS`，每次工作区授权校验加载。Redis client 不设置。 |
+| `CONCORDIA_CONFIG_STALE_GRACE_MS` | 否 | `5000` | 配置运行时读取失败后允许继续使用 last-known-good 的毫秒数，范围 `0`–`60000`；超出后 fail-closed。 |
+| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 旧版允许根目录列表；仅在未设置 `CONCORDIA_CONFIG_FILE` 时使用。Redis client 不设置。 |
 | `CONCORDIA_DB` | 否 | `<cwd>/.concordia/state.db` | stdio/协调器使用的本机 SQLite；Redis client 不设置，绝不能跨机器共享。 |
 | `CONCORDIA_REDIS_URL` | Redis 模式 | 无 | Redis URL；远程默认要求 `rediss://`。 |
 | `CONCORDIA_RELAY_NAMESPACE` | 否 | `concordia` | 隔离不同部署的 Redis 键，1–64 个安全字符。 |
 | `CONCORDIA_RELAY_CODEX_TOKEN` | Codex relay/协调器 | 无 | Codex 请求 HMAC token，至少 32 字符。 |
 | `CONCORDIA_RELAY_ZCODE_TOKEN` | ZCode relay/协调器 | 无 | ZCode 请求 HMAC token，至少 32 字符且与 Codex token 不同。 |
 
-例如：
+### 共享允许根目录配置（推荐）
+
+复制 [concordia.config.example.json](concordia.config.example.json) 到一个**不提交进业务仓库**的稳定绝对路径，例如 `/Users/me/.config/concordia/roots.json`：
+
+```json
+{
+  "version": 1,
+  "allowedRoots": [
+    "/Users/me/src"
+  ]
+}
+```
+
+`allowedRoots` 的每一项都必须是存在的绝对目录；每个任务的 `workspace` 仍须是其中某项之内的 Git 根目录。给 Codex、ZCode、`codex-waker`、`zcode-waker` 以及本机 relay coordinator 设置同一个 `CONCORDIA_CONFIG_FILE`，即可共享授权边界。
+
+服务会在每次**工作区授权校验**时重新读取此文件：在已有根目录下新增或移除仓库后，无需改两端 MCP 配置或重启服务。移除根目录会立即阻止该范围内的新任务、存量任务访问和 waker 后续唤醒。撤权被视为信任边界：重新加入后会恢复 API 访问，但撤权期间被全局 waker 游标越过的旧事件不会自动补发；需要继续的任务应发送新的适用事件或重新创建。首次添加此变量、变更其路径，或更新 MCP/waker/relay 的其他环境变量时，仍须重启相应进程。
+
+首次加载无效或文件不可读时，服务会失败且不会退回到 `CONCORDIA_ROOTS`。已经成功加载过的进程若运行时读取失败（包括 JSON 无效、文件暂不可读或根目录无效），只会在 `CONCORDIA_CONFIG_STALE_GRACE_MS` 的宽限期内继续使用 last-known-good（默认 5000 ms，设为 `0` 即立即拒绝）；超过宽限期后工作区授权会 fail-closed。配置修复后，下一次工作区授权校验自动恢复，无需重启。
+
+更新时先在同一目录写入临时文件，验证 JSON 后用原子 `rename` 替换正式文件，避免读到半写入内容。例如：
+
+```sh
+mkdir -p /Users/me/.config/concordia
+chmod 700 /Users/me/.config/concordia
+cp concordia.config.example.json /Users/me/.config/concordia/roots.json.tmp
+chmod 600 /Users/me/.config/concordia/roots.json.tmp
+mv /Users/me/.config/concordia/roots.json.tmp /Users/me/.config/concordia/roots.json
+```
+
+目录和文件应仅允许运行这些进程的用户读取和修改（通常目录 `0700`、文件 `0600`）。不要把配置文件放入 Git、同步盘或所有用户可写的目录；能改此文件的主体可扩大 Concordia 可操作的仓库范围。
+
+### 旧版根目录变量
+
+尚未迁移时仍可使用：
 
 ```sh
 CONCORDIA_ROOTS=/Users/me/src/project-a,/Users/me/src/project-b
@@ -191,6 +226,7 @@ CONCORDIA_ROOTS=/Users/me/src/project-a,/Users/me/src/project-b
 | Concordia 源码目录 | `/Users/me/tools/concordia` |
 | 被管理的目标 Git 仓库 | `/Users/me/src/example-app` |
 | 双端共享数据库 | `/Users/me/src/example-app/.concordia/state.db` |
+| 共享允许根目录配置 | `/Users/me/.config/concordia/roots.json` |
 
 先完成一次构建并确认两个入口文件存在：
 
@@ -226,7 +262,7 @@ tool_timeout_sec = 70
 
 [mcp_servers.concordia.env]
 CONCORDIA_TRANSPORT = "stdio"
-CONCORDIA_ROOTS = "/Users/me/src/example-app"
+CONCORDIA_CONFIG_FILE = "/Users/me/.config/concordia/roots.json"
 CONCORDIA_DB = "/Users/me/src/example-app/.concordia/state.db"
 CONCORDIA_AGENT_ID = "codex"
 ```
@@ -234,9 +270,9 @@ CONCORDIA_AGENT_ID = "codex"
 注意：
 
 - `args` 指向 Concordia 源码构建出的 `dist/src/index.js`，不是目标项目中的文件。
-- `cwd`、`CONCORDIA_ROOTS` 和 `CONCORDIA_DB` 指向被管理的目标项目。
+- `cwd` 和 `CONCORDIA_DB` 指向被管理的目标项目；`CONCORDIA_CONFIG_FILE` 指向共享授权文件。
 - `CONCORDIA_AGENT_ID` 在 Codex 端必须是 `codex`。
-- 管理多个仓库时，可用逗号或系统路径分隔符连接多个 `CONCORDIA_ROOTS`；每个任务的 `workspace` 仍必须是其中某个 Git 仓库的根目录。
+- 共享配置中可列出多个根目录；每个任务的 `workspace` 仍必须是其中某个 Git 仓库的根目录。
 
 保存后重启 Codex MCP server：桌面应用可进入 **Settings → MCP servers**，找到 `concordia` 后选择 **Restart**；CLI 或 IDE 扩展可重新启动会话。然后在 Codex 会话中输入 `/mcp`，应能看到 `concordia` 及其 8 个工具。
 
@@ -247,7 +283,7 @@ CONCORDIA_AGENT_ID = "codex"
 ```sh
 codex mcp add concordia \
   --env CONCORDIA_TRANSPORT=stdio \
-  --env CONCORDIA_ROOTS=/Users/me/src/example-app \
+  --env CONCORDIA_CONFIG_FILE=/Users/me/.config/concordia/roots.json \
   --env CONCORDIA_DB=/Users/me/src/example-app/.concordia/state.db \
   --env CONCORDIA_AGENT_ID=codex \
   -- node /Users/me/tools/concordia/dist/src/index.js
@@ -255,7 +291,7 @@ codex mcp add concordia \
 codex mcp list
 ```
 
-CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和允许根目录，因此不依赖 MCP 进程从哪个目录启动。如需 `cwd`、超时等精细选项，再按方式 A 编辑生成的 `~/.codex/config.toml`。
+CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和共享授权文件，因此不依赖 MCP 进程从哪个目录启动。如需 `cwd`、超时等精细选项，再按方式 A 编辑生成的 `~/.codex/config.toml`。
 
 #### Codex 端验证
 
@@ -307,6 +343,8 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
 
 - `${CLAUDE_PLUGIN_ROOT}`（也可写成 `${ZCODE_PLUGIN_ROOT}`）由 ZCode 替换为已安装插件目录。
 - `${CLAUDE_PROJECT_DIR}` 由 ZCode 替换为当前打开的目标项目根目录。
+- `CONCORDIA_ROOTS` 是插件的项目级兼容回退：插件模板无法预先知道用户共享配置的绝对路径。它让单项目安装无需额外配置即可工作。
+- 要让插件与 Codex、两个 waker 和 relay 使用同一热加载授权文件，请在 ZCode 的实际 MCP 配置中加入 `CONCORDIA_CONFIG_FILE: "/Users/me/.config/concordia/roots.json"`。设置后它优先于模板中的 `CONCORDIA_ROOTS`；更新 `allowedRoots` 无需重启，首次添加或更换文件路径后新建会话/重启 MCP。
 - `CONCORDIA_DB` 会展开为 `/Users/me/src/example-app/.concordia/state.db`；前面的 Codex 配置必须指向完全相同的文件。
 - `timeoutMs` 略大于 `wait_events` 允许的最长 60 秒等待，避免正常长轮询被客户端提前中止。
 
@@ -326,7 +364,7 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
       "cwd": "/Users/me/src/example-app",
       "env": {
         "CONCORDIA_TRANSPORT": "stdio",
-        "CONCORDIA_ROOTS": "/Users/me/src/example-app",
+        "CONCORDIA_CONFIG_FILE": "/Users/me/.config/concordia/roots.json",
         "CONCORDIA_DB": "/Users/me/src/example-app/.concordia/state.db",
         "CONCORDIA_AGENT_ID": "zcode"
       },
@@ -349,7 +387,7 @@ CLI 写入的也是 Codex MCP 配置。该命令已经显式指定数据库和�
         "cwd": "/Users/me/src/example-app",
         "env": {
           "CONCORDIA_TRANSPORT": "stdio",
-          "CONCORDIA_ROOTS": "/Users/me/src/example-app",
+          "CONCORDIA_CONFIG_FILE": "/Users/me/.config/concordia/roots.json",
           "CONCORDIA_DB": "/Users/me/src/example-app/.concordia/state.db",
           "CONCORDIA_AGENT_ID": "zcode"
         },
@@ -368,7 +406,7 @@ ZCode 的用户级配置位于 `~/.zcode/cli/config.json`，项目级配置位�
 2. 在 Codex 中调用 `create_task` 创建一个目标仓库为 `/Users/me/src/example-app` 的任务。
 3. 在 ZCode 中运行 `/tasks`，或要求 ZCode 调用 `list_tasks`。
 4. 如果 ZCode 能看到刚创建的任务，说明两端正在使用同一数据库。
-5. 若看不到，优先核对两端 `CONCORDIA_DB` 的绝对路径是否逐字符一致，再检查两端 `CONCORDIA_ROOTS` 是否包含目标 Git 根目录。
+5. 若看不到，优先核对两端 `CONCORDIA_DB` 的绝对路径是否逐字符一致，再检查两端 `CONCORDIA_CONFIG_FILE` 是否相同且 `allowedRoots` 包含目标 Git 根目录。
 
 插件提供的 `/tasks`、`/task <task-id>`、`/watch <task-id>` 是只读辅助命令；真正的领取、提交和审核仍由 MCP 工具完成。
 
@@ -574,7 +612,7 @@ ZCode/Git 机器需要另外运行 `npm run start:relay`。ZCode MCP 可设置�
 Concordia 的边界是“可信用户/团队 + 明确工作区白名单”，不是完整的多租户平台。已实现的约束包括：
 
 - 必须显式声明 `codex` 或 `zcode`；工具和事件发送者均做角色校验；
-- `CONCORDIA_ROOTS` 限制目标工作区，且工作区必须为该根内的 Git 仓库根；
+- 共享配置的 `allowedRoots`（或兼容变量 `CONCORDIA_ROOTS`）限制目标工作区，且工作区必须为该根内的 Git 仓库根；
 - 路径范围拒绝绝对路径、`..`、反斜杠、Git/Concordia 控制目录和越界符号链接；
 - worktree 及既有目录会解析真实路径，防止逃离目标仓库；
 - SQLite 使用外键、WAL、事务和任务 version 乐观锁；事件 idempotency key 全局唯一；
@@ -637,6 +675,7 @@ concordia/                         # Concordia 源码目录
 │   ├── design.md
 │   └── development.md
 ├── package.json
+├── concordia.config.example.json  # 热加载共享允许根目录配置模板
 ├── .env.waker.example             # Codex waker 环境变量模板
 ├── .env.zcode-waker.example       # ZCode waker 环境变量模板
 └── tsconfig.json
@@ -656,8 +695,10 @@ Concordia 使用 [MIT License](LICENSE) 开源。你可以自由使用、复制�
 | 现象 | 处理 |
 | --- | --- |
 | `CONCORDIA_AGENT_ID is required` | 为 MCP server 设置 `CONCORDIA_AGENT_ID=codex` 或 `zcode`。 |
-| `CONCORDIA_ROOTS must contain at least one allowed root` | 配置至少一个存在的目标项目根目录。 |
-| `WORKSPACE_DENIED` | 确认 `workspace` 是位于 `CONCORDIA_ROOTS` 内的目标 Git 仓库根，而不是其子目录或 Concordia 源码目录；检查软链接。 |
+| `CONCORDIA_CONFIG_FILE` 加载失败 | 确认路径为可读的绝对路径、JSON 符合 `{ "version": 1, "allowedRoots": ["/absolute/path"] }`，且每一根目录存在。运行中修复后会在下一请求生效。 |
+| 配置持续加载失败后请求被拒绝 | 在 `CONCORDIA_CONFIG_STALE_GRACE_MS`（默认 5000 ms）内修复或原子替换配置；超过该期限会 fail-closed，修复后下一次工作区授权校验自动恢复。 |
+| `CONCORDIA_ROOTS must contain at least one allowed root` | 未设置 `CONCORDIA_CONFIG_FILE` 时，配置至少一个存在的目标项目根目录。 |
+| `WORKSPACE_DENIED` | 确认 `workspace` 是位于共享配置 `allowedRoots`（或旧版 `CONCORDIA_ROOTS`）内的目标 Git 仓库根，而不是其子目录或 Concordia 源码目录；检查软链接。 |
 | 两端看不到彼此任务 | 两端 `CONCORDIA_DB` 必须是同一个绝对文件。若 ZCode 使用默认值，Codex 应设为 `<目标仓库>/.concordia/state.db`。 |
 | `Redis relay request timed out` | 确认协调器运行中，Redis URL、数据库编号和 namespace 一致，ACL 允许所需命令。 |
 | 远程 `redis://` 被拒绝 | 生产环境改用 `rediss://`；只有可信开发网络才设置 `CONCORDIA_RELAY_ALLOW_INSECURE=true`。 |
@@ -672,7 +713,7 @@ Concordia 使用 [MIT License](LICENSE) 开源。你可以自由使用、复制�
 
 ## 当前限制
 
-- 当前版本为 `0.4.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
+- 当前版本为 `0.5.0`，`package.json` 标为 `private: true`，尚未作为 npm 包发布。
 - Node 的 `node:sqlite` 在部分 Node 22 发行版可能显示实验性 API 警告；采用前请按自身 Node 策略评估。
 - Redis relay 当前只支持单活动协调器，不提供多协调器高可用、远程备份或自动清理旧 attempt worktree。
 - `timeoutSeconds`、`delegation.maxConcurrency`、`delegation.mode` 不会被运行时强制调度或限流。

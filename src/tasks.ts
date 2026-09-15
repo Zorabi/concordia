@@ -23,7 +23,7 @@ import {
   validateIdempotencyKey,
   validateTaskSpec,
 } from "./protocol.js";
-import { WorkspaceManager, normalizeRelativePath } from "./workspace.js";
+import { WorkspaceManager, normalizeRelativePath, type WorkspaceAuthorization } from "./workspace.js";
 
 interface TaskRow {
   id: string;
@@ -146,6 +146,7 @@ export class TaskService {
     validateIdempotencyKey(idempotencyKey);
     const duplicate = this.events.getByIdempotencyKey(idempotencyKey);
     if (duplicate) {
+      this.assertTaskAllowed(duplicate.taskId);
       if (duplicate.type !== "TASK_CREATED") {
         throw new ConcordiaException("INVALID_INPUT", "idempotencyKey was already used for another operation");
       }
@@ -155,8 +156,10 @@ export class TaskService {
     const spec = this.workspace.validateSpec(validateTaskSpec(specInput));
     const now = new Date().toISOString();
     return this.database.transaction(() => {
+      const authorization = this.workspace.authorizationSnapshot();
       const duplicateInTransaction = this.events.getByIdempotencyKey(idempotencyKey);
       if (duplicateInTransaction) {
+        this.assertTaskAllowed(duplicateInTransaction.taskId, authorization);
         if (duplicateInTransaction.type !== "TASK_CREATED") {
           throw new ConcordiaException("INVALID_INPUT", "idempotencyKey was already used for another operation");
         }
@@ -167,6 +170,7 @@ export class TaskService {
           created: false,
         };
       }
+      authorization.assertWorkspaceAllowed(spec.workspace);
       const existingTask = this.getTaskRow(spec.id);
       if (existingTask) throw new ConcordiaException("INVALID_INPUT", "Task ID already exists");
       this.database.connection.prepare(`
@@ -188,13 +192,20 @@ export class TaskService {
   }
 
   claimTask(input: ClaimTaskInput): ClaimTaskResult {
+    const initialAuthorization = this.workspace.authorizationSnapshot();
     const agentId = requireNonEmptyString(input.agentId, "agentId");
     const taskId = input.taskId === undefined ? undefined : requireNonEmptyString(input.taskId, "taskId");
     const seconds = validateLeaseSeconds(input.leaseSeconds);
-    const workspaceFilter = input.workspace === undefined ? undefined : this.workspace.resolveWorkspace(input.workspace);
+    const workspaceFilter = input.workspace === undefined ? undefined : initialAuthorization.resolveWorkspace(input.workspace);
     const now = new Date().toISOString();
 
     return this.database.transaction(() => {
+      const authorization = this.workspace.authorizationSnapshot();
+      if (workspaceFilter !== undefined) authorization.assertWorkspaceAllowed(workspaceFilter);
+      if (taskId !== undefined) {
+        const targetedRow = this.getTaskRow(taskId);
+        if (targetedRow !== undefined) this.assertTaskRowAllowed(targetedRow, authorization);
+      }
       const clauses = [
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))",
       ];
@@ -207,12 +218,21 @@ export class TaskService {
         clauses.push("workspace = ?");
         parameters.push(workspaceFilter);
       }
-      const row = this.database.connection.prepare(`
+      const statement = this.database.connection.prepare(`
         SELECT * FROM tasks
         WHERE ${clauses.join(" AND ")}
         ORDER BY CASE WHEN status = 'READY' THEN 0 ELSE 1 END, created_at ASC
-        LIMIT 1
-      `).get(...parameters) as unknown as TaskRow | undefined;
+        LIMIT ? OFFSET ?
+      `);
+      const batchSize = 100;
+      let offset = 0;
+      let row: TaskRow | undefined;
+      do {
+        const rows = statement.all(...parameters, batchSize, offset) as unknown as TaskRow[];
+        row = rows.find((candidate) => this.isTaskRowAllowed(candidate, authorization));
+        if (row !== undefined || rows.length < batchSize) break;
+        offset += rows.length;
+      } while (true);
       if (!row) return { task: null };
       if (!row.base_commit) {
         throw new ConcordiaException("BASE_COMMIT_MISMATCH", "Task has no resolved base commit");
@@ -225,7 +245,9 @@ export class TaskService {
         row.base_commit,
         attempt,
         row.worktree_path ?? undefined,
+        authorization,
       );
+      this.workspace.assertWorkspaceAllowed(row.workspace);
       const until = leaseUntil(seconds);
       const token = newLeaseToken();
       const result = this.database.connection.prepare(`
@@ -272,6 +294,7 @@ export class TaskService {
   }
 
   listTasks(input: ListTasksInput = {}): TaskRecord[] {
+    const authorization = this.workspace.authorizationSnapshot();
     const limit = input.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new ConcordiaException("INVALID_INPUT", "Task limit must be an integer from 1 to 100");
@@ -288,7 +311,7 @@ export class TaskService {
     }
     if (input.workspace !== undefined) {
       clauses.push("workspace = ?");
-      parameters.push(this.workspace.resolveWorkspace(input.workspace));
+      parameters.push(authorization.resolveWorkspace(input.workspace));
     }
     if (input.updatedAfter !== undefined) {
       if (!Number.isFinite(Date.parse(input.updatedAfter))) {
@@ -297,15 +320,31 @@ export class TaskService {
       clauses.push("updated_at > ?");
       parameters.push(input.updatedAfter);
     }
-    parameters.push(limit);
     const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
-    return (this.database.connection.prepare(`
-      SELECT * FROM tasks ${where} ORDER BY updated_at DESC, created_at ASC LIMIT ?
-    `).all(...parameters) as unknown as TaskRow[]).map(parseTask);
+    return this.database.readTransaction(() => {
+      const statement = this.database.connection.prepare(`
+        SELECT * FROM tasks ${where} ORDER BY updated_at DESC, created_at ASC, id ASC LIMIT ? OFFSET ?
+      `);
+      const tasks: TaskRecord[] = [];
+      const batchSize = 100;
+      let offset = 0;
+      do {
+        const rows = statement.all(...parameters, batchSize, offset) as unknown as TaskRow[];
+        for (const row of rows) {
+          if (!this.isTaskRowAllowed(row, authorization)) continue;
+          tasks.push(parseTask(row));
+          if (tasks.length === limit) return tasks;
+        }
+        if (rows.length < batchSize) break;
+        offset += rows.length;
+      } while (true);
+      return tasks;
+    });
   }
 
   sendEvent<T>(input: SendEventInput<T>): TaskEvent<T> {
     validateIdempotencyKey(input.idempotencyKey);
+    this.assertTaskAllowed(input.taskId);
     const duplicate = this.events.getByIdempotencyKey(input.idempotencyKey);
     if (duplicate) return this.validateDuplicateEvent(duplicate, input) as TaskEvent<T>;
 
@@ -392,11 +431,48 @@ export class TaskService {
   }
 
   async waitEvents(input: WaitEventsInput): Promise<TaskEvent[]> {
-    return this.events.waitEvents(input);
+    if (input.taskId !== undefined) {
+      const row = this.getTaskRow(input.taskId);
+      if (row !== undefined) this.assertTaskRowAllowed(row);
+    }
+    const timeoutMs = input.timeoutMs ?? 30_000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 60_000) {
+      throw new ConcordiaException("INVALID_INPUT", "timeoutMs must be an integer from 0 to 60000");
+    }
+    const limit = input.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new ConcordiaException("INVALID_INPUT", "Event limit must be an integer from 1 to 100");
+    }
+    if (!Number.isInteger(input.afterEventId) || input.afterEventId < 0) {
+      throw new ConcordiaException("INVALID_INPUT", "afterEventId must be a non-negative integer");
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    let scanAfterEventId = input.afterEventId;
+    let authorizationFingerprint: string | undefined;
+    do {
+      // Re-check the shared configuration on every poll. This makes an active
+      // long poll fail closed when the config becomes unavailable, and makes a
+      // targeted wait reject as soon as that task's workspace is revoked.
+      const authorization = this.workspace.authorizationSnapshot();
+      if (authorizationFingerprint !== authorization.fingerprint) {
+        authorizationFingerprint = authorization.fingerprint;
+        scanAfterEventId = input.afterEventId;
+      }
+      if (input.taskId !== undefined) {
+        const row = this.getTaskRow(input.taskId);
+        if (row !== undefined) this.assertTaskRowAllowed(row, authorization);
+      }
+      const scan = this.listAllowedEvents(input, limit, authorization, scanAfterEventId);
+      scanAfterEventId = scan.scannedThroughEventId;
+      if (scan.events.length > 0 || Date.now() >= deadline) return scan.events;
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(500, deadline - Date.now())));
+    } while (true);
   }
 
   submitTask(submission: TaskSubmission, expectedVersion?: number): TaskDetail {
     validateIdempotencyKey(submission.idempotencyKey);
+    this.assertTaskAllowed(submission.taskId);
     const duplicate = this.events.getByIdempotencyKey(submission.idempotencyKey);
     if (duplicate) {
       this.assertDuplicateSubmission(duplicate, submission);
@@ -479,6 +555,7 @@ export class TaskService {
 
   reviewTask(input: ReviewTaskInput): TaskDetail {
     validateIdempotencyKey(input.idempotencyKey);
+    this.assertTaskAllowed(input.taskId);
     const duplicate = this.events.getByIdempotencyKey(input.idempotencyKey);
     if (duplicate) {
       this.assertDuplicateReview(duplicate, input);
@@ -651,7 +728,78 @@ export class TaskService {
   private requireTaskRow(taskId: string): TaskRow {
     const row = this.getTaskRow(taskId);
     if (!row) throw new ConcordiaException("TASK_NOT_FOUND", "Task was not found");
+    this.assertTaskRowAllowed(row);
     return row;
+  }
+
+  private assertTaskAllowed(
+    taskId: string,
+    authorization: WorkspaceAuthorization = this.workspace.authorizationSnapshot(),
+  ): void {
+    this.assertTaskRowAllowed(this.requireExistingTaskRow(taskId), authorization);
+  }
+
+  private requireExistingTaskRow(taskId: string): TaskRow {
+    const row = this.getTaskRow(taskId);
+    if (!row) throw new ConcordiaException("TASK_NOT_FOUND", "Task was not found");
+    return row;
+  }
+
+  private assertTaskRowAllowed(
+    row: TaskRow,
+    authorization: WorkspaceAuthorization = this.workspace.authorizationSnapshot(),
+  ): void {
+    authorization.assertWorkspaceAllowed(row.workspace);
+  }
+
+  private isTaskRowAllowed(row: TaskRow, authorization: WorkspaceAuthorization): boolean {
+    try {
+      this.assertTaskRowAllowed(row, authorization);
+      return true;
+    } catch (error) {
+      if (error instanceof ConcordiaException && error.code === "WORKSPACE_DENIED") return false;
+      throw error;
+    }
+  }
+
+  private listAllowedEvents(
+    input: WaitEventsInput,
+    limit: number,
+    authorization: WorkspaceAuthorization,
+    initialAfterEventId: number,
+  ): { events: TaskEvent[]; scannedThroughEventId: number } {
+    const events: TaskEvent[] = [];
+    let afterEventId = initialAfterEventId;
+    do {
+      const batch = this.events.listEvents({
+        taskId: input.taskId,
+        recipient: input.recipient,
+        afterEventId,
+        limit: 100,
+      });
+      if (batch.length === 0) return { events, scannedThroughEventId: afterEventId };
+      const rowsByTaskId = this.getTaskRows(batch.map((event) => event.taskId));
+      for (const event of batch) {
+        const row = rowsByTaskId.get(event.taskId);
+        if (row !== undefined && this.isTaskRowAllowed(row, authorization)) {
+          events.push(event);
+          if (events.length === limit) {
+            return { events, scannedThroughEventId: event.eventId };
+          }
+        }
+      }
+      afterEventId = batch.at(-1)!.eventId;
+      if (batch.length < 100) return { events, scannedThroughEventId: afterEventId };
+    } while (true);
+  }
+
+  private getTaskRows(taskIds: readonly string[]): ReadonlyMap<string, TaskRow> {
+    const uniqueTaskIds = [...new Set(taskIds)];
+    if (uniqueTaskIds.length === 0) return new Map();
+    const rows = this.database.connection.prepare(`
+      SELECT * FROM tasks WHERE id IN (${uniqueTaskIds.map(() => "?").join(", ")})
+    `).all(...uniqueTaskIds) as unknown as TaskRow[];
+    return new Map(rows.map((row) => [row.id, row]));
   }
 
   private requireTask(taskId: string): TaskRecord {

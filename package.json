@@ -1,6 +1,6 @@
 {
   "name": "concordia",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "license": "MIT",
   "description": "Local-first MCP coordination runtime for Codex and ZCode with an optional Redis relay",

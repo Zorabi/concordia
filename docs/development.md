@@ -68,7 +68,9 @@ concordia/
 | --- | --- | --- | --- |
 | `CONCORDIA_TRANSPORT` | 否 | `stdio` | MCP 连接本机服务或 Redis relay |
 | `CONCORDIA_DB` | 否 | `<cwd>/.concordia/state.db` | SQLite 路径 |
-| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 允许的项目根目录列表 |
+| `CONCORDIA_CONFIG_FILE` | stdio/协调器 | 无 | 每次工作区授权校验加载的共享 JSON 绝对路径，优先于旧变量 |
+| `CONCORDIA_CONFIG_STALE_GRACE_MS` | 否 | `5000` | 读取失败后继续使用 last-known-good 的毫秒数，范围 `0`–`60000`；期满 fail-closed |
+| `CONCORDIA_ROOTS` | stdio/协调器 | 无 | 兼容旧版的允许项目根目录列表；未设置配置文件时使用 |
 | `CONCORDIA_AGENT_ID` | 是 | 无 | `codex` 或 `zcode`；缺失时拒绝启动 |
 | `CONCORDIA_REDIS_URL` | Redis | 无 | 远程使用 `rediss://` |
 | `CONCORDIA_RELAY_NAMESPACE` | 否 | `concordia` | Redis 键命名空间 |
@@ -85,7 +87,7 @@ concordia/
 | `CONCORDIA_RELAY_CODEX_TOKEN` | Codex/协调器 | 无 | Codex HMAC token |
 | `CONCORDIA_RELAY_ZCODE_TOKEN` | ZCode/协调器 | 无 | ZCode HMAC token |
 
-不提供通用配置文件。允许执行的检查命令采用固定白名单 ID，不接受来自任务 payload 的任意 shell 字符串。完整 relay 调优变量见 `.env.relay.example`。
+可用 `CONCORDIA_CONFIG_FILE` 指向共享 JSON（`{ "version": 1, "allowedRoots": ["/absolute/path"] }`）；服务在每次工作区授权校验加载。移除根目录会同时撤销该范围内存量任务及 waker 后续唤醒；重新加入只恢复 API 访问，不保证补发已被全局 waker 游标越过的旧事件。首次加载无效则失败；运行中读取失败只会在 `CONCORDIA_CONFIG_STALE_GRACE_MS`（默认 5000、范围 0–60000）内保留 last-known-good，期满后 fail-closed，修复后自动恢复。旧 `CONCORDIA_ROOTS` 保持兼容。允许执行的检查命令采用固定白名单 ID，不接受来自任务 payload 的任意 shell 字符串。完整 relay 调优变量见 `.env.relay.example`。
 
 ## 5. 开发阶段
 

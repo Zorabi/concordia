@@ -3,12 +3,19 @@ import { delimiter, dirname, isAbsolute, relative, resolve, sep } from "node:pat
 import { execFileSync } from "node:child_process";
 
 import { ConcordiaException, type TaskSpec } from "./protocol.js";
+import { parseWorkspaceConfigStaleGraceMs, WorkspaceRootsConfig } from "./workspace-config.js";
 
 export interface WorktreeResult {
   workspace: string;
   worktreePath: string;
   baseCommit: string;
   created: boolean;
+}
+
+export interface WorkspaceAuthorization {
+  readonly fingerprint: string;
+  assertWorkspaceAllowed(workspace: string): string;
+  resolveWorkspace(workspace: string): string;
 }
 
 export interface VerifySubmissionInput {
@@ -58,31 +65,58 @@ function matchesScope(file: string, scope: string): boolean {
 }
 
 export class WorkspaceManager {
-  readonly allowedRoots: readonly string[];
+  private readonly rootsConfig: WorkspaceRootsConfig;
 
-  constructor(roots: readonly string[] = parseConfiguredRoots(process.env.CONCORDIA_ROOTS)) {
-    if (roots.length === 0) {
-      throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_ROOTS must contain at least one allowed root");
+  constructor(roots?: readonly string[]) {
+    if (roots !== undefined) {
+      this.rootsConfig = WorkspaceRootsConfig.fromRoots(roots);
+      return;
     }
-    this.allowedRoots = roots.map((root) => {
-      try {
-        return realpathSync(root);
-      } catch {
-        throw new ConcordiaException("WORKSPACE_DENIED", "An allowed workspace root does not exist");
-      }
-    });
+    const configFile = process.env.CONCORDIA_CONFIG_FILE;
+    this.rootsConfig = configFile === undefined
+      ? WorkspaceRootsConfig.fromRoots(parseConfiguredRoots(process.env.CONCORDIA_ROOTS))
+      : WorkspaceRootsConfig.fromFile(
+        configFile.trim(),
+        parseWorkspaceConfigStaleGraceMs(process.env.CONCORDIA_CONFIG_STALE_GRACE_MS),
+      );
+  }
+
+  get allowedRoots(): readonly string[] {
+    return this.rootsConfig.getAllowedRoots();
+  }
+
+  authorizationSnapshot(): WorkspaceAuthorization {
+    const allowedRoots = this.rootsConfig.getAllowedRoots();
+    return {
+      fingerprint: allowedRoots.join("\0"),
+      assertWorkspaceAllowed: (workspace) => this.assertWorkspaceAllowedWithin(workspace, allowedRoots),
+      resolveWorkspace: (workspace) => this.resolveWorkspaceWithin(workspace, allowedRoots),
+    };
+  }
+
+  assertWorkspaceAllowed(workspace: string): string {
+    return this.authorizationSnapshot().assertWorkspaceAllowed(workspace);
   }
 
   resolveWorkspace(workspace: string): string {
+    return this.authorizationSnapshot().resolveWorkspace(workspace);
+  }
+
+  private assertWorkspaceAllowedWithin(workspace: string, allowedRoots: readonly string[]): string {
     let canonical: string;
     try {
       canonical = realpathSync(workspace);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace does not exist or cannot be accessed");
     }
-    if (!this.allowedRoots.some((root) => isWithin(root, canonical))) {
+    if (!allowedRoots.some((root) => isWithin(root, canonical))) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace is outside the configured roots");
     }
+    return canonical;
+  }
+
+  private resolveWorkspaceWithin(workspace: string, allowedRoots: readonly string[]): string {
+    const canonical = this.assertWorkspaceAllowedWithin(workspace, allowedRoots);
     const gitRoot = this.git(canonical, ["rev-parse", "--show-toplevel"], "WORKSPACE_DENIED", "Workspace is not a Git repository");
     let canonicalGitRoot: string;
     try {
@@ -96,8 +130,8 @@ export class WorkspaceManager {
     return canonical;
   }
 
-  validateSpec(spec: TaskSpec): TaskSpec {
-    const workspace = this.resolveWorkspace(spec.workspace);
+  validateSpec(spec: TaskSpec, authorization = this.authorizationSnapshot()): TaskSpec {
+    const workspace = authorization.resolveWorkspace(spec.workspace);
     const ownedPaths = this.validateScopes(workspace, spec.ownedPaths, "ownedPaths");
     const excludedPaths = spec.excludedPaths === undefined
       ? undefined
@@ -127,8 +161,9 @@ export class WorkspaceManager {
     baseCommit: string,
     attempt: number,
     previousWorktreePath?: string,
+    authorization = this.authorizationSnapshot(),
   ): WorktreeResult {
-    const workspace = this.resolveWorkspace(workspaceInput);
+    const workspace = authorization.resolveWorkspace(workspaceInput);
     this.assertBaseCommit(workspace, baseCommit);
     if (!Number.isInteger(attempt) || attempt < 1) {
       throw new ConcordiaException("INVALID_INPUT", "Worktree attempt must be a positive integer");
@@ -189,8 +224,8 @@ export class WorkspaceManager {
     return { workspace, worktreePath: canonicalWorktree, baseCommit, created: true };
   }
 
-  verifySubmission(input: VerifySubmissionInput): string[] {
-    const workspace = this.resolveWorkspace(input.workspace);
+  verifySubmission(input: VerifySubmissionInput, authorization = this.authorizationSnapshot()): string[] {
+    const workspace = authorization.resolveWorkspace(input.workspace);
     let worktreePath: string;
     try {
       worktreePath = realpathSync(input.worktreePath);

@@ -46,7 +46,7 @@ CLI 会话以 `--prompt --json --surface terminal --mode build` 创建，恢复�
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_ROOTS='/Users/me/src/example-app' \
+CONCORDIA_CONFIG_FILE='/Users/me/.config/concordia/roots.json' \
 CONCORDIA_DB='/Users/me/src/example-app/.concordia/state.db' \
 CONCORDIA_ZCODE_WAKER_DB='/Users/me/src/example-app/.concordia/zcode-waker.db' \
 npm run start:zcode-waker
@@ -67,7 +67,7 @@ CONCORDIA_ZCODE_WAKER_DB='/var/lib/concordia/zcode-waker.db' \
 npm run start:zcode-waker
 ```
 
-不要把 waker 放在只有 Codex 的远程机器：`claim_task`、worktree 和 ZCode CLI 会话都必须位于 ZCode/Git 主机。Redis 模式下不设置 `CONCORDIA_DB` 或 `CONCORDIA_ROOTS`；它们只属于 relay coordinator 的本机状态。waker 自己使用上面的 Redis 凭据监听和精确领取；ZCode CLI 子进程不会继承这些凭据，因此 ZCode 的 Concordia MCP 必须使用其独立配置的连接信息。若该 MCP 仅依赖父进程环境变量，headless turn 会连接失败。
+不要把 waker 放在只有 Codex 的远程机器：`claim_task`、worktree 和 ZCode CLI 会话都必须位于 ZCode/Git 主机。Redis 模式下不设置 `CONCORDIA_DB`、`CONCORDIA_CONFIG_FILE` 或 `CONCORDIA_ROOTS`；它们只属于 relay coordinator 的本机状态。waker 自己使用上面的 Redis 凭据监听和精确领取；ZCode CLI 子进程不会继承这些凭据，因此 ZCode 的 Concordia MCP 必须使用其独立配置的连接信息。若该 MCP 仅依赖父进程环境变量，headless turn 会连接失败。
 
 ## 5. 启动与退出生命周期
 
@@ -82,6 +82,7 @@ npm run start:zcode-waker
 | 环境变量 | 默认值 | 作用 |
 | --- | --- | --- |
 | `CONCORDIA_ZCODE_WAKER_DB` | `<cwd>/.concordia/zcode-waker.db` | 保存事件游标、`taskId → sess_*` 映射和投递结果的独立 SQLite 数据库 |
+| `CONCORDIA_CONFIG_FILE` | 无 | stdio 模式共享授权 JSON 的绝对路径；每次工作区授权校验加载，优先于 `CONCORDIA_ROOTS`，并传给 ZCode CLI |
 | `CONCORDIA_ZCODE_BIN` | macOS 应用内 CLI，否则 `zcode` | ZCode CLI 可执行文件 |
 | `CONCORDIA_ZCODE_MODE` | `build` | CLI 权限模式：`build`、`edit`、`plan` 或 `yolo`；自动实施推荐保持 `build` |
 | `CONCORDIA_ZCODE_MAX_TURNS` | `100` | 每次 headless CLI 调用允许的最大模型 turn 数 |
@@ -93,6 +94,8 @@ npm run start:zcode-waker
 | `CONCORDIA_ZCODE_WAKER_MAX_RETRY_DELAY_MS` | `300000` | 指数退避上限 |
 
 不要把 Redis URL、角色 token 或其他凭据放进命令历史。长期运行时应通过 launchd、systemd、容器 secret 或进程管理器注入环境变量。
+
+单机 waker 应与 Codex/ZCode MCP、`codex-waker` 和 relay coordinator（如有）使用同一个 `CONCORDIA_CONFIG_FILE`。修改该文件的 `allowedRoots` 不需重启 waker 或重新创建 ZCode 会话，并在下一次工作区授权校验生效；首次设置或改动变量路径后需要重启。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。原子写入和权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
 
 ## 7. 可靠性与安全语义
 

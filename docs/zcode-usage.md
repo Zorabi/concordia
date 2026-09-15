@@ -11,7 +11,7 @@
 3. 单机模式下 ZCode 和 Codex 的 `CONCORDIA_DB` 指向同一个绝对路径；跨机器模式下两端 Redis URL 与 namespace 一致，并分别使用自己的角色 token。
 4. 当前工作区是任务契约中的 Git 仓库根目录，而不是 Concordia 源码目录。
 
-插件或配置变化只保证对新会话生效。检查完成后，建议新建一个 ZCode 会话再开始操作。
+插件或 MCP 配置路径变化只保证对新会话生效。共享 `CONCORDIA_CONFIG_FILE` 的 `allowedRoots` 内容在每次工作区授权校验加载，更新内容不需要重启或新建会话；读取失败超过 stale grace 后会拒绝访问，修复后自动恢复。检查完成后，建议新建一个 ZCode 会话再开始操作。
 
 ## 2. 查看待办列表
 
@@ -117,7 +117,7 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_ROOTS=/absolute/path/to/example-app \
+CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
 CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
 CONCORDIA_ZCODE_WAKER_DB=/absolute/path/to/example-app/.concordia/zcode-waker.db \
 npm run start:zcode-waker
@@ -197,7 +197,7 @@ npm run start:zcode-waker
 
 ## 10. 原生待办同步与通知
 
-截至 Concordia `0.4.0`：
+截至 Concordia `0.5.0`：
 
 - 可以通过 `/tasks` 在 ZCode 会话中查看同步后的 Concordia 任务。
 - 不能把每个 Concordia 任务写入 ZCode 原生任务侧边栏。

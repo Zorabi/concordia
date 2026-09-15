@@ -71,6 +71,27 @@ export class ConcordiaDatabase {
     }
   }
 
+  readTransaction<T>(operation: () => T): T {
+    if (this.transactionDepth > 0) return operation();
+
+    this.connection.exec("BEGIN");
+    this.transactionDepth += 1;
+    try {
+      const result = operation();
+      this.connection.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        this.connection.exec("ROLLBACK");
+      } catch {
+        // Preserve the error which caused the rollback.
+      }
+      throw error;
+    } finally {
+      this.transactionDepth -= 1;
+    }
+  }
+
   private migrate(): void {
     this.retryLocked(() => this.transaction(() => {
       // The version must be read after BEGIN IMMEDIATE. Another process may have
