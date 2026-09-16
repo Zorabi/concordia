@@ -2989,7 +2989,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3016,7 +3016,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3846,7 +3846,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -4214,7 +4214,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -23384,11 +23384,11 @@ var require_commands_queue = __commonJS({
         if (this.#waitingForReply.length === 0) {
           return;
         }
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           const onEmpty = () => {
             if (timeoutId)
               clearTimeout(timeoutId);
-            resolve3();
+            resolve4();
           };
           let timeoutId;
           const timeoutMs = options?.timeoutMs;
@@ -23401,7 +23401,7 @@ var require_commands_queue = __commonJS({
                 (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Flushing ${pendingCount} commands that timed out waiting for reply`);
                 this.#flushWaitingForReply(new errors_1.TimeoutError());
               }
-              resolve3();
+              resolve4();
             }, timeoutMs);
           }
           this.#waitingForReply.events.once("empty", onEmpty);
@@ -23413,14 +23413,14 @@ var require_commands_queue = __commonJS({
         } else if (options?.abortSignal?.aborted) {
           return Promise.reject(new errors_1.AbortError());
         }
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           let node;
           const value = {
             args,
             chainId: options?.chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve3,
+            resolve: resolve4,
             reject,
             channelsCounter: void 0,
             typeMapping: options?.typeMapping
@@ -23457,7 +23457,7 @@ var require_commands_queue = __commonJS({
         });
       }
       #addPubSubCommand(command, asap = false, chainId) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           this.#toWrite.add({
             args: command.args,
             chainId,
@@ -23465,7 +23465,7 @@ var require_commands_queue = __commonJS({
             timeout: void 0,
             resolve() {
               command.resolve();
-              resolve3();
+              resolve4();
             },
             reject(err) {
               command.reject?.();
@@ -23485,8 +23485,8 @@ var require_commands_queue = __commonJS({
               return;
             const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
             if (PONG.equals(firstElement)) {
-              const { resolve: resolve3, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
-              resolve3(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
+              const { resolve: resolve4, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
+              resolve4(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
               return;
             }
           }
@@ -23510,12 +23510,12 @@ var require_commands_queue = __commonJS({
         if (!command)
           return;
         if (command && this.#respVersion === 2) {
-          const { resolve: resolve3 } = command;
+          const { resolve: resolve4 } = command;
           command.resolve = () => {
             if (!this.#pubSub.isActive) {
               this.#resetDecoderCallbacks();
             }
-            resolve3();
+            resolve4();
           };
         }
         return this.#addPubSubCommand(command);
@@ -23551,7 +23551,7 @@ var require_commands_queue = __commonJS({
         return this.#pubSub.listeners[type];
       }
       monitor(callback, options) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           const typeMapping = options?.typeMapping ?? {};
           this.#toWrite.add({
             args: ["MONITOR"],
@@ -23566,7 +23566,7 @@ var require_commands_queue = __commonJS({
                 this.decoder.onReply = callback;
               }
               this.decoder.getTypeMapping = () => typeMapping;
-              resolve3();
+              resolve4();
             },
             reject,
             channelsCounter: void 0,
@@ -23580,7 +23580,7 @@ var require_commands_queue = __commonJS({
       }
       #resetFallbackOnReply;
       async reset(chainId, typeMapping) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           this.#resetFallbackOnReply = this.decoder.onReply;
           this.decoder.onReply = ((reply) => {
             if (typeof reply === "string" && reply === "RESET" || reply instanceof Buffer && RESET.equals(reply)) {
@@ -23597,7 +23597,7 @@ var require_commands_queue = __commonJS({
             chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve3,
+            resolve: resolve4,
             reject,
             channelsCounter: void 0,
             typeMapping
@@ -25011,7 +25011,7 @@ var require_pool = __commonJS({
         this._self.#returnClient(node);
       }
       execute(fn) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           if (this._self.#isClosing || !this._self.#isOpen) {
             return reject(new errors_1.ClientClosedError());
           }
@@ -25028,7 +25028,7 @@ var require_pool = __commonJS({
             const task = this._self.#tasksQueue.push({
               timeout,
               // @ts-ignore
-              resolve: resolve3,
+              resolve: resolve4,
               reject,
               fn,
               waitStartTimestamp
@@ -25040,17 +25040,17 @@ var require_pool = __commonJS({
           }
           const node = this._self.#clientsInUse.push(client);
           (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: client._clientId, waitStartTimestamp }));
-          this._self.#executeTask(node, resolve3, reject, fn);
+          this._self.#executeTask(node, resolve4, reject, fn);
         });
       }
-      #executeTask(node, resolve3, reject, fn) {
+      #executeTask(node, resolve4, reject, fn) {
         const result = fn(node.value);
         if (result instanceof Promise) {
-          result.then(resolve3, reject).finally(() => {
+          result.then(resolve4, reject).finally(() => {
             this.#returnClient(node);
           });
         } else {
-          resolve3(result);
+          resolve4(result);
           this.#returnClient(node);
         }
       }
@@ -25100,8 +25100,8 @@ var require_pool = __commonJS({
         clearTimeout(this._self.cleanupTimeout);
         try {
           if (this._self.#clientsInUse.length > 0) {
-            await new Promise((resolve3) => {
-              this._self.#drainResolve = resolve3;
+            await new Promise((resolve4) => {
+              this._self.#drainResolve = resolve4;
             });
           }
           const promises = [];
@@ -27337,14 +27337,14 @@ var require_client = __commonJS({
        * Close the client. Wait for pending commands.
        */
       close() {
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           clearTimeout(this._self.#pingTimer);
           this._self.#socket.close();
           this._self.#clientSideCache?.onClose();
           if (this._self.#queue.isEmpty()) {
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            return resolve3();
+            return resolve4();
           }
           const maybeClose = () => {
             if (!this._self.#queue.isEmpty())
@@ -27352,7 +27352,7 @@ var require_client = __commonJS({
             this._self.#socket.off("data", maybeClose);
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            resolve3();
+            resolve4();
           };
           this._self.#socket.on("data", maybeClose);
           this._self.#credentialsSubscription?.dispose();
@@ -29072,9 +29072,9 @@ var require_wait_queue = __commonJS({
       #list = new linked_list_1.SinglyLinkedList();
       #queue = new linked_list_1.SinglyLinkedList();
       push(value) {
-        const resolve3 = this.#queue.shift();
-        if (resolve3 !== void 0) {
-          resolve3(value);
+        const resolve4 = this.#queue.shift();
+        if (resolve4 !== void 0) {
+          resolve4(value);
           return;
         }
         this.#list.push(value);
@@ -29083,7 +29083,7 @@ var require_wait_queue = __commonJS({
         return this.#list.shift();
       }
       wait() {
-        return new Promise((resolve3) => this.#queue.push(resolve3));
+        return new Promise((resolve4) => this.#queue.push(resolve4));
       }
     };
     exports.WaitQueue = WaitQueue;
@@ -30487,7 +30487,7 @@ function byteLength(message) {
   return Buffer.byteLength(message.payload) + Buffer.byteLength(message.signature);
 }
 function delay(milliseconds) {
-  return new Promise((resolve3) => setTimeout(resolve3, milliseconds));
+  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
 }
 function createRedisRelayServiceFromEnv(role) {
   const tokenName = role === "codex" ? "CONCORDIA_RELAY_CODEX_TOKEN" : "CONCORDIA_RELAY_ZCODE_TOKEN";
@@ -42762,7 +42762,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -42779,7 +42779,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -42857,7 +42857,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -43118,12 +43118,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -44214,7 +44214,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -44878,12 +44878,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -44896,8 +44896,27 @@ import { fileURLToPath } from "node:url";
 // src/database.ts
 init_protocol();
 import { chmodSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve as resolve2 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+
+// src/paths.ts
+init_protocol();
+import { homedir } from "node:os";
+import { isAbsolute, resolve } from "node:path";
+function concordiaHome(configured = process.env.CONCORDIA_HOME, userHome = homedir()) {
+  if (configured === void 0 || configured.trim() === "") {
+    return resolve(userHome, ".concordia");
+  }
+  if (!isAbsolute(configured)) {
+    throw new ConcordiaException("INVALID_INPUT", "CONCORDIA_HOME must be an absolute path");
+  }
+  return resolve(configured);
+}
+function defaultStateDatabasePath(configured = process.env.CONCORDIA_HOME, userHome = homedir()) {
+  return resolve(concordiaHome(configured, userHome), "state.db");
+}
+
+// src/database.ts
 var SCHEMA_VERSION = 2;
 var INITIALIZATION_RETRIES = 12;
 var ConcordiaDatabase = class {
@@ -44906,8 +44925,8 @@ var ConcordiaDatabase = class {
   transactionDepth = 0;
   constructor(options = {}) {
     const requestedPath = typeof options === "string" ? options : options.path;
-    const configuredPath = requestedPath ?? process.env.CONCORDIA_DB ?? resolve(process.cwd(), ".concordia/state.db");
-    this.path = configuredPath === ":memory:" ? ":memory:" : resolve(configuredPath);
+    const configuredPath = requestedPath ?? process.env.CONCORDIA_DB ?? defaultStateDatabasePath();
+    this.path = configuredPath === ":memory:" ? ":memory:" : resolve2(configuredPath);
     if (this.path !== ":memory:") {
       mkdirSync(dirname(this.path), { recursive: true, mode: 448 });
     }
@@ -45181,7 +45200,7 @@ var EventService = class {
         limit: input.limit
       });
       if (events.length > 0 || Date.now() >= deadline) return events;
-      await new Promise((resolve3) => setTimeout(resolve3, Math.min(500, deadline - Date.now())));
+      await new Promise((resolve4) => setTimeout(resolve4, Math.min(500, deadline - Date.now())));
     } while (true);
   }
 };
@@ -45192,13 +45211,13 @@ init_protocol();
 // src/workspace.ts
 init_protocol();
 import { existsSync, lstatSync, mkdirSync as mkdirSync2, realpathSync as realpathSync2 } from "node:fs";
-import { delimiter, dirname as dirname2, isAbsolute as isAbsolute2, relative, resolve as resolve2, sep } from "node:path";
+import { delimiter, dirname as dirname2, isAbsolute as isAbsolute3, relative, resolve as resolve3, sep } from "node:path";
 import { execFileSync } from "node:child_process";
 
 // src/workspace-config.ts
 init_protocol();
 import { readFileSync, realpathSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute as isAbsolute2 } from "node:path";
 import { performance as performance2 } from "node:perf_hooks";
 var DEFAULT_STALE_GRACE_MS = 5e3;
 var MAX_STALE_GRACE_MS = 6e4;
@@ -45239,7 +45258,7 @@ function parseConfig(contents) {
   if (!Array.isArray(config2.allowedRoots) || config2.allowedRoots.length === 0) {
     throw configError("must contain at least one allowed root");
   }
-  if (config2.allowedRoots.some((root) => typeof root !== "string" || root.trim() === "" || !isAbsolute(root))) {
+  if (config2.allowedRoots.some((root) => typeof root !== "string" || root.trim() === "" || !isAbsolute2(root))) {
     throw configError("allowedRoots must contain only non-empty absolute paths");
   }
   return { version: 1, allowedRoots: config2.allowedRoots };
@@ -45267,7 +45286,7 @@ var WorkspaceRootsConfig = class _WorkspaceRootsConfig {
   lastLoadedAt;
   reloadFailure;
   static fromFile(configFile, staleGraceMs = DEFAULT_STALE_GRACE_MS, monotonicNow = () => performance2.now()) {
-    if (configFile === "" || !isAbsolute(configFile)) {
+    if (configFile === "" || !isAbsolute2(configFile)) {
       throw configError("must be a non-empty absolute path");
     }
     if (!Number.isInteger(staleGraceMs) || staleGraceMs < 0 || staleGraceMs > MAX_STALE_GRACE_MS) {
@@ -45330,7 +45349,7 @@ function parseConfiguredRoots(value) {
 }
 function isWithin(parent, child) {
   const pathFromParent = relative(parent, child);
-  return pathFromParent === "" || !pathFromParent.startsWith(`..${sep}`) && pathFromParent !== ".." && !isAbsolute2(pathFromParent);
+  return pathFromParent === "" || !pathFromParent.startsWith(`..${sep}`) && pathFromParent !== ".." && !isAbsolute3(pathFromParent);
 }
 function normalizeRelativePath(input, field) {
   if (typeof input !== "string" || input.trim() === "" || input.includes("\0")) {
@@ -45360,18 +45379,19 @@ var WorkspaceManager = class {
       return;
     }
     const configFile = process.env.CONCORDIA_CONFIG_FILE;
-    this.rootsConfig = configFile === void 0 ? WorkspaceRootsConfig.fromRoots(parseConfiguredRoots(process.env.CONCORDIA_ROOTS)) : WorkspaceRootsConfig.fromFile(
+    const configuredRoots = parseConfiguredRoots(process.env.CONCORDIA_ROOTS);
+    this.rootsConfig = configFile !== void 0 ? WorkspaceRootsConfig.fromFile(
       configFile.trim(),
       parseWorkspaceConfigStaleGraceMs(process.env.CONCORDIA_CONFIG_STALE_GRACE_MS)
-    );
+    ) : configuredRoots.length === 0 ? void 0 : WorkspaceRootsConfig.fromRoots(configuredRoots);
   }
   get allowedRoots() {
-    return this.rootsConfig.getAllowedRoots();
+    return this.rootsConfig?.getAllowedRoots() ?? [];
   }
   authorizationSnapshot() {
-    const allowedRoots = this.rootsConfig.getAllowedRoots();
+    const allowedRoots = this.rootsConfig?.getAllowedRoots();
     return {
-      fingerprint: allowedRoots.join("\0"),
+      fingerprint: allowedRoots?.join("\0") ?? "unrestricted-local-user",
       assertWorkspaceAllowed: (workspace) => this.assertWorkspaceAllowedWithin(workspace, allowedRoots),
       resolveWorkspace: (workspace) => this.resolveWorkspaceWithin(workspace, allowedRoots)
     };
@@ -45389,7 +45409,7 @@ var WorkspaceManager = class {
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace does not exist or cannot be accessed");
     }
-    if (!allowedRoots.some((root) => isWithin(root, canonical))) {
+    if (allowedRoots !== void 0 && !allowedRoots.some((root) => isWithin(root, canonical))) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace is outside the configured roots");
     }
     return canonical;
@@ -45438,7 +45458,7 @@ var WorkspaceManager = class {
     if (!safeTaskId) {
       throw new ConcordiaException("INVALID_INPUT", "Task ID must contain a safe path character");
     }
-    const requestedWorktreesDirectory = resolve2(workspace, ".worktrees");
+    const requestedWorktreesDirectory = resolve3(workspace, ".worktrees");
     if (!existsSync(requestedWorktreesDirectory)) {
       try {
         mkdirSync2(requestedWorktreesDirectory, { recursive: true, mode: 448 });
@@ -45455,7 +45475,7 @@ var WorkspaceManager = class {
     if (!isWithin(workspace, worktreesDirectory) || !lstatSync(worktreesDirectory).isDirectory()) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Worktree directory resolves outside the repository");
     }
-    const worktreePath = resolve2(worktreesDirectory, `${safeTaskId}-zcode-a${attempt}`);
+    const worktreePath = resolve3(worktreesDirectory, `${safeTaskId}-zcode-a${attempt}`);
     if (!isWithin(workspace, worktreePath)) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Worktree path escapes the repository");
     }
@@ -45561,7 +45581,7 @@ var WorkspaceManager = class {
       if (normalized === ".git" || normalized.startsWith(".git/") || normalized === ".concordia" || normalized.startsWith(".concordia/") || normalized === ".worktrees" || normalized.startsWith(".worktrees/")) {
         throw new ConcordiaException("PATH_SCOPE_VIOLATION", `${field}[${index}] targets Concordia or Git control data`);
       }
-      const candidate = resolve2(workspace, normalized);
+      const candidate = resolve3(workspace, normalized);
       let existing = candidate;
       while (!existsSync(existing)) {
         const parent = dirname2(existing);
@@ -45775,7 +45795,16 @@ var TaskService = class {
       if (workspaceFilter !== void 0) authorization.assertWorkspaceAllowed(workspaceFilter);
       if (taskId !== void 0) {
         const targetedRow = this.getTaskRow(taskId);
-        if (targetedRow !== void 0) this.assertTaskRowAllowed(targetedRow, authorization);
+        if (targetedRow !== void 0) {
+          this.assertTaskRowAllowed(targetedRow, authorization);
+          const ownsActiveLease = targetedRow.assignee === agentId && targetedRow.lease_owner === agentId && targetedRow.lease_token !== null && targetedRow.lease_until !== null && targetedRow.lease_until > now && (targetedRow.status === "CLAIMED" || targetedRow.status === "RUNNING" || targetedRow.status === "WAITING_INPUT") && (workspaceFilter === void 0 || targetedRow.workspace === workspaceFilter);
+          if (ownsActiveLease) {
+            return {
+              task: this.requireTask(targetedRow.id),
+              leaseToken: targetedRow.lease_token
+            };
+          }
+        }
       }
       const clauses = [
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))"
@@ -46017,7 +46046,7 @@ var TaskService = class {
       const scan = this.listAllowedEvents(input, limit, authorization, scanAfterEventId);
       scanAfterEventId = scan.scannedThroughEventId;
       if (scan.events.length > 0 || Date.now() >= deadline) return scan.events;
-      await new Promise((resolve3) => setTimeout(resolve3, Math.min(500, deadline - Date.now())));
+      await new Promise((resolve4) => setTimeout(resolve4, Math.min(500, deadline - Date.now())));
     } while (true);
   }
   submitTask(submission, expectedVersion) {
@@ -46342,7 +46371,7 @@ async function invoke(operation) {
   }
 }
 function createMcpServer(service, configuredRole) {
-  const server = new McpServer({ name: "concordia", version: "0.5.0" });
+  const server = new McpServer({ name: "concordia", version: "0.6.0" });
   const requireRole = (role) => {
     if (configuredRole !== role) {
       throw new ConcordiaException("INVALID_INPUT", `The configured ${configuredRole} client cannot call this ${role} tool`);

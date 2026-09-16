@@ -1,6 +1,6 @@
 {
   "name": "concordia",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Local-first Concordia task coordination commands and optional Redis relay client for ZCode",
   "commands": "commands",
   "mcpServers": ".mcp.json",

@@ -100,7 +100,7 @@ export function createMcpServer(
   service: ConcordiaService,
   configuredRole: ActorRole,
 ): McpServer {
-  const server = new McpServer({ name: "concordia", version: "0.5.0" });
+  const server = new McpServer({ name: "concordia", version: "0.6.0" });
 
   const requireRole = (role: ActorRole) => {
     if (configuredRole !== role) {

@@ -1,5 +1,7 @@
 # ZCode 事件唤醒器
 
+> 兼容模式：此组件通过 ZCode CLI 执行。希望在当前 ZCode Desktop 任务中查看并持续执行时，请使用插件 `/worker`，见 [ZCode Desktop 原生工作器](zcode-desktop-worker.md)。
+
 `zcode-waker` 是 Concordia 的可选常驻进程。它在普通 Node.js 中监听发给 ZCode 的持久事件；空闲时不调用模型。收到需要实施的事件后，它通过 ZCode CLI 创建或恢复对应任务会话，而不是用 Computer Use 操作桌面界面。
 
 ## 1. 工作方式
@@ -46,11 +48,10 @@ CLI 会话以 `--prompt --json --surface terminal --mode build` 创建，恢复�
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_CONFIG_FILE='/Users/me/.config/concordia/roots.json' \
-CONCORDIA_DB='/Users/me/src/example-app/.concordia/state.db' \
-CONCORDIA_ZCODE_WAKER_DB='/Users/me/src/example-app/.concordia/zcode-waker.db' \
 npm run start:zcode-waker
 ```
+
+默认任务状态与 waker 状态分别位于 `~/.concordia/state.db` 和 `~/.concordia/zcode-waker.db`；无需为每个目标仓库增加数据库或 roots 配置。
 
 任务的 `workspace` 必须是本机实际存在的目标 Git 根目录。启动日志出现 `zcode_waker.started` 后，进程将等待事件；不创建 ZCode 会话，也不消耗模型 token，直到收到可操作事件。
 
@@ -81,11 +82,11 @@ npm run start:zcode-waker
 
 | 环境变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `CONCORDIA_ZCODE_WAKER_DB` | `<cwd>/.concordia/zcode-waker.db` | 保存事件游标、`taskId → sess_*` 映射和投递结果的独立 SQLite 数据库 |
-| `CONCORDIA_CONFIG_FILE` | 无 | stdio 模式共享授权 JSON 的绝对路径；每次工作区授权校验加载，优先于 `CONCORDIA_ROOTS`，并传给 ZCode CLI |
+| `CONCORDIA_ZCODE_WAKER_DB` | `~/.concordia/zcode-waker.db` | 保存事件游标、`taskId → sess_*` 映射和投递结果的独立 SQLite 数据库 |
+| `CONCORDIA_CONFIG_FILE` | 无 | 可选仓库范围加固配置；每次工作区授权校验加载，并传给 ZCode CLI |
 | `CONCORDIA_ZCODE_BIN` | macOS 应用内 CLI，否则 `zcode` | ZCode CLI 可执行文件 |
 | `CONCORDIA_ZCODE_MODE` | `build` | CLI 权限模式：`build`、`edit`、`plan` 或 `yolo`；自动实施推荐保持 `build` |
-| `CONCORDIA_ZCODE_MAX_TURNS` | `100` | 每次 headless CLI 调用允许的最大模型 turn 数 |
+| `CONCORDIA_ZCODE_MAX_TURNS` | 未设置 | 每次 headless CLI 调用允许的最大模型 turn 数；仅在当前 ZCode CLI 支持 `--max-turns` 时启用 |
 | `CONCORDIA_ZCODE_TURN_TIMEOUT_MS` | `3600000` | 单次 ZCode CLI turn 超时 |
 | `CONCORDIA_ZCODE_MAX_OUTPUT_BYTES` | `4194304` | CLI JSON stdout 最大字节数 |
 | `CONCORDIA_ZCODE_ENV_ALLOWLIST` | 空 | 额外传给 CLI 的环境变量名（逗号分隔）；不要加入 Redis token、URL 或 API key |
@@ -95,7 +96,7 @@ npm run start:zcode-waker
 
 不要把 Redis URL、角色 token 或其他凭据放进命令历史。长期运行时应通过 launchd、systemd、容器 secret 或进程管理器注入环境变量。
 
-单机 waker 应与 Codex/ZCode MCP、`codex-waker` 和 relay coordinator（如有）使用同一个 `CONCORDIA_CONFIG_FILE`。修改该文件的 `allowedRoots` 不需重启 waker 或重新创建 ZCode 会话，并在下一次工作区授权校验生效；首次设置或改动变量路径后需要重启。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。原子写入和权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
+默认单机模式不需要 `CONCORDIA_CONFIG_FILE`。如果显式启用这项额外加固，相关本机进程应指向同一个配置文件；修改其中的 `allowedRoots` 不需重启 waker，并在下一次工作区授权校验生效。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。原子写入和权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
 
 ## 7. 可靠性与安全语义
 
@@ -103,7 +104,7 @@ npm run start:zcode-waker
 - CLI 启动、JSON 解析或 turn 失败时保留原游标，并按有上限的指数退避重试。
 - 每个事件有独立投递记录和尝试次数；重启后恢复 `taskId → sess_*` 映射。
 - waker 在启动 ZCode 前由受信任代码按 `taskId` 精确领取，并强制把 CLI `cwd` 绑定到领取结果的 worktree；原始 checkout 不作为自动实施目录。
-- 若 CLI 在输出 `sess_*` 前崩溃，事件不会被确认。waker 在现有租约有效期内只做模型外退避，租约过期后精确重领并创建新会话，避免空转消耗 token。
+- 若 CLI 在输出 `sess_*` 前崩溃，事件不会被确认。waker 会按精确 `taskId` 幂等恢复自己仍有效的租约和原 worktree，无需等待租约过期；随后退避重试创建会话。
 - 同一个状态库只允许一个活跃 waker 实例；重复启动会直接失败，异常退出遗留的 PID 锁可在进程消失后自动接管。
 - 投递是至少一次语义：进程可能在 ZCode 已完成、游标尚未提交的极小窗口重放事件。唤醒提示必须先调用 `get_task` 检查当前状态，领取与后续写入使用稳定幂等键。
 - 事件 payload 不直接拼接到 CLI prompt。ZCode 必须通过 `get_task` 读取任务、回答、findings、仓库内容和日志，并把它们当作不可信证据。

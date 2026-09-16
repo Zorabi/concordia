@@ -20,7 +20,7 @@ Concordia 以 local-first 方式协调 Codex 与 ZCode：Codex 负责形成方�
 - TypeScript 编写的本地 MCP Server。
 - SQLite 任务、事件和交付物存储。
 - Codex 与 ZCode 共用的 MCP 工具。
-- ZCode 本地插件及 `/tasks`、`/task`、`/watch` 命令。
+- ZCode 本地插件及 `/tasks`、`/task`、`/watch`、`/worker` 命令。
 - 本地 Git branch/worktree 隔离。
 - 任务租约、心跳、幂等和失败恢复。
 - 单协调节点 Redis Streams relay coordinator。
@@ -60,21 +60,21 @@ Concordia 以 local-first 方式协调 Codex 与 ZCode：Codex 负责形成方�
 │       └── Codex App Server <── codex-waker（只在可操作事件启动 turn）  │
 │                         │                                             │
 │                         ▼                                             │
-│  zcode-waker ──> ZCode CLI（只在可操作事件启动或恢复 build turn）       │
+│  ZCode Desktop /worker Goal（当前可见任务内持续等待与执行）            │
 │                         │                                             │
 │                         ▼                                             │
 │                    Concordia MCP Server                              │
 │              ├── 任务状态机                                           │
 │              ├── 事件追加、查询和等待                                 │
 │              ├── 租约、心跳和幂等                                     │
-│              └── SQLite: .concordia/state.db                         │
+│              └── SQLite: ~/.concordia/state.db                       │
 │                         ▲                                             │
 │                         │                                             │
 │  ZCode plugin / worker task                                           │
 │  ├── claim_task                                                       │
 │  ├── 自主计划和选择子代理                                             │
 │  ├── send_event / submit_task                                         │
-│  └── /tasks /task /watch                                              │
+│  └── /tasks /task /watch /worker                                      │
 │                         │                                             │
 │                         ▼                                             │
 │  Local Git repository                                                 │
@@ -83,7 +83,7 @@ Concordia 以 local-first 方式协调 Codex 与 ZCode：Codex 负责形成方�
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Codex 与 ZCode 可以各自启动一个 stdio MCP Server 进程。两个进程连接同一个 SQLite 文件，因此不需要共享 stdio 进程或监听 TCP 端口。
+Codex 与 ZCode 可以各自启动一个 stdio MCP Server 进程。两个进程默认连接同一用户级 SQLite 文件，因此不需要共享 stdio 进程、仓库级数据库配置或监听 TCP 端口。
 
 跨机器模式采用以下拓扑：
 
@@ -98,7 +98,7 @@ Local ZCode relay client ───┘                                      ├�
 
 可选 `codex-waker` 在 Codex 主机运行。它复用相同的 stdio/Redis 事件源，但不经过模型轮询；`COMPLETED`、`QUESTION`、`FAILED` 才触发 Codex App Server turn。每个任务使用一个持久 Codex 线程，线程 ID、事件游标和投递状态保存在独立 `waker.db`，避免污染协调主机的任务协议数据库。
 
-可选 `zcode-waker` 在 ZCode CLI 与 Git 工作区所在主机运行。它监听 `recipient=zcode`，且仅 `TASK_CREATED`、`ANSWER`、`CHANGES_REQUESTED` 触发 ZCode CLI turn；首次使用 `--prompt --json --surface terminal --mode build`，后续以保存的 `sess_*` 用 `--resume` 恢复。会话 ID、游标和投递状态保存于独立 `zcode-waker.db`。Concordia 自身不调用 Computer Use，也不依赖鼠标、桌面窗口或焦点；ZCode agent 是否使用该工具由其自身策略和配置决定。
+ZCode Desktop 的推荐入口是 `/worker`：插件在当前可见任务中建立持久 Goal，并由该 Desktop 会话消费 `recipient=zcode` 的事件。MCP server 本身不能主动创建客户端模型 turn，这一职责属于 ZCode 的 Goal 生命周期。旧 `zcode-waker` 仅作为无界面兼容路径保留，通过 ZCode CLI 启动或恢复会话，不作为 Desktop 可见工作流的实现。
 
 ## 5. 角色与责任
 

@@ -204,7 +204,24 @@ export class TaskService {
       if (workspaceFilter !== undefined) authorization.assertWorkspaceAllowed(workspaceFilter);
       if (taskId !== undefined) {
         const targetedRow = this.getTaskRow(taskId);
-        if (targetedRow !== undefined) this.assertTaskRowAllowed(targetedRow, authorization);
+        if (targetedRow !== undefined) {
+          this.assertTaskRowAllowed(targetedRow, authorization);
+          const ownsActiveLease = targetedRow.assignee === agentId
+            && targetedRow.lease_owner === agentId
+            && targetedRow.lease_token !== null
+            && targetedRow.lease_until !== null
+            && targetedRow.lease_until > now
+            && (targetedRow.status === "CLAIMED"
+              || targetedRow.status === "RUNNING"
+              || targetedRow.status === "WAITING_INPUT")
+            && (workspaceFilter === undefined || targetedRow.workspace === workspaceFilter);
+          if (ownsActiveLease) {
+            return {
+              task: this.requireTask(targetedRow.id),
+              leaseToken: targetedRow.lease_token!,
+            };
+          }
+        }
       }
       const clauses = [
         "(status = 'READY' OR (status IN ('CLAIMED', 'RUNNING', 'WAITING_INPUT') AND lease_until <= ?))",

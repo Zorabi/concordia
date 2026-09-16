@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { ConcordiaException } from "./protocol.js";
+import { defaultStateDatabasePath } from "./paths.js";
 
 const SCHEMA_VERSION = 2;
 const INITIALIZATION_RETRIES = 12;
@@ -18,7 +19,7 @@ export class ConcordiaDatabase {
 
   constructor(options: DatabaseOptions | string = {}) {
     const requestedPath = typeof options === "string" ? options : options.path;
-    const configuredPath = requestedPath ?? process.env.CONCORDIA_DB ?? resolve(process.cwd(), ".concordia/state.db");
+    const configuredPath = requestedPath ?? process.env.CONCORDIA_DB ?? defaultStateDatabasePath();
     this.path = configuredPath === ":memory:"
       ? ":memory:"
       : resolve(configuredPath);

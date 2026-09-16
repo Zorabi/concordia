@@ -214,6 +214,6 @@ npm run start:waker
 | `Redis relay request timed out` | 检查协调器是否运行、namespace 是否一致、Redis ACL/网络是否允许 Streams 命令。 |
 | 签名无效或一直超时 | 核对 Codex/ZCode token 是否与协调器对应，不能混用。 |
 | `Another relay coordinator already holds this namespace` | 已有活动协调器；停止重复进程或使用另一个 namespace。 |
-| `WORKSPACE_DENIED` | `workspace` 必须是 ZCode 主机上共享配置 `allowedRoots`（或旧版 `CONCORDIA_ROOTS`）内的真实 Git 根目录。 |
+| `WORKSPACE_DENIED` | `workspace` 必须是 ZCode 主机上可访问的真实 Git 根；若启用了 roots 加固，还必须位于配置范围内。 |
 | ZCode 看不到 Codex 创建的任务 | 核对两端 `CONCORDIA_RELAY_NAMESPACE` 和 Redis DB 编号；再用 `list_tasks` 验证。 |
 | `LEASE_CONFLICT` | 租约已过期、已提交、已返工或已重领；重新领取，不要复用旧 token。 |

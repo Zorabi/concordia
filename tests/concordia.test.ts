@@ -161,6 +161,25 @@ test("a claimant can target one ready task by id", (t) => {
   assert.equal(fixture.service.getTask("first-ready").status, "READY");
 });
 
+test("a targeted claimant can recover its own active lease without a new attempt", (t) => {
+  const fixture = createFixture(t);
+  const taskId = "owned-lease-recovery";
+  fixture.service.createTask(spec(fixture.repository, taskId), `${taskId}:create`);
+  const first = fixture.service.claimTask({ agentId: "zcode", taskId });
+
+  const recovered = fixture.service.claimTask({ agentId: "zcode", taskId });
+
+  assert.equal(recovered.leaseToken, first.leaseToken);
+  assert.equal(recovered.task?.attempt, 1);
+  assert.equal(recovered.task?.worktreePath, first.task?.worktreePath);
+  assert.equal(recovered.eventId, undefined);
+  assert.equal(
+    fixture.service.getTask(taskId, 100).events.filter((item) => item.type === "TASK_CLAIMED").length,
+    1,
+  );
+  assert.equal(fixture.service.claimTask({ agentId: "zcode-2", taskId }).task, null);
+});
+
 test("an unavailable targeted task never falls back to another ready task", (t) => {
   const fixture = createFixture(t);
   fixture.service.createTask(spec(fixture.repository, "only-ready"), "only-ready:create");

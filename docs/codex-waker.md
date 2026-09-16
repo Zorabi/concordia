@@ -43,11 +43,10 @@ Codex App Server 使用稳定的 `initialize`、`thread/start`、`thread/resume`
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_CONFIG_FILE='/Users/me/.config/concordia/roots.json' \
-CONCORDIA_DB='/Users/me/src/example-app/.concordia/state.db' \
-CONCORDIA_WAKER_DB='/Users/me/src/example-app/.concordia/waker.db' \
 npm run start:waker
 ```
+
+默认任务状态与 waker 状态分别位于 `~/.concordia/state.db` 和 `~/.concordia/codex-waker.db`。只有需要隔离多个控制面时才设置 `CONCORDIA_HOME`/`CONCORDIA_DB`，只有需要额外目录白名单时才设置 `CONCORDIA_CONFIG_FILE`。
 
 若任务的 worktree 在本机存在，waker 默认以 `task.worktreePath` 作为 Codex `cwd`；否则依次使用任务 workspace 和 waker 启动目录。可显式固定：
 
@@ -81,8 +80,8 @@ npm run start:waker
 
 | 环境变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `CONCORDIA_WAKER_DB` | `<cwd>/.concordia/waker.db` | 独立保存事件游标、任务线程映射和投递结果 |
-| `CONCORDIA_CONFIG_FILE` | 无 | stdio 模式共享授权 JSON 的绝对路径；每次工作区授权校验加载，优先于 `CONCORDIA_ROOTS` |
+| `CONCORDIA_WAKER_DB` | `~/.concordia/codex-waker.db` | 独立保存事件游标、任务线程映射和投递结果 |
+| `CONCORDIA_CONFIG_FILE` | 无 | 可选仓库范围加固配置；每次工作区授权校验加载 |
 | `CONCORDIA_WAKER_CWD` | worktree、workspace 或启动目录 | Codex 审查线程的工作目录，必须为存在的绝对路径 |
 | `CONCORDIA_CODEX_BIN` | `codex` | Codex CLI 可执行文件 |
 | `CONCORDIA_WAKER_MODEL` | Codex 默认模型 | 可选模型覆盖 |
@@ -95,7 +94,7 @@ npm run start:waker
 
 不要把 Redis URL、角色 token 或其他凭据放进命令历史。长期运行时应通过 launchd、systemd、容器 secret 或进程管理器注入环境变量。
 
-单机 waker 应与 Codex MCP、ZCode MCP、`zcode-waker` 和 relay coordinator（如有）指向同一个 `CONCORDIA_CONFIG_FILE`。变更该 JSON 的 `allowedRoots` 在下一次工作区授权校验生效，无需重启 waker；首次设置或更换变量路径时才需要重启。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。文件格式、原子更新与权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
+默认单机模式不需要 `CONCORDIA_CONFIG_FILE`。如果显式启用这项额外加固，相关本机进程应指向同一个配置文件；变更其中的 `allowedRoots` 会在下一次工作区授权校验生效，无需重启 waker。读取失败仅在配置的 stale grace 内使用 last-known-good，期满 fail-closed；修复后自动恢复。文件格式、原子更新与权限要求见 [README 的共享允许根目录配置](../README.md#共享允许根目录配置)。
 
 ## 6. 可靠性语义
 

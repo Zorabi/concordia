@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -12,6 +12,7 @@ import {
   type TaskRecord,
 } from "./protocol.js";
 import { createWakerEventSource, type WakerEventSource } from "./waker-source.js";
+import { defaultZCodeWakerDatabasePath } from "./paths.js";
 import { WakerStateDatabase, type WakerState } from "./waker-state.js";
 import { ZCodeCliClient, type ZCodeAutomationClient, type ZCodeTurnResult } from "./zcode-cli.js";
 
@@ -49,6 +50,16 @@ function envInteger(name: string, fallback: number, maximum?: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
   return integerOption(Number(raw), fallback, name, maximum);
+}
+
+function optionalEnvInteger(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return undefined;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new ConcordiaException("INVALID_INPUT", `${name} must be a positive integer`);
+  }
+  return value;
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
@@ -284,7 +295,12 @@ export class ZCodeWaker {
       || Date.parse(task.lease.until) <= Date.now();
     const shouldClaim = task.status === "READY"
       || ((task.status === "CLAIMED" || task.status === "RUNNING") && leaseExpired);
-    if (shouldClaim) {
+    const shouldRecoverOwnedLease = !hasSession
+      && !leaseExpired
+      && task.assignee === "zcode"
+      && task.lease?.owner === "zcode"
+      && (task.status === "CLAIMED" || task.status === "RUNNING");
+    if (shouldClaim || shouldRecoverOwnedLease) {
       const result = await this.source.claimTask({
         agentId: "zcode",
         taskId: task.id,
@@ -292,6 +308,9 @@ export class ZCodeWaker {
         leaseSeconds: 3600,
       });
       if (!result.task || !result.leaseToken) {
+        if (shouldRecoverOwnedLease) {
+          throw new ZCodeLeaseRecoveryPendingError(task.id, task.lease?.until);
+        }
         throw new ZCodeClaimUnavailableError(task.id);
       }
       return { task: result.task, leaseToken: result.leaseToken };
@@ -369,12 +388,15 @@ export async function run(): Promise<void> {
   try {
     source = await createWakerEventSource("zcode");
     state = new WakerStateDatabase(
-      process.env.CONCORDIA_ZCODE_WAKER_DB ?? resolve(process.cwd(), ".concordia/zcode-waker.db"),
+      process.env.CONCORDIA_ZCODE_WAKER_DB ?? defaultZCodeWakerDatabasePath(),
     );
     const zcode = new ZCodeCliClient({
       command: process.env.CONCORDIA_ZCODE_BIN,
       mode: process.env.CONCORDIA_ZCODE_MODE,
-      maxTurns: envInteger("CONCORDIA_ZCODE_MAX_TURNS", 100),
+      // ZCode 0.16.5 advertises --max-turns in help but rejects it at runtime.
+      // Keep the limit opt-in so current desktop builds can still be automated;
+      // the wall-clock timeout remains enforced independently.
+      maxTurns: optionalEnvInteger("CONCORDIA_ZCODE_MAX_TURNS"),
       turnTimeoutMs: envInteger("CONCORDIA_ZCODE_TURN_TIMEOUT_MS", 60 * 60_000),
       maxOutputBytes: envInteger("CONCORDIA_ZCODE_MAX_OUTPUT_BYTES", 4 * 1024 * 1024),
       envAllowlist: process.env.CONCORDIA_ZCODE_ENV_ALLOWLIST,

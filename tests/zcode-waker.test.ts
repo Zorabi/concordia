@@ -92,7 +92,17 @@ class FakeSource implements WakerEventSource {
 
   async claimTask(input: ClaimTaskInput): Promise<ClaimTaskResult> {
     const current = input.taskId === undefined ? undefined : this.tasks.get(input.taskId);
-    if (!current || (current.status !== "READY" && Date.parse(current.lease?.until ?? "") > Date.now())) {
+    if (!current) {
+      return { task: null };
+    }
+    const activeOwnedLease = current.assignee === input.agentId
+      && current.lease?.owner === input.agentId
+      && Date.parse(current.lease.until) > Date.now()
+      && (current.status === "CLAIMED" || current.status === "RUNNING");
+    if (activeOwnedLease) {
+      return { task: current, leaseToken: "lease-secret" };
+    }
+    if (current.status !== "READY" && Date.parse(current.lease?.until ?? "") > Date.now()) {
       return { task: null };
     }
     const claimed: TaskDetail = {
@@ -236,7 +246,7 @@ test("an incomplete turn keeps the event retryable and reuses its session", asyn
   await waker.close();
 });
 
-test("a crash before session output waits for lease expiry instead of losing the event", async () => {
+test("a crash before session output recovers the owned lease without waiting for expiry", async () => {
   const created = event(23, "TASK_CREATED");
   const tasks = new Map([["task-1", task("task-1", "READY")]]);
   const source = new FakeSource([created], tasks);
@@ -251,18 +261,15 @@ test("a crash before session output waits for lease expiry instead of losing the
   assert.equal(state.getSession("task-1"), undefined);
   assert.equal(zcode.turns.length, 1);
 
-  await assert.rejects(waker.pollOnce(0), ZCodeLeaseRecoveryPendingError);
+  await assert.rejects(waker.pollOnce(0), /before JSON/);
   assert.equal(state.getCursor(), 0);
-  assert.equal(zcode.turns.length, 1);
+  assert.equal(zcode.turns.length, 2);
 
-  const expired = task("task-1", "RUNNING", "zcode");
-  expired.lease = { owner: "zcode", until: new Date(0).toISOString() };
-  tasks.set("task-1", expired);
   zcode.error = undefined;
   zcode.onRun = () => tasks.set("task-1", task("task-1", "REVIEW", "zcode"));
   assert.equal(await waker.pollOnce(0), 1);
   assert.equal(state.getCursor(), 23);
-  assert.equal(zcode.turns.length, 2);
+  assert.equal(zcode.turns.length, 3);
   await waker.close();
 });
 

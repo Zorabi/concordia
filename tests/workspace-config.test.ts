@@ -219,6 +219,22 @@ test("CONCORDIA_ROOTS remains the fallback when no config file is set", (t) => {
   assert.equal(manager.resolveWorkspace(repository), realpathSync(repository));
 });
 
+test("local mode accepts any accessible Git root when no roots restriction is configured", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "concordia-workspace-unrestricted-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const first = createRepository(directory, "first");
+  const second = createRepository(directory, "second");
+
+  const manager = WorkspaceRootsEnvironment.with(
+    { CONCORDIA_CONFIG_FILE: undefined, CONCORDIA_ROOTS: undefined },
+    () => new WorkspaceManager(),
+  );
+
+  assert.deepEqual(manager.allowedRoots, []);
+  assert.equal(manager.resolveWorkspace(first), realpathSync(first));
+  assert.equal(manager.resolveWorkspace(second), realpathSync(second));
+});
+
 test("shared config takes precedence over CONCORDIA_ROOTS", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "concordia-workspace-config-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

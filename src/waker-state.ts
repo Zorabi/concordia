@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { defaultCodexWakerDatabasePath } from "./paths.js";
 import type { TaskEvent } from "./protocol.js";
 
 export type DeliveryStatus = "running" | "completed" | "failed";
@@ -92,7 +93,7 @@ export class WakerStateDatabase implements WakerState {
   private readonly ownerId: string;
   private closed = false;
 
-  constructor(path = process.env.CONCORDIA_WAKER_DB ?? resolve(process.cwd(), ".concordia/waker.db")) {
+  constructor(path = process.env.CONCORDIA_WAKER_DB ?? defaultCodexWakerDatabasePath()) {
     this.path = path === ":memory:" ? path : resolve(path);
     this.ownerId = `${process.pid}:${randomUUID()}`;
     if (this.path !== ":memory:") {

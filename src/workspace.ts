@@ -65,7 +65,7 @@ function matchesScope(file: string, scope: string): boolean {
 }
 
 export class WorkspaceManager {
-  private readonly rootsConfig: WorkspaceRootsConfig;
+  private readonly rootsConfig: WorkspaceRootsConfig | undefined;
 
   constructor(roots?: readonly string[]) {
     if (roots !== undefined) {
@@ -73,22 +73,25 @@ export class WorkspaceManager {
       return;
     }
     const configFile = process.env.CONCORDIA_CONFIG_FILE;
-    this.rootsConfig = configFile === undefined
-      ? WorkspaceRootsConfig.fromRoots(parseConfiguredRoots(process.env.CONCORDIA_ROOTS))
-      : WorkspaceRootsConfig.fromFile(
+    const configuredRoots = parseConfiguredRoots(process.env.CONCORDIA_ROOTS);
+    this.rootsConfig = configFile !== undefined
+      ? WorkspaceRootsConfig.fromFile(
         configFile.trim(),
         parseWorkspaceConfigStaleGraceMs(process.env.CONCORDIA_CONFIG_STALE_GRACE_MS),
-      );
+      )
+      : configuredRoots.length === 0
+        ? undefined
+        : WorkspaceRootsConfig.fromRoots(configuredRoots);
   }
 
   get allowedRoots(): readonly string[] {
-    return this.rootsConfig.getAllowedRoots();
+    return this.rootsConfig?.getAllowedRoots() ?? [];
   }
 
   authorizationSnapshot(): WorkspaceAuthorization {
-    const allowedRoots = this.rootsConfig.getAllowedRoots();
+    const allowedRoots = this.rootsConfig?.getAllowedRoots();
     return {
-      fingerprint: allowedRoots.join("\0"),
+      fingerprint: allowedRoots?.join("\0") ?? "unrestricted-local-user",
       assertWorkspaceAllowed: (workspace) => this.assertWorkspaceAllowedWithin(workspace, allowedRoots),
       resolveWorkspace: (workspace) => this.resolveWorkspaceWithin(workspace, allowedRoots),
     };
@@ -102,20 +105,20 @@ export class WorkspaceManager {
     return this.authorizationSnapshot().resolveWorkspace(workspace);
   }
 
-  private assertWorkspaceAllowedWithin(workspace: string, allowedRoots: readonly string[]): string {
+  private assertWorkspaceAllowedWithin(workspace: string, allowedRoots: readonly string[] | undefined): string {
     let canonical: string;
     try {
       canonical = realpathSync(workspace);
     } catch {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace does not exist or cannot be accessed");
     }
-    if (!allowedRoots.some((root) => isWithin(root, canonical))) {
+    if (allowedRoots !== undefined && !allowedRoots.some((root) => isWithin(root, canonical))) {
       throw new ConcordiaException("WORKSPACE_DENIED", "Workspace is outside the configured roots");
     }
     return canonical;
   }
 
-  private resolveWorkspaceWithin(workspace: string, allowedRoots: readonly string[]): string {
+  private resolveWorkspaceWithin(workspace: string, allowedRoots: readonly string[] | undefined): string {
     const canonical = this.assertWorkspaceAllowedWithin(workspace, allowedRoots);
     const gitRoot = this.git(canonical, ["rev-parse", "--show-toplevel"], "WORKSPACE_DENIED", "Workspace is not a Git repository");
     let canonicalGitRoot: string;

@@ -6,12 +6,12 @@
 
 在 ZCode 中打开被管理的目标 Git 仓库，然后确认：
 
-1. **Settings → Plugins** 中的 `concordia` 插件已安装并启用。
-2. **Settings → MCP Servers → Plugin MCP servers** 中的 `plugin:concordia:concordia` 已启用。
-3. 单机模式下 ZCode 和 Codex 的 `CONCORDIA_DB` 指向同一个绝对路径；跨机器模式下两端 Redis URL 与 namespace 一致，并分别使用自己的角色 token。
-4. 当前工作区是任务契约中的 Git 仓库根目录，而不是 Concordia 源码目录。
+1. **Settings → Plugins** 中的 `concordia` 插件已安装并启用，或用户级 `concordia` MCP 已启用。
+2. **Settings → MCP Servers** 中的 Concordia 服务处于启用状态。
+3. 单机模式不要为仓库覆盖 `CONCORDIA_DB`、`CONCORDIA_ROOTS` 或 MCP `cwd`；Codex 与 ZCode 默认自动共享 `~/.concordia/state.db`。跨机器模式下两端 Redis URL 与 namespace 一致，并分别使用自己的角色 token。
+4. 在一个可见的 ZCode Desktop 任务中运行 `/worker`，让后续过程与结果留在 Desktop。
 
-插件或 MCP 配置路径变化只保证对新会话生效。共享 `CONCORDIA_CONFIG_FILE` 的 `allowedRoots` 内容在每次工作区授权校验加载，更新内容不需要重启或新建会话；读取失败超过 stale grace 后会拒绝访问，修复后自动恢复。检查完成后，建议新建一个 ZCode 会话再开始操作。
+首次安装/升级插件或修改 MCP 启动配置后，刷新 MCP 并新建一次 ZCode 会话以载入能力。此后切换或新增仓库不再修改配置、同步 roots 或重启客户端。若显式启用了 `CONCORDIA_CONFIG_FILE`，只修改其中的 `allowedRoots` 不需要重启；读取失败超过 stale grace 后会拒绝访问，修复后自动恢复。
 
 ## 2. 查看待办列表
 
@@ -103,7 +103,11 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 发现任务后再调用 `claim_task`。从 `zcode-waker` 的事件启动时传入该事件的 `taskId`，以精确领取对应任务；手动领取时可省略 `taskId` 让服务按工作区选择最早待办。`claim_task` 是原子操作；多个执行者同时领取时，只有一个执行者会成功获得同一任务。
 
-### 5.2 使用 `zcode-waker` 持续监听（推荐）
+### 5.2 使用 ZCode Desktop `/worker` 持续监听（推荐）
+
+在一个专门的 ZCode Desktop 任务中执行 `/worker`。插件会创建持久 Goal，所有领取、进度、验证与提交结果都显示在当前桌面任务中。详细行为和恢复方式见 [ZCode Desktop 原生工作器](zcode-desktop-worker.md)。
+
+### 5.3 使用 `zcode-waker` 无界面监听（兼容）
 
 `zcode-waker` 是运行在 ZCode CLI 所在机器的外置 Node.js 守护进程。它监听发给 `zcode` 的持久事件，只在需要工作时调用 ZCode CLI：
 
@@ -117,22 +121,19 @@ READY → CLAIMED → RUNNING → REVIEW → APPROVED
 
 ```sh
 CONCORDIA_TRANSPORT=stdio \
-CONCORDIA_CONFIG_FILE=/absolute/path/to/concordia.config.json \
-CONCORDIA_DB=/absolute/path/to/example-app/.concordia/state.db \
-CONCORDIA_ZCODE_WAKER_DB=/absolute/path/to/example-app/.concordia/zcode-waker.db \
 npm run start:zcode-waker
 ```
 
 完整的单机/Redis 配置、可靠性语义和故障排查见 [ZCode 事件唤醒器指南](zcode-waker.md)。
 
-### 5.3 在当前会话持续监听
+### 5.4 在当前会话手动持续监听
 
 `create_task` 会生成发给 `zcode` 的 `TASK_CREATED` 事件。可在一个保持运行的 ZCode 会话中输入：
 
 ```text
 使用 Concordia 持续监听 Codex 发给 zcode 的任务事件。
 
-先调用 list_tasks，处理当前工作区已有的 READY 任务。然后反复调用 wait_events：
+先调用 list_tasks，处理共享控制面中已有的 READY 任务。然后反复调用 wait_events：
 - recipient: "zcode"
 - afterEventId: 使用上一次收到的最大 eventId，首次从 0 开始
 - timeoutMs: 60000
@@ -197,14 +198,15 @@ npm run start:zcode-waker
 
 ## 10. 原生待办同步与通知
 
-截至 Concordia `0.5.0`：
+截至 Concordia `0.6.0`：
 
 - 可以通过 `/tasks` 在 ZCode 会话中查看同步后的 Concordia 任务。
 - 不能把每个 Concordia 任务写入 ZCode 原生任务侧边栏。
 - 不提供操作系统弹窗通知。
-- 可选 `zcode-waker` 可在 ZCode 交互界面关闭后继续监听，并在需要时使用 ZCode CLI 创建或恢复任务会话。
+- `/worker` 在当前 ZCode Desktop 任务中持续监听和执行，结果完整可见。
+- 可选 `zcode-waker` 仅作为界面关闭后的 CLI 兼容模式。
 
-`zcode-waker` 默认不显示操作系统通知，也不写入 ZCode 原生任务侧边栏；它负责可靠地恢复实施会话。若还需要桌面提醒，可在它之外接入 macOS、Windows 或 Linux 系统通知接口，插件仍只负责 `/tasks`、任务详情和交互式工作流。
+MCP 不能主动创建 ZCode Desktop turn；`/worker` 通过 ZCode 原生 Goal 保持任务可见并持续运行。`zcode-waker` 默认不显示操作系统通知，也不写入当前 Desktop 任务。
 
 ## 11. 跨机器 Redis 模式
 
@@ -226,8 +228,8 @@ npm run start:zcode-waker
 
 | 现象 | 处理方式 |
 | --- | --- |
-| `/tasks READY` 没有结果 | 确认 Codex 已创建任务，任务 `workspace` 是当前 Git 根目录，并核对双方数据库路径。 |
-| ZCode 看不到 Codex 刚创建的任务 | 单机核对 `CONCORDIA_DB`；跨机核对 Redis URL、数据库编号、namespace 和协调器状态。 |
+| `/tasks READY` 没有结果 | 确认 Codex 已创建任务，任务 `workspace` 是真实 Git 根，并检查两端是否覆盖了不同状态路径。 |
+| ZCode 看不到 Codex 刚创建的任务 | 单机默认都应使用 `~/.concordia/state.db`；跨机核对 Redis URL、数据库编号、namespace 和协调器状态。 |
 | 找不到 `/tasks` | 确认安装的是完整插件而不是仅手动配置 MCP，并在新会话中重试。 |
 | `/watch` 看不到新任务 | `/watch` 只观察已知任务；使用 `/tasks READY` 或全局 `wait_events`。 |
 | `zcode-waker` 无法创建会话 | 确认 `zcode --version` 可运行、运行用户已登录 ZCode，并检查 CLI 是否支持 `--prompt --json --surface terminal --mode build`。 |
